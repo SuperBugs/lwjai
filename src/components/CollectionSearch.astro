@@ -1,6 +1,9 @@
 ---
 /**
- * 集合内检索框 —— 挂在 `/posts`、`/qa`、`/guides` 三个列表页顶部。
+ * 站内检索框，两档（`kind` / `siteWide`，二选一，类型上就只能填一个）：
+ *
+ *   ① **只搜本集合**（传 `kind`）—— 挂在 `/r`、`/q`、`/g`、`/p` 四个列表页顶部。
+ *   ② **全站**（传 `siteWide`）—— 挂在首页导语下面。【2026-09-23，见文末那一节】
  *
  * ## 为什么不用 PagefindUI
  *
@@ -15,7 +18,7 @@
  * 所以这里直接用 API 自己渲染结果。代价是没有 PagefindUI 的子结果和成套样式，
  * 换来的是「在问答页搜出来的只有问答」。
  *
- * 全站跨集合检索仍然在 `/search`（那一页继续用 PagefindUI + 分面），
+ * 全站跨集合检索的完整页面在 `/se`（那一页继续用 PagefindUI + 分面），
  * 由这个框右边的「搜全站」链接过去。
  *
  * ## 三档状态不许合并
@@ -24,88 +27,155 @@
  *   搜了没命中     → 「{集合}里没有匹配「xx」的内容」
  *   **索引不存在** → 「搜索索引还没生成 —— 它是构建产物」
  *
- * 最后一档是**故障**，不是结果。`pnpm dev` 里永远走这一档（Pagefind 的索引由
- * `pnpm build` 生成，dev server 里 `/pagefind/pagefind.js` 根本不存在）。
- * 把它显示成「没搜到」，一个坏掉的搜索框就会被读成「这个站没有这类内容」。
+ * 最后一档是**故障**，不是结果。Pagefind 的索引由 `pnpm build` 生成：dev server
+ * 读的是上一次构建拷回 `public/pagefind` 的那一份（可能是旧的），从没构建过
+ * 才走这一档。把它显示成「没搜到」，一个坏掉的搜索框就会被读成「这个站没有这类内容」。
  *
  * ## 加载时机
  *
  * **聚焦才加载**，不是 onIdle。Pagefind 那套是 `pagefind.js` 加一个 wasm，
- * 而这三个是站里最常访问的页面 —— 绝大多数人打开列表页是来翻的，不是来搜的。
+ * 而挂着它的是站里最常访问的几页（首页和四个列表页）—— 绝大多数人打开它们
+ * 是来翻的，不是来搜的。
+ *
+ * ## 全站那一档（首页）
+ *
+ * 【2026-09-23 用户要的】「首页应该要增加一个全站搜索框」。在那之前首页上**一个检索
+ * 入口都没有**：导航里的搜索图标 9-18 拿掉了（理由见 Header.astro），`/se` 只能从
+ * 列表页这个框右边那条「搜全站」进去 —— 从首页进站的读者得先点进某个集合才看得见搜索。
+ *
+ * 和列表页那一档是**同一段脚本**（三档状态、聚焦才加载、丢弃过时结果、结果卡都不分叉），
+ * 只差四处：
+ *   - 不带过滤条件（`searchFilters()` 返回 `{}`）；
+ *   - 每条结果多印一格「类型: 研究」—— 四种内容混在一个列表里，读者得知道点进去是哪种。
+ *     没有类型的（「关于」页）不印：它本来就不属于四种里的任何一种，不是没标；
+ *   - 外层是一个指向 `/se` 的 GET 表单：回车 = 去完整的搜索页（分面筛选、加载更多），
+ *     词一起带过去。列表页那一档回车什么都不做 —— 在「问答」里一回车跳去全站，
+ *     是悄悄换了范围；
+ *   - 命中比列出来的多时，末尾多一行「查看全部 N 条」（同样去 `/se?q=…`）。
+ *     不给这一行的话，「23 条」底下只有 8 张卡，剩下 15 条一条路都没有。
+ *
+ * ★ 回车走**表单原生提交**，不是在 keydown 里自己跳页：中文输入法用回车确认候选词，
+ *   手写的 keydown 得自己判组字状态，漏判就是"敲拼音、回车选字、页面跳走了"。
+ *   原生的隐式提交，组字那一段由浏览器自己管。
+ * ★ 范围写在 DOM 上（`data-scope`），脚本不从"有没有 kind"去推 —— 理由在
+ *   `src/utils/searchBox.ts` 的 `searchFilters()`。钉子在 `scripts/gate/search.test.ts`。
  */
-import IconSearch from "@/assets/icons/IconSearch.svg";
-import { SEARCH_FILTER_KEY } from "@/config/searchKinds";
+import { getRelativeLocaleUrl } from "astro:i18n";
+import IconArrowRight from "@/assets/icons/IconArrowRight.svg";
+import SearchField from "@/components/SearchField.astro";
+import { SEARCH_FILTER_KEY, type SearchKind } from "@/config/searchKinds";
+import { ROUTES } from "@/config/routes";
+import { SEARCH_QUERY_PARAM, type SearchScope } from "@/utils/searchBox";
 import { getAssetPath } from "@/utils/withBase";
 import { useTranslations } from "@/i18n";
 import { tplStr } from "@/i18n/format";
 import config from "@/config";
 
-type Props = {
-  /** Pagefind 分面值，必须和详情页上 `data-pagefind-filter` 冒号后面那半截**逐字相同**。
-   *  两边都从 `SEARCH_KINDS` 取，就是为了不让它们各写一份。
-   *  对不上的表现是：搜什么都 0 条，而且不报错。
-   *  （冒号前面那半截是键名，走 `SEARCH_FILTER_KEY`，同一条纪律。） */
-  kind: string;
+type Props = (
+  | {
+      /** Pagefind 分面值，必须和详情页上 `data-pagefind-filter` 冒号后面那半截**逐字相同**。
+       *  两边都从 `SEARCH_KINDS` 取，就是为了不让它们各写一份。
+       *  对不上的表现是：搜什么都 0 条，而且不报错。
+       *  （冒号前面那半截是键名，走 `SEARCH_FILTER_KEY`，同一条纪律。） */
+      kind: SearchKind;
+      siteWide?: never;
+    }
+  | {
+      /** 全站：不带任何过滤条件（首页那一个）。 */
+      siteWide: true;
+      kind?: never;
+    }
+) & {
+  /** 外边距 / 宽度。不传就是列表页那一档的 `mb-6`；传了就**整个换掉**，不叠加 ——
+   *  两个 `mb-*` 挂在同一个元素上时，谁生效取决于生成的 CSS 顺序，不是 class 的顺序。 */
+  class?: string;
 };
 
-const { kind } = Astro.props;
+const props = Astro.props;
 
 const locale = Astro.currentLocale ?? config.site.lang;
 const t = useTranslations(locale);
 
 const enabled = config.features.search === "pagefind";
 
+/** `/se`（带 base 和语言前缀）。「搜全站」「查看全部」和全站那一档表单的 action 都指向它。 */
+const searchUrl = getRelativeLocaleUrl(locale, ROUTES.search);
+
+/** 两档在服务端只在这几格上分叉；脚本那一侧只认 `data-scope`。 */
+const mode = props.siteWide
+  ? {
+      scope: "site" satisfies SearchScope,
+      kind: undefined,
+      inputId: "cs-input-site",
+      // 占位符和读屏标签跟 `/se` 那一页是同一句话 —— 同一件事，两处说法一样。
+      placeholder: t.a11y.searchPlaceholder,
+      label: t.searchUi.searchLabel,
+      empty: t.collectionSearch.emptyAll,
+    }
+  : {
+      scope: "collection" satisfies SearchScope,
+      kind: props.kind,
+      inputId: `cs-input-${props.kind}`,
+      placeholder: tplStr(t.collectionSearch.placeholder, { kind: props.kind }),
+      label: tplStr(t.collectionSearch.label, { kind: props.kind }),
+      // 这里**不能**用 tplStr：它会把没给值的 `{{term}}` 替换成空字符串，
+      // 而 term 只有运行时才知道。只填 kind，`{{term}}` 原样留给客户端。
+      empty: t.collectionSearch.empty.replaceAll("{{kind}}", props.kind),
+    };
+const siteWide = mode.scope === "site";
+
+/** 全站那一档外面包一层表单（回车去 `/se`），列表页那一档不包 —— 理由见文件头。 */
+const Row = siteWide ? "form" : "div";
+const rowAttrs = siteWide ? { action: searchUrl, method: "get" } : {};
+
 // 文案在服务端拼好，脚本里只管塞进 DOM，省得把 i18n 整个搬进客户端。
 const strings = {
   unavailable: t.collectionSearch.unavailable,
-  // 这里**不能**用 tplStr：它会把没给值的 `{{term}}` 替换成空字符串，
-  // 而 term 只有运行时才知道。只填 kind，`{{term}}` 原样留给客户端。
-  empty: t.collectionSearch.empty.replaceAll("{{kind}}", kind),
+  empty: mode.empty,
   count: t.collectionSearch.count,
+  // `{{count}}` 同样原样留给客户端。
+  viewAll: t.collectionSearch.viewAll,
 };
 ---
 
 {
   enabled && (
     <search
-      class="collection-search mb-6"
-      data-kind={kind}
+      class:list={["collection-search", props.class ?? "mb-6"]}
+      data-scope={mode.scope}
+      data-kind={mode.kind}
       data-filter-key={SEARCH_FILTER_KEY}
+      data-search-url={searchUrl}
       data-pagefind-ignore
       data-bundle={getAssetPath("pagefind/pagefind.js")}
       data-strings={JSON.stringify(strings)}
     >
-      <div class="flex items-center gap-3">
-        <label class="sr-only" for={`cs-input-${kind}`}>
-          {tplStr(t.collectionSearch.label, { kind })}
+      <Row class="flex items-center gap-3" {...rowAttrs}>
+        <label class="sr-only" for={mode.inputId}>
+          {mode.label}
         </label>
-        {/* 放大镜画在框里。原来框里只有 placeholder —— 一个圆角矩形加一行灰字
-            在移动端很容易被当成"输入你的邮箱"那类订阅框。图标是这一类控件的
-            通用记号，不依赖读者读懂那行字。
-            `pointer-events-none`：图标压在输入框上面，不加这条的话点到图标
-            那一小块不会聚焦输入框。 */}
-        <div class="relative w-full">
-          <span
-            class="text-muted-foreground pointer-events-none absolute inset-y-0 start-0 flex items-center ps-3"
-            aria-hidden="true"
+        {/* 框本身（放大镜 + 输入框）是 SearchField，/s 的筛选框读同一份。
+            name / enterkeyhint 只给全站那一档：它在表单里，回车真的会去 `/se`；
+            列表页那一档回车什么都不做，手机键盘上就别画一个「搜索」键。 */}
+        <SearchField
+          id={mode.inputId}
+          placeholder={mode.placeholder}
+          name={siteWide ? SEARCH_QUERY_PARAM : undefined}
+          enterkeyhint={siteWide ? "search" : undefined}
+        />
+        {/* 【2026-09-23】原来这里是 `getAssetPath("search")` —— 手写的老地址，
+            每点一次都要经 legacyUrls 那张表跳一次才到 `/se`。现在走 ROUTES，
+            脚本再把框里已经敲的词接上去（`searchPageHref()`）。 */}
+        {!siteWide && (
+          <a
+            href={searchUrl}
+            data-cs-all
+            class="text-muted-foreground hover:text-foreground shrink-0 text-sm underline decoration-1 underline-offset-4 transition-colors"
           >
-            <IconSearch class="size-4" />
-          </span>
-          <input
-            id={`cs-input-${kind}`}
-            type="search"
-            autocomplete="off"
-            class="border-border bg-surface text-foreground focus-visible:border-border-strong focus-visible:outline-accent rounded-app w-full border py-2 ps-9 pe-3 transition-colors focus-visible:outline focus-visible:outline-1"
-            placeholder={tplStr(t.collectionSearch.placeholder, { kind })}
-          />
-        </div>
-        <a
-          href={getAssetPath("search")}
-          class="text-muted-foreground hover:text-foreground shrink-0 text-sm underline decoration-1 underline-offset-4 transition-colors"
-        >
-          {t.collectionSearch.searchAll}
-        </a>
-      </div>
+            {t.collectionSearch.searchAll}
+          </a>
+        )}
+      </Row>
 
       {/*
         状态行和结果列表分成两个容器：状态行要能在「没命中」和「索引不存在」
@@ -121,15 +191,40 @@ const strings = {
       */}
       <p class="mt-2 empty:hidden" data-cs-status />
       <ul class="mt-3 space-y-3 empty:hidden" data-cs-results />
+      {
+        /* 「查看全部 N 条」—— 只有全站那一档有，而且只在命中比列出来的多时才放出来
+           （脚本切 hidden）。列表页那一档没有它：那边的 N 是本集合的数，而 `/se`
+           是全站，点过去数对不上。 */
+        siteWide && (
+          <p class="mt-3 text-sm" data-cs-more hidden>
+            <a
+              href={searchUrl}
+              class="text-muted-foreground hover:text-foreground inline-flex items-center gap-1 transition-colors"
+            >
+              <span data-cs-more-text />
+              <IconArrowRight class="inline-block size-4 rtl:-rotate-180" />
+            </a>
+          </p>
+        )
+      }
     </search>
   )
 }
 
 <script>
+  // 范围 / 过滤条件 / 去 `/se` 的地址 —— 判据在这个零依赖的小文件里（会被打进浏览器的包），
+  // `/se` 那一页读同一份，`scripts/gate/search.test.ts` 裸 tsx 测它。
+  import {
+    searchFilters,
+    searchPageHref,
+    searchResultHref,
+  } from "@/utils/searchBox";
+
   type Strings = {
     unavailable: string;
     empty: string;
     count: string;
+    viewAll: string;
   };
 
   /** Pagefind 的返回结构，只声明这里真正读到的字段。 */
@@ -139,6 +234,8 @@ const strings = {
     /** title / image / image_alt 是 Pagefind 的保留键；其余是详情页 data-pagefind-meta
      *  写进去的（智能体 / 模型，见 src/utils/searchMeta.ts）。 */
     meta?: { title?: string } & Record<string, string | undefined>;
+    /** 详情页 data-pagefind-filter 写进去的分面（`{ 类型: ["研究"] }`）。 */
+    filters?: Record<string, string[]>;
   };
   type PagefindResult = { data: () => Promise<PagefindData> };
   type PagefindModule = {
@@ -186,15 +283,39 @@ const strings = {
     const statusEl = root.querySelector<HTMLElement>("[data-cs-status]");
     const listEl = root.querySelector<HTMLElement>("[data-cs-results]");
     const bundle = root.dataset.bundle;
-    const kind = root.dataset.kind;
-    // 分面键名同样从 data-* 读（服务端来自 SEARCH_FILTER_KEY）——
-    // 这里是客户端 script，import 不到那个常量，而写死第二份字面量正是
-    // searchKinds.ts 顶上那段要防的东西：对不上就"搜什么都 0 条且不报错"。
+    const searchUrl = root.dataset.searchUrl;
+    // 分面键名同样从 data-* 读（服务端来自 SEARCH_FILTER_KEY），不在这里写第二份字面量 ——
+    // 那正是 searchKinds.ts 顶上那段要防的东西：对不上就"搜什么都 0 条且不报错"。
     const filterKey = root.dataset.filterKey;
-    if (!input || !statusEl || !listEl || !bundle || !kind || !filterKey)
+    // null = 接错了（列表页那一档丢了 kind / 键名、认不出的 scope）：不挂，
+    // 也**不许**退成全站 —— 理由在 searchBox.ts 的 searchFilters()。
+    const filters = searchFilters(
+      root.dataset.scope,
+      filterKey,
+      root.dataset.kind
+    );
+    if (!input || !statusEl || !listEl || !bundle || !searchUrl || !filters)
       return;
+    const siteWide = root.dataset.scope === "site";
+
+    // 列表页那一档右边的「搜全站」；全站那一档末尾的「查看全部 N 条」。各自只有一档有。
+    const allLink = root.querySelector<HTMLAnchorElement>("[data-cs-all]");
+    const moreEl = root.querySelector<HTMLElement>("[data-cs-more]");
+    const moreLink = moreEl?.querySelector("a");
+    const moreText = moreEl?.querySelector<HTMLElement>("[data-cs-more-text]");
 
     const strings: Strings = JSON.parse(root.dataset.strings ?? "{}");
+
+    /** 「查看全部 N 条」：命中比列出来的多才放出来，词跟着带去 `/se`。 */
+    function setMore(total: number, term: string) {
+      if (!moreEl || !moreLink || !moreText) return;
+      moreEl.hidden = total <= MAX_RESULTS;
+      moreLink.href = searchPageHref(searchUrl!, term);
+      moreText.textContent = strings.viewAll.replaceAll(
+        "{{count}}",
+        String(total)
+      );
+    }
 
     // null = 还没试过加载；false = 试过且加载不出来（索引不存在）。
     let pagefind: PagefindModule | null | false = null;
@@ -212,23 +333,27 @@ const strings = {
 
     async function run() {
       const term = input!.value.trim();
+      // 「搜全站」跟着框里的词走：敲了 TSLA 再点它，到了 `/se` 不用再敲一遍。
+      if (allLink) allLink.href = searchPageHref(searchUrl!, term);
       if (!term) {
         setStatus(statusEl!, "note", "");
         listEl!.replaceChildren();
+        setMore(0, term);
         return;
       }
 
       await ensureLoaded();
 
-      // 索引不存在 —— 这是**故障**，不是「没搜到」。dev 里永远走这一支。
+      // 索引不存在 —— 这是**故障**，不是「没搜到」。从没构建过的 dev 里走这一支。
       if (pagefind === false) {
         listEl!.replaceChildren();
+        setMore(0, term);
         setStatus(statusEl!, "broken", strings.unavailable);
         return;
       }
 
       const search = await pagefind!.debouncedSearch(term, {
-        filters: { [filterKey!]: [kind!] },
+        filters: filters!,
       });
 
       // Pagefind 在这次搜索被后一次顶掉时返回 null，直接丢弃 ——
@@ -241,6 +366,7 @@ const strings = {
 
       if (results.length === 0) {
         listEl!.replaceChildren();
+        setMore(0, term);
         // 服务端只填了 `{{kind}}`，`{{term}}` 原样留到这里。
         setStatus(
           statusEl!,
@@ -253,12 +379,15 @@ const strings = {
       const shown = await Promise.all(
         results.slice(0, MAX_RESULTS).map(r => r.data())
       );
+      // 取正文摘要那一下也要等 —— 等的时候框里的词又变了，这一批同样过时。
+      if (input!.value.trim() !== term) return;
 
       setStatus(
         statusEl!,
         "note",
         strings.count.replaceAll("{{count}}", String(results.length))
       );
+      setMore(results.length, term);
 
       listEl!.replaceChildren(
         ...shown.map(d => {
@@ -266,7 +395,8 @@ const strings = {
 
           // 结果项和站里其他"可点的整块"用同一张卡（见 global.css 的 app-card）。
           const a = document.createElement("a");
-          a.href = d.url;
+          // Pagefind 的地址带末尾斜杠（/r/1036/）—— 本地 404、线上多跳一次，见 searchResultHref()。
+          a.href = searchResultHref(d.url);
           a.className = "app-card app-card-interactive block p-4";
 
           const title = document.createElement("span");
@@ -282,12 +412,21 @@ const strings = {
 
           a.append(title, p);
 
-          // 索引里带的那两个小标签（智能体 / 模型）：/search 那页由 PagefindUI 自己画成 tags，
+          // 全站那一档：四种内容混在一个列表里，每条先说自己是哪一种（「类型: 研究」）。
+          // 列表页那一档不画 —— 那一页上每条都是同一种，画出来是八遍同一个词。
+          // 没有类型的（「关于」页）不画：它不属于四种里的任何一种，不是没标。
+          const kinds =
+            siteWide && filterKey ? (d.filters?.[filterKey] ?? []) : [];
+
+          // 索引里带的那两个小标签（智能体 / 模型）：/se 那页由 PagefindUI 自己画成 tags，
           // 这里是自渲染的，得自己画一行。title / image 是 Pagefind 的保留键，不算。
-          const extra = Object.entries(d.meta ?? {}).filter(
-            ([key, value]) =>
-              value && !["title", "image", "image_alt"].includes(key)
-          );
+          const extra = [
+            ...kinds.map(value => [filterKey!, value] as const),
+            ...Object.entries(d.meta ?? {}).filter(
+              ([key, value]) =>
+                value && !["title", "image", "image_alt"].includes(key)
+            ),
+          ];
           if (extra.length > 0) {
             const tags = document.createElement("p");
             tags.className = "text-muted-foreground mt-1 text-xs";
@@ -307,10 +446,23 @@ const strings = {
     // 这只是预热，真正触发搜索的是 input 事件。
     input.addEventListener("focus", () => void ensureLoaded(), { once: true });
     input.addEventListener("input", () => void run());
-    // 回车不要提交（外层是 <search> 不是 <form>，这里只是保险）。
-    input.addEventListener("keydown", e => {
-      if (e.key === "Enter") e.preventDefault();
-    });
+
+    if (siteWide) {
+      // 全站那一档：回车交给外面那个指向 `/se` 的表单（原生提交，理由见文件头）。
+      // 这里只管一件事：空着回车不跳 —— 跳到一个空的搜索页，读者只会以为什么都没发生，
+      // 历史记录里还多一条。ClientRouter 看得见 defaultPrevented，不会再接手这次提交。
+      root.querySelector("form")?.addEventListener("submit", e => {
+        const term = input.value.trim();
+        if (!term) e.preventDefault();
+        else input.value = term;
+      });
+    } else {
+      // 列表页那一档：回车不要提交（外层是 <div> 不是 <form>，这里只是保险）。
+      // ⚠ 别把这条挪到 if 外面去：全站那一档拦了回车，表单就永远提交不出去。
+      input.addEventListener("keydown", e => {
+        if (e.key === "Enter") e.preventDefault();
+      });
+    }
   }
 
   function initAll() {

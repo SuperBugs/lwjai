@@ -210,8 +210,17 @@ export default {
     searchAll: "搜全站",
     count: "{{count}} 条",
     empty: "{{kind}}里没有匹配「{{term}}」的内容",
-    // ★ 和上面那句必须不一样：这是"搜不了"，不是"没搜到"。
+    emptyAll: "全站没有匹配「{{term}}」的内容",
+    viewAll: "查看全部 {{count}} 条",
+    // ★ 和上面两句都必须不一样：这是"搜不了"，不是"没搜到"。
     unavailable: "搜索索引还没生成 —— 它是构建产物，`pnpm build` 跑一次才有。",
+  },
+  symbolFilter: {
+    label: "搜索标的",
+    placeholder: "搜代码或公司名，如 TSLA、特斯拉、Tesla…",
+    count: "匹配 {{count}} 只（共 {{total}} 只）",
+    empty: "没有匹配「{{term}}」的标的。",
+    searchAll: "在全站搜「{{term}}」",
   },
   provenance: {
     ai: "这一篇是 AI 生成的（模型会编数字）。",

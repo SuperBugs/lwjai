@@ -86,10 +86,11 @@ export default defineAstroPaperConfig({
     },
     search: "pagefind",
   },
-  // 页脚右侧 + 首页简介下方那一行「找到我:」共用这一个数组（`src/components/Socials.astro`）。
+  // 页脚右侧那一组图标读这个数组（`src/components/Socials.astro`）；页脚那条
+  // 「Telegram 频道 →」的地址、首页 JSON-LD 的 `sameAs`（滤掉 mailto）也从这里取。
   // `name` 必须对得上 `src/assets/icons/socials/` 下的 SVG 文件名 —— 对不上的那一条
   // **不报错，只是静默不渲染**（Socials.astro 里 `Icon ? … : null`）。
-  // 数组顺序就是渲染顺序：Telegram、X、邮箱。
+  // 数组顺序就是图标的顺序：X、邮箱、GitHub（Telegram 在页脚是那条带字的链接，不画图标）。
   socials: [
     {
       name: "telegram",
@@ -123,6 +124,14 @@ export default defineAstroPaperConfig({
       // ★ 不写这行的话默认 title 是英文的 "Send an email to 牢玩家"
       // （判据 `url.startsWith("mailto:") || name === "mail"`），中文站里挂个英文 aria-label。
       linkTitle: "给牢玩家发邮件",
+    },
+    {
+      // 【2026-09-23 用户要的】这套系统开源了，页脚放一个 GitHub 图标指向公开仓库。
+      // name 必须叫 github —— 图标按名字找（src/assets/icons/socials/github.svg，AstroPaper 自带）。
+      name: "github",
+      url: "https://github.com/your-account/your-repo",
+      // ★ 不写这行的话默认 title 是英文的 "牢玩家 on Github"。
+      linkTitle: "查看牢玩家的开源代码（GitHub）",
     },
   ],
   // ⚠ 下面这个 telegram 和上面那个**不是一回事**，别改混：

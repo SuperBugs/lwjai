@@ -104,19 +104,28 @@ test("A4 manual / retired 都得说出为什么", () => {
   }
 });
 
-test("A5 就是三档 —— 加第四档（比如「模拟登录」）会红", () => {
+test("A5 就是这四档 —— 再加一档（比如「替人按发布」）会红", () => {
   /**
-   * 把"拿 cookie / 无头浏览器替人按发送"做成一个选项，就是把 2026-09-23
+   * 把"拿 cookie / 无头浏览器替人按发布"做成一个选项，就是把 2026-09-23
    * 踩过的坑铺成一条路。
    * ⚠ 第一版这条是 grep 一句中文注释，而那四个字在文件里有两处 ——
    *   破坏掉屏幕上真正生效的那一处，断言被**另一处注释**接住了，照样绿。
    *   （这一轮第五次同一个形态。）现在钉的是**类型联合本身**。
+   * ★【2026-09-23 同日晚些时候】这条**真红过一次，而且红得对**：用户听过风险之后
+   *   要用 Wechatsync 推雪球长文，平台表多了 `draft` 一档，这条当场红 ——
+   *   逼着人回来表态这一档和"替人按发布"差在哪（三件事，写在 socialPlatforms.ts
+   *   文件头「仍然没有…」那一节）。下一次它红，也是同样的意思：先回去写清楚，再改这一行。
    */
   const src = readFileSync(join(ROOT, "src/config/socialPlatforms.ts"), "utf8");
   const decl = src.match(/export type PostMode =([^;]+);/);
   assert.ok(decl, "PostMode 的声明找不着了");
   const tiers = [...decl[1]!.matchAll(/"([a-z]+)"/g)].map(m => m[1]!).sort();
-  assert.deepEqual(tiers, ["manual", "official", "retired"]);
+  assert.deepEqual(tiers, ["draft", "manual", "official", "retired"]);
+
+  // draft 那一档成立的三个前提，文件头里一个都不许少（少一个就是"替人按发布"）。
+  assert.match(src, /结构上只能存草稿/);
+  assert.match(src, /你真的浏览器/);
+  assert.match(src, /一次一篇、人来点/);
 
   // 表里每一行也得落在这三档里（类型之外再拦一道，表是手写的）。
   for (const p of SOCIAL_PLATFORMS) {

@@ -9,6 +9,7 @@ import Footer from "@/components/Footer.astro";
 import Card from "@/components/Card.astro";
 import EmptyState from "@/components/EmptyState.astro";
 import LinkButton from "@/components/LinkButton.astro";
+import CollectionSearch from "@/components/CollectionSearch.astro";
 import { getSortedPosts } from "@/utils/getSortedPosts";
 import { foldQaGroups } from "@/utils/qaGroups";
 import { siteJsonLd } from "@/utils/structuredData";
@@ -210,6 +211,20 @@ const structuredData = siteJsonLd({
           >网站无任何收费内容，以后也不会有任何收费。</span
         >
       </p>
+
+      {
+        /* ★【2026-09-23 用户要的】全站搜索框。在这之前首页上一个检索入口都没有
+           （导航里的搜索图标 9-18 拿掉了，理由见 Header.astro）。
+           和列表页顶上那个是**同一个组件**的全站那一档：边敲边出结果，
+           回车 / 「查看全部」去 `/se`（分面筛选、加载更多）。两档差在哪、
+           为什么回车走原生表单提交，见 CollectionSearch.astro 文件头。
+           宽度和上面两行导语对齐（max-w-2xl），结果卡也在这一列里。
+           ⚠ 全站一条内容都没有时不摆 —— 和列表页同一条口径：一个搜什么都
+             搜不到的框，在界面上和"搜索坏了"长得一样。 */
+        sortedEntries.length > 0 && (
+          <CollectionSearch siteWide class="mt-6 max-w-2xl sm:mt-8" />
+        )
+      }
     </section>
 
     {

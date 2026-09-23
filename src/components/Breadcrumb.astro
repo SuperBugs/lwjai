@@ -1,6 +1,7 @@
 ---
 import { getRelativeLocaleUrl } from "astro:i18n";
 import { stripBase, stripLocale } from "@/utils/withBase";
+import { breadcrumbTrail } from "@/utils/breadcrumb";
 import { useTranslations } from "@/i18n";
 import config from "@/config";
 
@@ -12,85 +13,20 @@ const t = useTranslations(locale);
 const pathWithoutBase = stripBase(Astro.url.pathname).replace(/\/+$/, "");
 const currentUrlPath = stripLocale(pathWithoutBase, locale);
 
-// Get url array from path
-// eg: /tags/tailwindcss => ['tags', 'tailwindcss']
-const breadcrumbList = currentUrlPath.split("/").slice(1).filter(Boolean);
-
-const decodeSegment = (value: string) => {
-  try {
-    return decodeURIComponent(value);
-  } catch {
-    return value;
-  }
-};
-
-// 路径段 → 中文名。**命不中就原样输出路径段，而且不报错** ——
-// 所以这张表漏一行的症状只是页面上多出一个英文单词，没有任何测试会红。
-const navLabels: Record<string, string> = {
-  posts: t.nav.posts,
-  qa: t.nav.qa,
-  guides: t.nav.guides,
-  prompts: t.nav.prompts,
-  // ★【2026-09-18 修】这一行以前没有，于是 /s/ 的面包屑一直显示「首页 » s」
-  //   （在 dist/s/index.html 里核实过），尽管 i18n 里 nav.symbols = "标的"
-  //   从一开始就存在。漏的不是文案，是这张表里的一行。
-  s: t.nav.symbols,
-  tags: t.nav.tags,
-  about: t.nav.about,
-  archives: t.nav.archives,
-  search: t.nav.search,
-};
-
 /**
- * 首段本身就是一个分页列表的集合：/posts/2 → 「研究 (第 2)」、/qa/2 → 「问答 (第 2)」。
- * 第 1 页**不带页码**：/posts → 「研究」。【2026-09-20 改】原来印「研究 (第 1)」，
- * 一个每个模块首页都有、永远是 1 的数字不带任何信息（标签那条一直是这么处理的，见下面）。
+ * 首页后面那几格印什么、链到哪 —— 判据全在 `src/utils/breadcrumb.ts`，这里只管画。
  *
- * ★ 做成一张表而不是每个集合一个 if：写死的分支正是下一个集合上线时会被漏掉的地方，
- *   而漏掉的症状是面包屑显示成「问答 » 2」—— 不报错、不会红。
- * ⚠ 不许把 `s` 加进来：/s/ 是一张不分页的总表，套上这条会显示成「标的 (第 1)」，
- *   一个不存在的页码比没有页码糟糕得多。
- * ⚠ `tags` 也不在这里：它的页码在第 3 段（/tags/<标签>/2），形状不同，见下面那条。
+ * ★【2026-09-23 修】这里原来有一张手写的「路径段 → 中文名」表和一份手写的分页集合名单，
+ *   键还是 2026-09-21 改地址之前的 posts / tags / about……于是 /r 印成「首页 / r」、
+ *   /se 印成「首页 / se」，整整两天四处全绿（表查不中就原样输出路径段，不报错）。
+ *   现在首段的名字从登记表推（collections.ts 的 urlPrefix + routes.ts 的 ROUTES），
+ *   `scripts/gate/breadcrumb.test.ts` 钉着：**别在这个文件里再点名任何一个路径段**，
+ *   也别再写 `t.nav.<某一格>` —— 除了「首页」，每一格的名字都从那张表来。
  */
-const PAGINATED_ROOTS: readonly string[] = ["posts", "qa", "guides", "prompts"];
-
-// if breadcrumb is Home > Posts > [page] <etc>
-// replace Posts with localized "Posts (page number)"
-const paginatedRoot = breadcrumbList[0];
-const maybePageSegment = breadcrumbList[1];
-// ⚠ 第二段必须是"没有"或"纯数字"才当页码用。少了这个判断，/qa/some-slug
-//   这种详情页地址会被显示成「问答 (第 some-slug)」—— 今天详情页不渲染面包屑
-//   所以看不见，但那是别人往详情页加一行 <Breadcrumb /> 就会踩到的坑。
-//   这条判断不改变任何现存页面的输出：/posts 没有第二段，/posts/2 是数字。
-if (
-  paginatedRoot &&
-  PAGINATED_ROOTS.includes(paginatedRoot) &&
-  (!maybePageSegment || /^\d+$/.test(maybePageSegment))
-) {
-  const pageNo = Number(breadcrumbList[1] || 1);
-  const rootLabel = navLabels[paginatedRoot] ?? paginatedRoot;
-  breadcrumbList.splice(
-    0,
-    2,
-    pageNo === 1
-      ? rootLabel
-      : `${rootLabel} (${t.pagination.page.toLowerCase()} ${pageNo})`
-  );
-}
-
-// if breadcrumb is Home > Tags > [tag] > [page] <etc>
-// replace [tag] > [page] with localized [tag] (page number)
-if (breadcrumbList[0] === "tags" && !isNaN(Number(breadcrumbList[2]))) {
-  breadcrumbList.splice(
-    1,
-    3,
-    `${decodeSegment(breadcrumbList[1])} ${
-      Number(breadcrumbList[2]) === 1
-        ? ""
-        : `(${t.pagination.page.toLowerCase()} ${breadcrumbList[2]})`
-    }`
-  );
-}
+const crumbs = breadcrumbTrail(currentUrlPath, {
+  nav: t.nav,
+  page: t.pagination.page,
+});
 ---
 
 {
@@ -118,8 +54,8 @@ if (breadcrumbList[0] === "tags" && !isNaN(Number(breadcrumbList[2]))) {
       <span aria-hidden="true">/</span>
     </li>
     {
-      breadcrumbList.map((breadcrumb, index) =>
-        index + 1 === breadcrumbList.length ? (
+      crumbs.map((crumb, index) =>
+        index + 1 === crumbs.length ? (
           <li>
             <span
               class:list={[
@@ -129,16 +65,16 @@ if (breadcrumbList[0] === "tags" && !isNaN(Number(breadcrumbList[2]))) {
               aria-current="page"
             >
               {/* make the last part lowercase in Home > Tags > some-tag */}
-              {navLabels[breadcrumb] ?? decodeSegment(breadcrumb)}
+              {crumb.label}
             </span>
           </li>
         ) : (
           <li class="flex items-center gap-x-1.5">
             <a
-              href={getRelativeLocaleUrl(locale, breadcrumb)}
+              href={getRelativeLocaleUrl(locale, crumb.path)}
               class="hover:text-foreground capitalize transition-colors"
             >
-              {navLabels[breadcrumb] ?? decodeSegment(breadcrumb)}
+              {crumb.label}
             </a>
             <span aria-hidden="true">/</span>
           </li>

@@ -34,7 +34,12 @@ const guides = await getCollection("guides");
 const prompts = await getCollection("prompts");
 
 // ★ 直接用 getSortedPosts，它一次做完两件事：postFilter（草稿 / 定时未到）
-//   和「modDatetime ?? pubDatetime 降序」。
+//   和「按创建时间（pubDatetime）降序」。
+//
+//   【2026-09-23】排序键从 `modDatetime ?? pubDatetime` 换成了创建时间
+//   （src/utils/createdOrder.ts），分组（pubDatetime 的年月）和组内顺序重新是
+//   同一个键 —— 按更新时间排的那几天里，一篇 1 月写、9 月改过的稿子
+//   会排在 1 月那一组的最前面。
 //
 //   【2026-09-18 侦察实测】原来这一页是 `posts.filter(postFilter)` 再在月份组里
 //   补一句按 **pubDatetime** 的就地 `.sort()`，而 RSS 和首页用的是

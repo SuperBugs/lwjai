@@ -7,6 +7,7 @@ import { foldQaGroups } from "@/utils/qaGroups";
 import { entrySlug, entryUrl } from "@/utils/getPostPaths";
 import { fullTextLabelFor, type XhsCardSource } from "@/utils/xhsCardPlan";
 import type { XhsPostSource } from "@/utils/xhsPost";
+import type { XueqiuArticleSource } from "@/utils/xueqiuArticle";
 import { symbolNames } from "@/config/symbols";
 import { agentDisplayName, findAgent } from "@/config/agents";
 import { modelSlot, modelSlotLabel } from "@/config/models";
@@ -239,5 +240,61 @@ export function postSourceOf(
     voices: group.answers.map(a => voiceOf(a, t)),
     tags: list(data, "tags"),
     date: beijingDate(data),
+  };
+}
+
+/**
+ * 推到雪球草稿箱的那篇长文要带什么（`src/dev/xueqiu-draft.ts`）。
+ * **和卡片、文案读同一个 group、同一个 `bylineOf()`** —— 理由见文件头。
+ *
+ * ★ 每一份的**全文不在这儿读**，由调用方从 `.md` 导出端点取回来传进来
+ *   （`bodies` 和 `group.answers` 一一对齐）：推到雪球的正文要和读者下载的
+ *   逐字节相同，理由在 `src/utils/xueqiuArticle.ts` 文件头。
+ *   ⚠ 所以这里**不许**碰 `entry.body` —— 那是第二个出口（docs/gate.md 7.5
+ *   「复制全文」那一节的同一条）。
+ * ★ 仍然是一张字段白名单：标题、标的、日期、地址、每一份的落款和摘要。
+ */
+export function xueqiuSourceOf(
+  group: XhsGroup,
+  collection: string,
+  t: T,
+  locale: string | undefined,
+  bodies: readonly string[]
+): XueqiuArticleSource {
+  if (bodies.length !== group.answers.length) {
+    // 对不齐就是某一份的全文张冠李戴了 —— 宁可红。
+    throw new Error(
+      `xueqiuSourceOf: 取回 ${bodies.length} 份全文，而这一组有 ${group.answers.length} 份。`
+    );
+  }
+  const entry = group.entry;
+  const data = entry.data;
+  return {
+    kindLabel: requireCollectionSpec(collection).label,
+    title: typeof data.title === "string" ? data.title : "",
+    symbols: list(data, "symbols").map(code => symbolNames(code)),
+    date: beijingDate(data),
+    url: new URL(
+      entryUrl(entry.collection, entry.id, entry.filePath, locale),
+      config.site.url
+    ).href,
+    sections: group.answers.map((a, i) => ({
+      label: bylineOf(a.collection, a.data, t),
+      description:
+        typeof a.data.description === "string" ? a.data.description : "",
+      body: bodies[i]!,
+      // 放不下、分开推的时候每篇各记一笔账，要知道它是站上哪一条。
+      key: `${a.collection}/${slugOf(a)}`,
+      /**
+       * 分开推的时候这一份自己就是一篇：「全文」链接必须指向**它自己的**页面，
+       * 不是整组代表那一条的（理由在 `XueqiuSection.url` 上面）。
+       */
+      url: new URL(
+        entryUrl(a.collection, a.id, a.filePath, locale),
+        config.site.url
+      ).href,
+      date: beijingDate(a.data),
+      symbols: list(a.data, "symbols").map(code => symbolNames(code)),
+    })),
   };
 }

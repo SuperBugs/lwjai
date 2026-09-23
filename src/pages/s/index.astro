@@ -7,8 +7,11 @@ import Breadcrumb from "@/components/Breadcrumb.astro";
 import Main from "@/components/Main.astro";
 import EmptyState from "@/components/EmptyState.astro";
 import Footer from "@/components/Footer.astro";
+import SearchField from "@/components/SearchField.astro";
 import { getUniqueSymbols } from "@/utils/getUniqueSymbols";
 import { coverageLabel } from "@/utils/coverageLabel";
+import { symbolNames, symbolSearchText } from "@/config/symbols";
+import { ROUTES } from "@/config/routes";
 import { useTranslations } from "@/i18n";
 import config from "@/config";
 
@@ -27,6 +30,17 @@ const t = useTranslations(locale);
 // 「3 篇研究 · 2 条问答」—— 分开报、为 0 的那档不出现。
 // 【2026-09-20】原来这里和 /s/[symbol] 各写一份，智能体索引要用第三份时抽到了
 // src/utils/coverageLabel.ts（零 import，有单测）。这里的每一只票至少有一边非 0。
+
+/** 筛选框「一只都没中」时那条去全站搜的链接指向这里（`/se`，走 ROUTES，不手写）。 */
+const searchUrl = getRelativeLocaleUrl(locale, ROUTES.search);
+
+// 筛选框底下那一行的三句话。服务端拼好塞进 data-*，脚本只管替换 {{…}} ——
+// 和 CollectionSearch 同一个做法，省得把 i18n 整个搬进客户端。
+const filterStrings = {
+  count: t.symbolFilter.count,
+  empty: t.symbolFilter.empty,
+  searchAll: t.symbolFilter.searchAll,
+};
 ---
 
 <Layout
@@ -43,32 +57,153 @@ const t = useTranslations(locale);
       symbols.length === 0 ? (
         <EmptyState message={t.pages.symbolsEmpty} />
       ) : (
-        /* ★ 这里的格子**整块就是一个 `<a>`**，所以用 `app-card-interactive`
-           （悬停抬起 + 边框提档）。列表页的 Card 不是链接，只能提边框 ——
-           两者的差别是刻意的，见 global.css 里那两条 utility 的说明。 */
-        <ul class="grid grid-cols-[repeat(auto-fill,minmax(12rem,1fr))] gap-3">
-          {symbols.map(s => (
-            <li>
-              <a
-                href={getRelativeLocaleUrl(locale, `s/${s.slug}`)}
-                class="app-card app-card-interactive block p-4"
-              >
-                {/* 代码用等宽：一列代码上下对得齐，扫起来快得多 */}
-                <span class="font-mono text-lg font-semibold tracking-wide">
-                  {s.code}
-                </span>
-                {/* 没有中文名就什么都不显示 —— 不编，也不摆一个"—" */}
-                {s.name && <span class="mt-0.5 block truncate">{s.name}</span>}
-                <span class="text-muted-foreground mt-2 block text-sm">
-                  {coverageLabel(s.postCount, s.qaCount)}
-                </span>
-              </a>
-            </li>
-          ))}
-        </ul>
+        <>
+          {/* ★【2026-09-23 用户要的】「标的模块也要加搜索，等以后标的多起来就不好找了」。
+              **就地筛选**，不走 Pagefind：这一页要找的是"哪一张卡"，而卡已经全在页面上了。
+              按代码 / 中文名 / 英文名筛（`symbolSearchText()`，后台那一格的搜索框读同一份；
+              英文名不在卡片上，但读者会敲 Micron 找美光），匹配规矩也是同一条
+              （`matchesQuery()`：NFKC + 小写，空格切开每段都得中，全角的 ＭＵ 也认）。
+              底下那一行三档不一样，判据 `filterTier()`：没输入不画 / 「匹配 N 只（共 M 只）」/
+              「没有匹配…」＋ 去全站搜的链接（没有这只票的专页 ≠ 站上没提过它）。
+              ⚠ 一只票都没有时不摆这个框 —— 走上面那个空状态，和列表页同一条口径。 */}
+          <search
+            class="mb-6"
+            data-symbol-filter
+            data-search-url={searchUrl}
+            data-strings={JSON.stringify(filterStrings)}
+          >
+            <label class="sr-only" for="symbol-filter">
+              {t.symbolFilter.label}
+            </label>
+            <SearchField
+              id="symbol-filter"
+              placeholder={t.symbolFilter.placeholder}
+            />
+            {/* role=status：筛完之后焦点还在框里，读屏软件靠它才知道剩几只 */}
+            <p
+              role="status"
+              class="text-muted-foreground mt-2 text-sm empty:hidden"
+              data-symbol-filter-status
+            />
+          </search>
+          {/* ★ 这里的格子**整块就是一个 `<a>`**，所以用 `app-card-interactive`
+             （悬停抬起 + 边框提档）。列表页的 Card 不是链接，只能提边框 ——
+             两者的差别是刻意的，见 global.css 里那两条 utility 的说明。 */}
+          <ul class="grid grid-cols-[repeat(auto-fill,minmax(12rem,1fr))] gap-3">
+            {symbols.map(s => (
+              <li data-symbol-search={symbolSearchText(symbolNames(s.code))}>
+                <a
+                  href={getRelativeLocaleUrl(locale, `s/${s.slug}`)}
+                  class="app-card app-card-interactive block p-4"
+                >
+                  {/* 代码用等宽：一列代码上下对得齐，扫起来快得多 */}
+                  <span class="font-mono text-lg font-semibold tracking-wide">
+                    {s.code}
+                  </span>
+                  {/* 没有中文名就什么都不显示 —— 不编，也不摆一个"—" */}
+                  {s.name && (
+                    <span class="mt-0.5 block truncate">{s.name}</span>
+                  )}
+                  <span class="text-muted-foreground mt-2 block text-sm">
+                    {coverageLabel(s.postCount, s.qaCount)}
+                  </span>
+                </a>
+              </li>
+            ))}
+          </ul>
+        </>
       )
     }
   </Main>
 
   <Footer />
 </Layout>
+
+<script>
+  // 匹配规矩和后台「标的」那一格是同一条，判据全在 searchBox.ts ——
+  // 这里只管把命中的卡留着、没中的藏起来，再把底下那一行画成对应的那一档。
+  import {
+    SEARCH_QUERY_PARAM,
+    filterTier,
+    matchesQuery,
+    searchPageHref,
+  } from "@/utils/searchBox";
+
+  type Strings = { count: string; empty: string; searchAll: string };
+
+  function initSymbolFilter() {
+    const root = document.querySelector<HTMLElement>("[data-symbol-filter]");
+    if (!root || root.dataset.ready) return;
+    root.dataset.ready = "1";
+
+    const input = root.querySelector<HTMLInputElement>("input[type=search]");
+    const status = root.querySelector<HTMLElement>(
+      "[data-symbol-filter-status]"
+    );
+    const searchUrl = root.dataset.searchUrl;
+    const cards = [
+      ...document.querySelectorAll<HTMLElement>("[data-symbol-search]"),
+    ];
+    if (!input || !status || !searchUrl) return;
+    const strings: Strings = JSON.parse(root.dataset.strings ?? "{}");
+
+    function apply() {
+      const query = input!.value;
+      const term = query.trim();
+
+      let shown = 0;
+      for (const card of cards) {
+        const hit = matchesQuery(card.dataset.symbolSearch ?? "", query);
+        card.hidden = !hit;
+        if (hit) shown += 1;
+      }
+
+      const tier = filterTier(query, shown);
+      if (tier === "idle") {
+        status!.replaceChildren();
+      } else if (tier === "some") {
+        status!.textContent = strings.count
+          .replaceAll("{{count}}", String(shown))
+          .replaceAll("{{total}}", String(cards.length));
+      } else {
+        const link = document.createElement("a");
+        link.href = searchPageHref(searchUrl!, term);
+        link.className =
+          "hover:text-foreground underline decoration-1 underline-offset-4 transition-colors";
+        link.textContent = strings.searchAll.replaceAll("{{term}}", term);
+        status!.replaceChildren(
+          strings.empty.replaceAll("{{term}}", term),
+          " ",
+          link
+        );
+      }
+
+      // 词写进地址栏（/s?q=mu）：点进一只票再按返回，筛选还在；地址也能直接发给别人。
+      // history.state 原样传回去 —— ClientRouter 换页靠它，/se 那一页也是这么写的。
+      const params = new URLSearchParams(location.search);
+      if (term) params.set(SEARCH_QUERY_PARAM, term);
+      else params.delete(SEARCH_QUERY_PARAM);
+      const qs = params.toString();
+      history.replaceState(
+        history.state,
+        "",
+        qs ? `${location.pathname}?${qs}` : location.pathname
+      );
+    }
+
+    input.addEventListener("input", apply);
+
+    // 带着 ?q= 进来的（按了返回键 / 别人发来的地址）：先把词填回框里，再筛一次。
+    const initial = new URLSearchParams(location.search).get(
+      SEARCH_QUERY_PARAM
+    );
+    if (initial) {
+      input.value = initial;
+      apply();
+    }
+  }
+
+  // 只挂 astro:page-load 一处：它在首屏和每次站内换页之后都会触发。
+  // 再在这里直接调一次 = 首屏跑两遍（上面那个 data-ready 挡得住，但别依赖它）。
+  document.addEventListener("astro:page-load", initSymbolFilter);
+</script>

@@ -16,38 +16,19 @@ import type { ScannedGroup } from "../config/groupScan";
 import {
   symbolNames,
   symbolOptionLabel,
+  symbolSearchText,
   type SymbolRow,
 } from "../config/symbols";
+import { matchesQuery, queryTerms, searchKey } from "../utils/searchBox";
 
 // ── 搜索：两个选择器共用这一条规矩 ────────────────────────────────────────
-
-/**
- * 比较之前两边都过一遍：**NFKC + 小写**。
- *
- * NFKC 不是讲究：中文输入法下敲出来的常常是全角（`ＭＵ`、`０９`），而选项里的
- * 括号和冒号本来就是全角的（「补一份研究：MU（09-23）」）。只转小写的话，
- * 半角的 `(09` 找不到全角的 `（09`，屏幕上是「没有匹配」而那一项明明就在。
- * 两边同一个函数，所以全角半角怎么混着敲都对得上。
- * ⚠ NFKC 会把 `①` `②` 折成 `1` `2` —— 两边一起折，不影响匹配，只是别拿它做显示。
- */
-export function searchKey(text: string): string {
-  return text.normalize("NFKC").toLowerCase();
-}
-
-/** 搜索词按空白切开：**每一段都得命中**（`mu 09` = 既有 mu 又有 09）。 */
-export function queryTerms(query: string): string[] {
-  return searchKey(query)
-    .split(/\s+/u)
-    .filter(t => t !== "");
-}
-
-/** 空搜索词 = 全都算命中（搜索框空着就是"不筛"）。 */
-export function matchesQuery(haystack: string, query: string): boolean {
-  const terms = queryTerms(query);
-  if (terms.length === 0) return true;
-  const h = searchKey(haystack);
-  return terms.every(t => h.includes(t));
-}
+//
+// 【2026-09-23】`searchKey` / `queryTerms` / `matchesQuery` 搬到了 src/utils/searchBox.ts ——
+// 站上 /s 的标的筛选框也读这一条，而这个文件在 src/dev/ 底下、还 import 了整张标的表，
+// 不该被打进公开页面的包。规矩和注释原样搬过去了，这里只是转出去：
+// 两个选择器、entryListPlan.ts 和 pickers.test.ts 的 import 都不用改。
+// ⚠ 别在这里再写一份 —— 两份的那天，后台搜得到的票站上搜不到（或者反过来），而两边各自全绿。
+export { matchesQuery, queryTerms, searchKey };
 
 // ── ① 「这一条是…」：搜索 + 分页 ──────────────────────────────────────────
 
@@ -310,7 +291,7 @@ export function symbolChoices(rows: readonly SymbolRow[]): SymbolChoice[] {
   return rows.map(r => ({
     value: r.code,
     label: symbolOptionLabel(r),
-    search: [r.code, r.name, r.nameEn].filter(Boolean).join(" "),
+    search: symbolSearchText(r),
   }));
 }
 

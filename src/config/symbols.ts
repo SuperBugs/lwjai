@@ -170,6 +170,18 @@ export function symbolOptionLabel(row: SymbolRow): string {
 }
 
 /**
+ * 一只票**能被哪些字搜到**：代码 + 中文名 + 英文名。【2026-09-23】
+ *
+ * 两处读它：后台「标的」那一格的搜索框（`pickerPlan.ts` 的 `symbolChoices()`）、
+ * 站上 `/s` 顶上那个筛选框。英文名在这两处都**不在屏幕上那行字里**（格子太窄 /
+ * 卡片上只印中文名），但读者会敲 Micron 找美光 —— 所以要搜得到。
+ * ★ 哪天给票加别名（「英伟达 / 辉达」），加在这里，两处一起生效。
+ */
+export function symbolSearchText(row: SymbolRow): string {
+  return [row.code, row.name, row.nameEn].filter(Boolean).join(" ");
+}
+
+/**
  * 这几个代码里，哪些**不在表里** —— 全站唯一判据。
  *
  * 读它的地方：`src/content.config.ts` 两个集合的 schema（构建期拦）、

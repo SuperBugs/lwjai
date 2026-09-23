@@ -60,7 +60,6 @@ export type FeedEntry = {
     title: string;
     description: string;
     pubDatetime: Date;
-    modDatetime?: Date | null;
   };
 };
 
@@ -75,6 +74,12 @@ export function toFeedItems(entries: readonly FeedEntry[]) {
       ? `${TITLE_PREFIX[collection]}｜${data.title}`
       : data.title,
     description: data.description,
-    pubDate: new Date(data.modDatetime ?? data.pubDatetime),
+    /**
+     * ★【2026-09-23】**创建时间**，不是上游的 `modDatetime ?? pubDatetime`。
+     *   条目的先后按创建时间排（`createdOrder.ts`），而阅读器是按 pubDate 自己排的 ——
+     *   这里填更新时间的话，站上改过一个字的老稿子在阅读器里就是"最新一条"，
+     *   和站上的顺序对不上。RSS 2.0 的 pubDate 本来就是"什么时候发的"。
+     */
+    pubDate: new Date(data.pubDatetime),
   }));
 }

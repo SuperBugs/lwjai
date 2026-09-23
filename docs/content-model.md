@@ -208,7 +208,7 @@ src/config/collections.ts   ← 唯一的一份
 |---|---|---|
 | `title` | `scripts/gate/inspect.ts` | **零症状漏扫**。inspect 用 `data.title ?? ""` 兜底 —— 换成 `question` 之后闸门会"成功扫描"一个空标题，报告里照常计入篇数，而问题文本从未进过 `scan()` |
 | `description` | 同上 + RSS item + `<meta>` + 列表页 | 同上；RSS 里变成空正文且不报错 |
-| `pubDatetime` · `modDatetime` · `timezone` | `Datetime.astro` · `postFilter.ts` | 类型会报错，但报的是「Datetime 缺 prop」，不是「你的 schema 名字取错了」 |
+| `pubDatetime` · `modDatetime` · `timezone` | `Datetime.astro` · `postFilter.ts` · `createdOrder.ts`（列表的先后只看 `pubDatetime`） | 类型会报错，但报的是「Datetime 缺 prop」，不是「你的 schema 名字取错了」 |
 | `draft` | `postFilter.ts` | 草稿会开始生成公开页面 |
 | `tags` | `getUniqueTags` | 缺字段时 `slugify(undefined)` 抛错，而报错信息看不出是哪个集合 |
 
@@ -450,9 +450,12 @@ logo 的全部用处就是一眼分得开谁是谁。
 不是相等）；详情页一只画一张芯片，「相关条目」按**交集**算 ——
 要求两边完全一样的话，那条多标的问答会和谁都不相关，而页面上只会少一块，不报错。
 
-⚠ 后台列表页那一列 `symbol` **没了**：`columns` 只吃 text / select / datetime /
+⚠ Keystatic 自己那张列表里 `symbol` 那一列**没了**：`columns` 只吃 text / select / datetime /
 date / checkbox / number / url / slug，`fields.multiselect` 放进去配置求值那一刻就抛
-（`tags` 一直进不来也是这个原因）。这一列是真的丢了，不是被什么东西替代了。
+（`tags` 一直进不来也是这个原因）。在那张表里这一列是真的丢了，不是被什么东西替代了。
+【2026-09-23】后台的列表页换成了自己画的（`src/dev/keystaticEntryList.ts`：搜索 + 新的在前 +
+分页），「标的」那一列在那边回来了 —— 它从 .md 直接读、名字查标的表，不走 `columns`。
+Keystatic 那张表只在我们的列表读不到数据时才露出来，那时仍然没有这一列。
 
 ### 4.2 标的表：公司名只有一处
 

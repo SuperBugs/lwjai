@@ -201,6 +201,18 @@ const devGate: AstroIntegration = {
         pattern: "/_xhs/publish",
         entrypoint: new URL("./src/dev/xhs-publish.ts", import.meta.url),
       });
+      // 【2026-09-23】推长文到雪球草稿箱：/_xueqiu/status（页面一打开就起桥、报状态）＋
+      // /_xueqiu/draft（推一篇）。走「文章同步助手」（Wechatsync）扩展 —— **我们开 WebSocket、
+      // 扩展来连**，只存草稿不发布。理由和那两个安全洞（它自己的桥不查来源、开了个
+      // 不认证的 9528）写在 src/dev/wechatsyncPlan.ts / wechatsyncBridge.ts 文件头。
+      injectRoute({
+        pattern: "/_xueqiu/status",
+        entrypoint: new URL("./src/dev/xueqiu-status.ts", import.meta.url),
+      });
+      injectRoute({
+        pattern: "/_xueqiu/draft",
+        entrypoint: new URL("./src/dev/xueqiu-draft.ts", import.meta.url),
+      });
       // 【2026-09-21】预览中转页 /_preview（src/dev/preview.astro）：后台编辑页
       // 「…」菜单里那条 Preview 链到这里（Keystatic 原生的 previewUrl）。能看的直接
       // 302 跳到真实地址；草稿 / 还没存盘 / 参数不对三档分别说明 —— 为什么不直接
@@ -208,6 +220,16 @@ const devGate: AstroIntegration = {
       injectRoute({
         pattern: "/_preview",
         entrypoint: new URL("./src/dev/preview.astro", import.meta.url),
+      });
+      // 【2026-09-23】后台列表页的数据 /_entries（src/dev/entries-run.ts）：研究稿 / 问答 /
+      // 教程 / 提示词那几张表换成了自己画的（搜索 + 新的在前 + 分页，src/dev/keystaticEntryList.ts），
+      // 数据从这里读。只读、同样只在 dev 里存在。
+      // ⚠ 这个地址和浏览器那头 fetch 的是同一个常量（entryListPlan.ts 的 ENTRIES_ROUTE），
+      //   这里写字面量是为了不让这份配置 import 一串会被后台改动的数据文件 ——
+      //   两边对得上由 scripts/gate/entryList.test.ts 钉着。
+      injectRoute({
+        pattern: "/_entries",
+        entrypoint: new URL("./src/dev/entries-run.ts", import.meta.url),
       });
     },
   },

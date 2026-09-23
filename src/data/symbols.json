@@ -69,6 +69,841 @@
       "code": "SNDK",
       "name": "闪迪",
       "nameEn": "Sandisk Corporation"
+    },
+    {
+      "code": "AAPL",
+      "name": "苹果",
+      "nameEn": "Apple"
+    },
+    {
+      "code": "MSFT",
+      "name": "微软",
+      "nameEn": "Microsoft"
+    },
+    {
+      "code": "GOOGL",
+      "name": "谷歌",
+      "nameEn": "Alphabet"
+    },
+    {
+      "code": "AMZN",
+      "name": "亚马逊",
+      "nameEn": "Amazon"
+    },
+    {
+      "code": "NVDA",
+      "name": "英伟达",
+      "nameEn": "NVIDIA"
+    },
+    {
+      "code": "TSLA",
+      "name": "特斯拉",
+      "nameEn": "Tesla"
+    },
+    {
+      "code": "AMD",
+      "name": "超威半导体",
+      "nameEn": "Advanced Micro Devices"
+    },
+    {
+      "code": "AVGO",
+      "name": "博通",
+      "nameEn": "Broadcom"
+    },
+    {
+      "code": "TSM",
+      "name": "台积电",
+      "nameEn": "TSMC"
+    },
+    {
+      "code": "INTC",
+      "name": "英特尔",
+      "nameEn": "Intel"
+    },
+    {
+      "code": "ASML",
+      "name": "阿斯麦",
+      "nameEn": "ASML"
+    },
+    {
+      "code": "SMCI",
+      "name": "超微电脑",
+      "nameEn": "Super Micro Computer"
+    },
+    {
+      "code": "MRVL",
+      "name": "迈威尔科技",
+      "nameEn": "Marvell Technology"
+    },
+    {
+      "code": "AMAT",
+      "name": "应用材料",
+      "nameEn": "Applied Materials"
+    },
+    {
+      "code": "LRCX",
+      "name": "泛林集团",
+      "nameEn": "Lam Research"
+    },
+    {
+      "code": "KLAC",
+      "name": "科磊",
+      "nameEn": "KLA"
+    },
+    {
+      "code": "TXN",
+      "name": "德州仪器",
+      "nameEn": "Texas Instruments"
+    },
+    {
+      "code": "ADI",
+      "name": "亚德诺",
+      "nameEn": "Analog Devices"
+    },
+    {
+      "code": "NXPI",
+      "name": "恩智浦",
+      "nameEn": "NXP Semiconductors"
+    },
+    {
+      "code": "ON",
+      "name": "安森美",
+      "nameEn": "onsemi"
+    },
+    {
+      "code": "MCHP",
+      "name": "微芯科技",
+      "nameEn": "Microchip Technology"
+    },
+    {
+      "code": "SNPS",
+      "name": "新思科技",
+      "nameEn": "Synopsys"
+    },
+    {
+      "code": "CDNS",
+      "name": "楷登电子",
+      "nameEn": "Cadence Design Systems"
+    },
+    {
+      "code": "WDC",
+      "name": "西部数据",
+      "nameEn": "Western Digital"
+    },
+    {
+      "code": "STX",
+      "name": "希捷科技",
+      "nameEn": "Seagate Technology"
+    },
+    {
+      "code": "ALAB",
+      "name": "Astera Labs",
+      "nameEn": "Astera Labs"
+    },
+    {
+      "code": "CRDO",
+      "name": "Credo Technology",
+      "nameEn": "Credo Technology"
+    },
+    {
+      "code": "COHR",
+      "name": "Coherent",
+      "nameEn": "Coherent"
+    },
+    {
+      "code": "LITE",
+      "name": "Lumentum",
+      "nameEn": "Lumentum"
+    },
+    {
+      "code": "ANET",
+      "name": "Arista Networks",
+      "nameEn": "Arista Networks"
+    },
+    {
+      "code": "CLS",
+      "name": "Celestica",
+      "nameEn": "Celestica"
+    },
+    {
+      "code": "VRT",
+      "name": "维谛技术",
+      "nameEn": "Vertiv"
+    },
+    {
+      "code": "DELL",
+      "name": "戴尔科技",
+      "nameEn": "Dell Technologies"
+    },
+    {
+      "code": "HPE",
+      "name": "慧与",
+      "nameEn": "Hewlett Packard Enterprise"
+    },
+    {
+      "code": "HPQ",
+      "name": "惠普",
+      "nameEn": "HP"
+    },
+    {
+      "code": "CSCO",
+      "name": "思科",
+      "nameEn": "Cisco"
+    },
+    {
+      "code": "IBM",
+      "name": "国际商业机器",
+      "nameEn": "IBM"
+    },
+    {
+      "code": "NBIS",
+      "name": "Nebius Group",
+      "nameEn": "Nebius Group"
+    },
+    {
+      "code": "APP",
+      "name": "AppLovin",
+      "nameEn": "AppLovin"
+    },
+    {
+      "code": "GEV",
+      "name": "GE Vernova",
+      "nameEn": "GE Vernova"
+    },
+    {
+      "code": "CEG",
+      "name": "星座能源",
+      "nameEn": "Constellation Energy"
+    },
+    {
+      "code": "VST",
+      "name": "Vistra",
+      "nameEn": "Vistra"
+    },
+    {
+      "code": "OKLO",
+      "name": "Oklo",
+      "nameEn": "Oklo"
+    },
+    {
+      "code": "SMR",
+      "name": "NuScale Power",
+      "nameEn": "NuScale Power"
+    },
+    {
+      "code": "IONQ",
+      "name": "IonQ",
+      "nameEn": "IonQ"
+    },
+    {
+      "code": "RGTI",
+      "name": "Rigetti Computing",
+      "nameEn": "Rigetti Computing"
+    },
+    {
+      "code": "QBTS",
+      "name": "D-Wave Quantum",
+      "nameEn": "D-Wave Quantum"
+    },
+    {
+      "code": "SOUN",
+      "name": "SoundHound AI",
+      "nameEn": "SoundHound AI"
+    },
+    {
+      "code": "CRM",
+      "name": "赛富时",
+      "nameEn": "Salesforce"
+    },
+    {
+      "code": "ADBE",
+      "name": "奥多比",
+      "nameEn": "Adobe"
+    },
+    {
+      "code": "NOW",
+      "name": "ServiceNow",
+      "nameEn": "ServiceNow"
+    },
+    {
+      "code": "INTU",
+      "name": "财捷",
+      "nameEn": "Intuit"
+    },
+    {
+      "code": "PLTR",
+      "name": "Palantir",
+      "nameEn": "Palantir"
+    },
+    {
+      "code": "SNOW",
+      "name": "Snowflake",
+      "nameEn": "Snowflake"
+    },
+    {
+      "code": "CRWD",
+      "name": "CrowdStrike",
+      "nameEn": "CrowdStrike"
+    },
+    {
+      "code": "PANW",
+      "name": "派拓网络",
+      "nameEn": "Palo Alto Networks"
+    },
+    {
+      "code": "NET",
+      "name": "Cloudflare",
+      "nameEn": "Cloudflare"
+    },
+    {
+      "code": "DDOG",
+      "name": "Datadog",
+      "nameEn": "Datadog"
+    },
+    {
+      "code": "MDB",
+      "name": "MongoDB",
+      "nameEn": "MongoDB"
+    },
+    {
+      "code": "ZS",
+      "name": "Zscaler",
+      "nameEn": "Zscaler"
+    },
+    {
+      "code": "SHOP",
+      "name": "Shopify",
+      "nameEn": "Shopify"
+    },
+    {
+      "code": "FIG",
+      "name": "Figma",
+      "nameEn": "Figma"
+    },
+    {
+      "code": "UBER",
+      "name": "优步",
+      "nameEn": "Uber"
+    },
+    {
+      "code": "ABNB",
+      "name": "爱彼迎",
+      "nameEn": "Airbnb"
+    },
+    {
+      "code": "DASH",
+      "name": "DoorDash",
+      "nameEn": "DoorDash"
+    },
+    {
+      "code": "NFLX",
+      "name": "奈飞",
+      "nameEn": "Netflix"
+    },
+    {
+      "code": "DIS",
+      "name": "迪士尼",
+      "nameEn": "Walt Disney"
+    },
+    {
+      "code": "SPOT",
+      "name": "Spotify",
+      "nameEn": "Spotify"
+    },
+    {
+      "code": "RBLX",
+      "name": "Roblox",
+      "nameEn": "Roblox"
+    },
+    {
+      "code": "TTD",
+      "name": "The Trade Desk",
+      "nameEn": "The Trade Desk"
+    },
+    {
+      "code": "SNAP",
+      "name": "Snap",
+      "nameEn": "Snap"
+    },
+    {
+      "code": "PINS",
+      "name": "Pinterest",
+      "nameEn": "Pinterest"
+    },
+    {
+      "code": "RDDT",
+      "name": "Reddit",
+      "nameEn": "Reddit"
+    },
+    {
+      "code": "DUOL",
+      "name": "多邻国",
+      "nameEn": "Duolingo"
+    },
+    {
+      "code": "COIN",
+      "name": "Coinbase",
+      "nameEn": "Coinbase"
+    },
+    {
+      "code": "CRCL",
+      "name": "Circle",
+      "nameEn": "Circle"
+    },
+    {
+      "code": "MSTR",
+      "name": "微策略",
+      "nameEn": "Strategy"
+    },
+    {
+      "code": "SOFI",
+      "name": "SoFi",
+      "nameEn": "SoFi"
+    },
+    {
+      "code": "PYPL",
+      "name": "PayPal",
+      "nameEn": "PayPal"
+    },
+    {
+      "code": "XYZ",
+      "name": "Block",
+      "nameEn": "Block"
+    },
+    {
+      "code": "AFRM",
+      "name": "Affirm",
+      "nameEn": "Affirm"
+    },
+    {
+      "code": "MARA",
+      "name": "MARA Holdings",
+      "nameEn": "MARA Holdings"
+    },
+    {
+      "code": "RIOT",
+      "name": "Riot Platforms",
+      "nameEn": "Riot Platforms"
+    },
+    {
+      "code": "SCHW",
+      "name": "嘉信理财",
+      "nameEn": "Charles Schwab"
+    },
+    {
+      "code": "IBKR",
+      "name": "盈透证券",
+      "nameEn": "Interactive Brokers"
+    },
+    {
+      "code": "FUTU",
+      "name": "富途控股",
+      "nameEn": "Futu Holdings"
+    },
+    {
+      "code": "TIGR",
+      "name": "老虎证券",
+      "nameEn": "UP Fintech"
+    },
+    {
+      "code": "JPM",
+      "name": "摩根大通",
+      "nameEn": "JPMorgan Chase"
+    },
+    {
+      "code": "BAC",
+      "name": "美国银行",
+      "nameEn": "Bank of America"
+    },
+    {
+      "code": "WFC",
+      "name": "富国银行",
+      "nameEn": "Wells Fargo"
+    },
+    {
+      "code": "C",
+      "name": "花旗集团",
+      "nameEn": "Citigroup"
+    },
+    {
+      "code": "GS",
+      "name": "高盛",
+      "nameEn": "Goldman Sachs"
+    },
+    {
+      "code": "MS",
+      "name": "摩根士丹利",
+      "nameEn": "Morgan Stanley"
+    },
+    {
+      "code": "BRK.B",
+      "name": "伯克希尔·哈撒韦",
+      "nameEn": "Berkshire Hathaway"
+    },
+    {
+      "code": "BLK",
+      "name": "贝莱德",
+      "nameEn": "BlackRock"
+    },
+    {
+      "code": "V",
+      "name": "Visa",
+      "nameEn": "Visa"
+    },
+    {
+      "code": "MA",
+      "name": "万事达",
+      "nameEn": "Mastercard"
+    },
+    {
+      "code": "AXP",
+      "name": "美国运通",
+      "nameEn": "American Express"
+    },
+    {
+      "code": "LLY",
+      "name": "礼来",
+      "nameEn": "Eli Lilly"
+    },
+    {
+      "code": "NVO",
+      "name": "诺和诺德",
+      "nameEn": "Novo Nordisk"
+    },
+    {
+      "code": "UNH",
+      "name": "联合健康",
+      "nameEn": "UnitedHealth"
+    },
+    {
+      "code": "JNJ",
+      "name": "强生",
+      "nameEn": "Johnson & Johnson"
+    },
+    {
+      "code": "PFE",
+      "name": "辉瑞",
+      "nameEn": "Pfizer"
+    },
+    {
+      "code": "MRK",
+      "name": "默沙东",
+      "nameEn": "Merck"
+    },
+    {
+      "code": "ABBV",
+      "name": "艾伯维",
+      "nameEn": "AbbVie"
+    },
+    {
+      "code": "AMGN",
+      "name": "安进",
+      "nameEn": "Amgen"
+    },
+    {
+      "code": "MRNA",
+      "name": "Moderna",
+      "nameEn": "Moderna"
+    },
+    {
+      "code": "ISRG",
+      "name": "直觉外科",
+      "nameEn": "Intuitive Surgical"
+    },
+    {
+      "code": "HIMS",
+      "name": "Hims & Hers",
+      "nameEn": "Hims & Hers"
+    },
+    {
+      "code": "WMT",
+      "name": "沃尔玛",
+      "nameEn": "Walmart"
+    },
+    {
+      "code": "COST",
+      "name": "好市多",
+      "nameEn": "Costco"
+    },
+    {
+      "code": "HD",
+      "name": "家得宝",
+      "nameEn": "Home Depot"
+    },
+    {
+      "code": "TGT",
+      "name": "塔吉特",
+      "nameEn": "Target"
+    },
+    {
+      "code": "MCD",
+      "name": "麦当劳",
+      "nameEn": "McDonald's"
+    },
+    {
+      "code": "SBUX",
+      "name": "星巴克",
+      "nameEn": "Starbucks"
+    },
+    {
+      "code": "KO",
+      "name": "可口可乐",
+      "nameEn": "Coca-Cola"
+    },
+    {
+      "code": "PEP",
+      "name": "百事",
+      "nameEn": "PepsiCo"
+    },
+    {
+      "code": "PG",
+      "name": "宝洁",
+      "nameEn": "Procter & Gamble"
+    },
+    {
+      "code": "NKE",
+      "name": "耐克",
+      "nameEn": "Nike"
+    },
+    {
+      "code": "LULU",
+      "name": "露露乐蒙",
+      "nameEn": "Lululemon"
+    },
+    {
+      "code": "GME",
+      "name": "游戏驿站",
+      "nameEn": "GameStop"
+    },
+    {
+      "code": "AMC",
+      "name": "AMC院线",
+      "nameEn": "AMC Entertainment"
+    },
+    {
+      "code": "F",
+      "name": "福特汽车",
+      "nameEn": "Ford"
+    },
+    {
+      "code": "GM",
+      "name": "通用汽车",
+      "nameEn": "General Motors"
+    },
+    {
+      "code": "RIVN",
+      "name": "Rivian",
+      "nameEn": "Rivian"
+    },
+    {
+      "code": "LCID",
+      "name": "Lucid",
+      "nameEn": "Lucid"
+    },
+    {
+      "code": "NIO",
+      "name": "蔚来",
+      "nameEn": "NIO"
+    },
+    {
+      "code": "LI",
+      "name": "理想汽车",
+      "nameEn": "Li Auto"
+    },
+    {
+      "code": "XPEV",
+      "name": "小鹏汽车",
+      "nameEn": "XPeng"
+    },
+    {
+      "code": "BA",
+      "name": "波音",
+      "nameEn": "Boeing"
+    },
+    {
+      "code": "LMT",
+      "name": "洛克希德·马丁",
+      "nameEn": "Lockheed Martin"
+    },
+    {
+      "code": "RTX",
+      "name": "雷神技术",
+      "nameEn": "RTX"
+    },
+    {
+      "code": "GE",
+      "name": "通用电气",
+      "nameEn": "GE Aerospace"
+    },
+    {
+      "code": "CAT",
+      "name": "卡特彼勒",
+      "nameEn": "Caterpillar"
+    },
+    {
+      "code": "RKLB",
+      "name": "Rocket Lab",
+      "nameEn": "Rocket Lab"
+    },
+    {
+      "code": "ASTS",
+      "name": "AST SpaceMobile",
+      "nameEn": "AST SpaceMobile"
+    },
+    {
+      "code": "XOM",
+      "name": "埃克森美孚",
+      "nameEn": "ExxonMobil"
+    },
+    {
+      "code": "CVX",
+      "name": "雪佛龙",
+      "nameEn": "Chevron"
+    },
+    {
+      "code": "OXY",
+      "name": "西方石油",
+      "nameEn": "Occidental Petroleum"
+    },
+    {
+      "code": "FSLR",
+      "name": "第一太阳能",
+      "nameEn": "First Solar"
+    },
+    {
+      "code": "T",
+      "name": "AT&T",
+      "nameEn": "AT&T"
+    },
+    {
+      "code": "VZ",
+      "name": "威瑞森",
+      "nameEn": "Verizon"
+    },
+    {
+      "code": "BABA",
+      "name": "阿里巴巴",
+      "nameEn": "Alibaba"
+    },
+    {
+      "code": "PDD",
+      "name": "拼多多",
+      "nameEn": "PDD Holdings"
+    },
+    {
+      "code": "JD",
+      "name": "京东",
+      "nameEn": "JD.com"
+    },
+    {
+      "code": "BIDU",
+      "name": "百度",
+      "nameEn": "Baidu"
+    },
+    {
+      "code": "NTES",
+      "name": "网易",
+      "nameEn": "NetEase"
+    },
+    {
+      "code": "TCOM",
+      "name": "携程",
+      "nameEn": "Trip.com"
+    },
+    {
+      "code": "BILI",
+      "name": "哔哩哔哩",
+      "nameEn": "Bilibili"
+    },
+    {
+      "code": "TME",
+      "name": "腾讯音乐",
+      "nameEn": "Tencent Music"
+    },
+    {
+      "code": "BEKE",
+      "name": "贝壳",
+      "nameEn": "KE Holdings"
+    },
+    {
+      "code": "YMM",
+      "name": "满帮",
+      "nameEn": "Full Truck Alliance"
+    },
+    {
+      "code": "ZTO",
+      "name": "中通快递",
+      "nameEn": "ZTO Express"
+    },
+    {
+      "code": "EDU",
+      "name": "新东方",
+      "nameEn": "New Oriental"
+    },
+    {
+      "code": "TAL",
+      "name": "好未来",
+      "nameEn": "TAL Education"
+    },
+    {
+      "code": "VIPS",
+      "name": "唯品会",
+      "nameEn": "Vipshop"
+    },
+    {
+      "code": "IQ",
+      "name": "爱奇艺",
+      "nameEn": "iQIYI"
+    },
+    {
+      "code": "WB",
+      "name": "微博",
+      "nameEn": "Weibo"
+    },
+    {
+      "code": "HTHT",
+      "name": "华住",
+      "nameEn": "H World"
+    },
+    {
+      "code": "YUMC",
+      "name": "百胜中国",
+      "nameEn": "Yum China"
+    },
+    {
+      "code": "MNSO",
+      "name": "名创优品",
+      "nameEn": "MINISO"
+    },
+    {
+      "code": "BZ",
+      "name": "BOSS直聘",
+      "nameEn": "Kanzhun"
+    },
+    {
+      "code": "HSAI",
+      "name": "禾赛科技",
+      "nameEn": "Hesai"
+    },
+    {
+      "code": "PONY",
+      "name": "小马智行",
+      "nameEn": "Pony AI"
+    },
+    {
+      "code": "SE",
+      "name": "冬海集团",
+      "nameEn": "Sea Limited"
+    },
+    {
+      "code": "CPNG",
+      "name": "酷澎",
+      "nameEn": "Coupang"
+    },
+    {
+      "code": "MELI",
+      "name": "美客多",
+      "nameEn": "MercadoLibre"
     }
   ]
 }

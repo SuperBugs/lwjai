@@ -47,6 +47,29 @@ import { agentLogoUrl } from "@/utils/agentLogoUrls";
  * ⚠ 哪天真把它用在一个**没有相邻文字**的地方，这一条就不成立了 ——
  *   那时要给它真的 alt 文字，而不是让读屏用户少一条信息。
  *
+ * ## 站内搜索：`<img>` 上那个 `data-pagefind-ignore="all"`【2026-09-23 查实】
+ *
+ * Pagefind 会把**标题之后的第一张 `<img>`** 自动记成这一页的 `meta.image`（搜索结果的
+ * 缩略图），不看它在正文里还是在一排导航里。在这之前，真构建出来的 39 页索引里
+ * 36 页的缩略图是一个智能体 logo，**其中 18 页是别人的**：ChatGPT 的 logo 是单色
+ * （`<span>`，不是 `<img>`），于是"标题之后第一张图"落到了切换排里兄弟那一份的 Gemini 上；
+ * 提示词页落到了「相关条目」卡片上。缩略图今天没有地方画（`/se` 关着 `showImages`，
+ * CollectionSearch 跳过 `image`），但 Pagefind 把 meta 的**字**也编进索引（`parse_meta_words`），
+ * 所以不用等谁打开图片：搜「gemini」搜得出 16 篇 ChatGPT 写的，搜「claude」搜得出一篇
+ * ChatGPT 写的，对上的只是那个 logo 的文件名。搜索结果替这一页**认领了一个厂商** ——
+ * 和上面「待补不许回落到品牌标」是同一件事。
+ *
+ * ★ 必须挂在 `<img>` **本身**，而且必须是 `"all"`（Pagefind 1.5.2 `fossick/parser.rs`，
+ *   拿真二进制逐条试过）：
+ *   - 不带值的 `data-pagefind-ignore`（=「index」）只丢文字，**照样抓图**；
+ *   - 挂在外层 `<nav>` 上连 `"all"` 都不管用：Pagefind 自己的排除表里有 `nav`
+ *     （还有 footer / form / label…），那个处理器排在后面，把状态改回「index」——
+ *     而切换排（QaAnswerSwitch）恰好就是个 `<nav>`。
+ *   - 单色那档（mask 的 `<span>`）和两个待补档（`<svg>`）不是 `<img>`，抓不到，所以不挂。
+ * ★ 不是"显式写一个 `image` meta"：那得有个值 —— 写空串就是给每一页塞一个
+ *   `image: ""`，连教程正文里真正的截图（那才该当缩略图）也一起挡掉。
+ * 钉子 `scripts/gate/pagefindImage.test.ts`：拿**真渲染出来的**组件喂真 Pagefind。
+ *
  * ⚠ 调用方传 `class` 时用 `inline-block`，不要用 `inline`：单色那一档是个 `<span>`，
  *   `display: inline` 的 span **宽高不生效** —— 那一格会缩成零宽，logo 凭空消失，
  *   而彩色那几个（`<img>`）照常显示。只在挑了单色 logo 的那几条上坏，零报错。
@@ -89,6 +112,7 @@ const maskStyle = logo ? logoMaskStyle(logo.url) : undefined;
       src={logo.url}
       alt=""
       aria-hidden="true"
+      data-pagefind-ignore="all"
       width={px}
       height={px}
       decoding="async"

@@ -1,0 +1,52 @@
+---
+/**
+ * 站上检索框的**输入框本身**（放大镜 + 框）。【2026-09-23】
+ *
+ * 读它的：`CollectionSearch.astro`（四个列表页 + 首页全站那一档）、`/s` 标的索引的
+ * 筛选框。几个框长得一模一样是**结构上**保证的 —— 原来这副样子只写在 CollectionSearch
+ * 里一份，/s 要加第二个框时抽出来：抄一份的话，哪天改了框的圆角 / 内边距，
+ * 一个站上就有两种搜索框，而没有任何一处会报错。
+ * （`/se` 那一页的框是 PagefindUI 自己画的，从它的 CSS 变量那一侧对齐，见 se.astro。）
+ *
+ * 只管长相，不管行为：输入之后干什么由外面那一层的脚本决定，脚本按
+ * `input[type=search]` 找它 —— 所以 `type` 不许改。
+ */
+import type { HTMLAttributes } from "astro/types";
+import IconSearch from "@/assets/icons/IconSearch.svg";
+
+type Props = {
+  id: string;
+  placeholder: string;
+  /** 只给**在表单里、回车真会提交**的那个框（首页全站那一档）。 */
+  name?: string;
+  /** 同上：回车真会去搜索页时，手机键盘上才画一个「搜索」键。 */
+  enterkeyhint?: HTMLAttributes<"input">["enterkeyhint"];
+};
+
+const { id, placeholder, name, enterkeyhint } = Astro.props;
+---
+
+{
+  /* 放大镜画在框里。原来框里只有 placeholder —— 一个圆角矩形加一行灰字
+     在移动端很容易被当成"输入你的邮箱"那类订阅框。图标是这一类控件的
+     通用记号，不依赖读者读懂那行字。
+     `pointer-events-none`：图标压在输入框上面，不加这条的话点到图标
+     那一小块不会聚焦输入框。 */
+}
+<div class="relative w-full">
+  <span
+    class="text-muted-foreground pointer-events-none absolute inset-y-0 start-0 flex items-center ps-3"
+    aria-hidden="true"
+  >
+    <IconSearch class="size-4" />
+  </span>
+  <input
+    id={id}
+    type="search"
+    name={name}
+    enterkeyhint={enterkeyhint}
+    autocomplete="off"
+    class="border-border bg-surface text-foreground focus-visible:border-border-strong focus-visible:outline-accent rounded-app w-full border py-2 ps-9 pe-3 transition-colors focus-visible:outline focus-visible:outline-1"
+    placeholder={placeholder}
+  />
+</div>

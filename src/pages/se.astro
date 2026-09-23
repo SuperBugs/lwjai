@@ -76,6 +76,17 @@ const t = useTranslations(locale);
 </Layout>
 
 <script>
+  // 地址栏里那个参数名（`/se?q=TSLA`）。首页全站框回车提交时的 <input name>、
+  // 「搜全站」「查看全部」两条链接都按它拼 —— 各写一份的话，改了一处，
+  // 从首页回车过来的读者就落在一个空框上，而四处全绿（search.test.ts 钉着）。
+  import { SEARCH_QUERY_PARAM, searchResultHref } from "@/utils/searchBox";
+
+  /** PagefindUI 交给 processResult 的那一份里，这里真正改到的字段。 */
+  type PagefindUiResult = {
+    url: string;
+    sub_results?: { url: string }[];
+  };
+
   function initSearch() {
     const pageFindSearch: HTMLElement | null =
       document.querySelector("#pagefind-search");
@@ -138,8 +149,20 @@ const t = useTranslations(locale);
         // 「这个查询下没有问答」和「这个站没有问答这种东西」是两件事 ——
         // 把前者藏起来就等于把它显示成后者（docs/engineering-notes.md 第二节）。
         showEmptyFilters: true,
+
+        // ★【2026-09-23 实测】Pagefind 的地址带末尾斜杠（/r/1036/），全站口径不带 ——
+        //   不换的话本地每条结果都是 404、线上每条都先 307 一次。判据在 searchBox.ts，
+        //   和两个检索框读同一份。子结果（锚点那几条）要一起换：PagefindUI 拿
+        //   第一条子结果的地址和 url 比相等来认"这是不是页面本身"，只换一边就认不出了。
+        processResult: function (result: PagefindUiResult) {
+          result.url = searchResultHref(result.url);
+          result.sub_results?.forEach(sub => {
+            sub.url = searchResultHref(sub.url);
+          });
+          return result;
+        },
         processTerm: function (term: string) {
-          params.set("q", term); // Update the `q` parameter in the URL
+          params.set(SEARCH_QUERY_PARAM, term); // Update the `q` parameter in the URL
           history.replaceState(history.state, "", "?" + params.toString()); // Push the new URL without reloading
 
           const backUrl =
@@ -151,7 +174,7 @@ const t = useTranslations(locale);
       });
 
       // If search param exists (eg: search?q=astro), trigger search
-      const query = params.get("q");
+      const query = params.get(SEARCH_QUERY_PARAM);
       if (query) {
         search.triggerSearch(query);
       }

@@ -51,7 +51,7 @@
     "remark-collapse": "^0.1.2",
     "remark-toc": "^9.0.0",
     "satori": "^0.26.0",
-    "sharp": "^0.35.2",
+    "sharp": "^0.34.0",
     "slugify": "^1.6.9",
     "tailwindcss": "^4.3.2"
   },
@@ -62,6 +62,7 @@
     "@tailwindcss/typography": "^0.5.20",
     "@types/lodash.kebabcase": "^4.1.9",
     "@types/node": "^22.10.0",
+    "@types/ws": "^8.18.1",
     "@typescript-eslint/parser": "^8.62.0",
     "eslint": "^10.6.0",
     "eslint-plugin-astro": "^2.1.1",
@@ -72,7 +73,8 @@
     "prettier-plugin-tailwindcss": "^0.8.0",
     "tsx": "^4.19.2",
     "typescript": "^6.0.3",
-    "wrangler": "^4.134.0"
+    "wrangler": "^4.134.0",
+    "ws": "^8.21.3"
   },
   "//wrangler": "`pnpm build` 这条链子里**一次都不会调用 wrangler**，但它必须钉在这里：Cloudflare Workers Builds 的部署命令（`npx wrangler deploy`）按官方文档「will use the Wrangler version set in your package.json」—— 不钉的话每次部署现拉 latest，哪天 wrangler 出个破坏性变更，仓库一行没改而部署就挂了。顺带让 wrangler.jsonc 第一行那个 `$schema: node_modules/wrangler/config-schema.json` 真的有东西可指（在这之前它指着一个不存在的文件，编辑器校验是哑的）。⚠ 别把 `workerd` 加进下面的 onlyBuiltDependencies —— 实测 `wrangler deploy --dry-run` 不需要它（本站是纯静态资源、没有 Worker 脚本），放行只会给每次 CF 构建白下一个上百 MB 的二进制。",
   "pnpm": {

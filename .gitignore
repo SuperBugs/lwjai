@@ -65,3 +65,7 @@ compose.override.yaml
 #   而 Tailwind 这类按 .gitignore 取扫描范围的工具会去扫它里面的文件 ——
 #   那是一个任何人都能提 PR 的公开仓库，里面的字节不该影响这个站的构建。
 open_source/
+
+# 雪球长文推过什么的流水账（/_share 雪球那一块的「已推到草稿箱」那一行）。
+# 理由和 .xhs-published.json 逐字相同：这台机器的备忘不是内容；不放 node_modules（丢了会重复推）。
+.xueqiu-drafts.json

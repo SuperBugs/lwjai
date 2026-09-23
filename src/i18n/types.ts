@@ -309,17 +309,38 @@ export interface UIStrings {
     placeholder: string;
     /** 屏幕阅读器用的标签，`{{kind}}` 同上。 */
     label: string;
-    /** 去 `/search` 跨集合搜的那条链接。 */
+    /** 去 `/se` 跨集合搜的那条链接。 */
     searchAll: string;
     /** `{{count}}` = 命中数。 */
     count: string;
     /** 搜了但没命中。`{{kind}}` / `{{term}}`。
      *  ★ 必须和 `unavailable` 是两句不同的话 —— 见那一条。 */
     empty: string;
+    /** 首页那个**全站**框搜了但没命中。只有 `{{term}}`（全站那一档的占位符和读屏标签
+     *  借的是 `a11y.searchPlaceholder` / `searchUi.searchLabel`，和 `/se` 同一句话）。
+     *  ★ 同样必须和 `unavailable` 是两句不同的话。 */
+    emptyAll: string;
+    /** 全站框命中比列出来的多时，末尾那条去 `/se` 的链接。`{{count}}` = 命中总数。 */
+    viewAll: string;
     /** ★ 索引根本不存在（`pnpm dev` 里，或者忘了 `pnpm build`）。
      *  **不许和 `empty` 合并**：「没搜到」是结果，「搜不了」是故障，
      *  在界面上长一样的话，一个坏掉的搜索框会被当成"这个站没这内容"。 */
     unavailable: string;
+  };
+  /** 标的索引（/s）顶上那个筛选框。【2026-09-23】它不走 Pagefind，筛的是页面上已经有的
+   *  那张表 —— 所以没有「索引读不到」那一档，只有 `filterTier()` 的三档。 */
+  symbolFilter: {
+    /** 读屏标签。 */
+    label: string;
+    placeholder: string;
+    /** 有匹配。`{{count}}` = 匹配几只，`{{total}}` = 一共几只。
+     *  ★ 总数不许省：筛掉之后剩的那几张卡，读起来不能像"站上就这几只"。 */
+    count: string;
+    /** 一只都没中。`{{term}}`。★ 只说"没有这只票的专页"那一层意思 ——
+     *  站上可能在别的内容里提过它，所以后面跟着 `searchAll` 那条链接。 */
+    empty: string;
+    /** 去全站搜这个词的那条链接（`/se?q=…`）。`{{term}}`。 */
+    searchAll: string;
   };
   /**
    * 「这一份东西是谁写的」**三档**。判据在 `src/config/provenance.ts`，

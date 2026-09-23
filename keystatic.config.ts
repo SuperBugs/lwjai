@@ -70,11 +70,17 @@ import { mountSymbolPicker } from "./src/dev/keystaticSymbolPicker";
 // 挂载在下面 mountGroupAutofill 旁边 —— 两边吃同一次扫描出来的组。
 import { mountGroupPicker } from "./src/dev/keystaticGroupPicker";
 import { groupSearchIndex } from "./src/dev/pickerPlan";
+// 【2026-09-23 用户要的】研究稿 / 问答 / 教程 / 提示词的**列表页**：搜索 + 新的在前 + 分页
+// （原话「管理界面的研究、问答、教程 list 都应该是按照倒序分页展示，并且要可以搜索」）。
+// Keystatic 自己那张表藏起来、不删，读不到数据就露回来 —— 理由写在那个文件开头，
+// 判据在 src/dev/entryListPlan.ts，数据从 dev 专用的 /_entries 读（astro.config.ts 挂的）。
+import { mountEntryList } from "./src/dev/keystaticEntryList";
 
 mountAgentModelLink();
 mountTooltipI18n();
 mountIconPreview();
 mountSymbolPicker();
+mountEntryList();
 
 /**
  * 牢玩家的后台。
@@ -1071,8 +1077,10 @@ export default config({
       // ⚠【2026-09-22】原来这里还有一列 `symbol`。标的那一格换成多选之后**它进不了列** ——
       //   `columns` 只吃 text / select / datetime / date / checkbox / number / url / slug，
       //   `fields.multiselect` 放进来是配置求值那一刻就抛（同 tags 一直进不来）。
-      //   这一列是真的丢了，不是被什么东西替代了：后台列表里从此看不出这条讲哪只票，
-      //   要按票找就用顶上那个搜索框（它只过滤地址，也帮不上忙）或者点进去看。
+      //   这一列在 **Keystatic 自己那张表**里是真的丢了，不是被什么东西替代了。
+      //   【2026-09-23】列表页换成了自己画的（src/dev/keystaticEntryList.ts）：「标的」那一列
+      //   在那边回来了（从 .md 直接读，不走 columns），搜索也搜得到代码和公司名。
+      //   这里的 columns 从此只在一种时候看得见 —— 那张表读不到数据、退回 Keystatic 原来的表。
       //   换来的是一条内容可以讲好几只票 —— 这是那次改动付的账，写在这免得被当成漏改。
       columns: ["title", "agent", "model", "pubDatetime"],
       entryLayout: "content",
@@ -1298,8 +1306,10 @@ export default config({
       // ⚠【2026-09-22】原来这里还有一列 `symbol`。标的那一格换成多选之后**它进不了列** ——
       //   `columns` 只吃 text / select / datetime / date / checkbox / number / url / slug，
       //   `fields.multiselect` 放进来是配置求值那一刻就抛（同 tags 一直进不来）。
-      //   这一列是真的丢了，不是被什么东西替代了：后台列表里从此看不出这条讲哪只票，
-      //   要按票找就用顶上那个搜索框（它只过滤地址，也帮不上忙）或者点进去看。
+      //   这一列在 **Keystatic 自己那张表**里是真的丢了，不是被什么东西替代了。
+      //   【2026-09-23】列表页换成了自己画的（src/dev/keystaticEntryList.ts）：「标的」那一列
+      //   在那边回来了（从 .md 直接读，不走 columns），搜索也搜得到代码和公司名。
+      //   这里的 columns 从此只在一种时候看得见 —— 那张表读不到数据、退回 Keystatic 原来的表。
       //   换来的是一条内容可以讲好几只票 —— 这是那次改动付的账，写在这免得被当成漏改。
       columns: ["title", "agent", "model", "pubDatetime"],
       // 屏幕窄的时候它会**静默退回**普通表单布局，不报错 —— 不是配错了。

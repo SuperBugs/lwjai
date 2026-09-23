@@ -26,6 +26,7 @@ import {
   type SocialPlatform,
 } from "@/config/socialPlatforms";
 import { beijingDate, bylineOf } from "./xhsEntry";
+import { draftLabel, draftRecordsFor, readDrafts } from "./xueqiuDrafts";
 import { useTranslations } from "@/i18n";
 import type { ShareKind } from "@/utils/sharePost";
 import config from "@/config";
@@ -47,8 +48,11 @@ import config from "@/config";
  * 雪球 / 富途那套文案在 `src/utils/communityPost.ts`。
  *
  * ★ **三家都没有官方发帖接口**（富途 OpenAPI 只有交易和行情；雪球那些
- *   `xq_a_token` 的接口是读数据的）。所以这一页只出字 ——「最后一下人自己按」
- *   不是偷懒，拿 cookie / 无头浏览器替人按发送正是这次被封的那个形状。
+ *   `xq_a_token` 的接口是读数据的）。所以这一页出的是字 ——「最后一下人自己按」
+ *   不是偷懒，拿 cookie / 无头浏览器替人按**发布**正是这次被封的那个形状。
+ * ★【2026-09-23 同日晚些时候，用户要的】雪球那一块多一个「推长文到雪球草稿箱」：
+ *   走 Wechatsync 扩展、**只存草稿**，发布那一下仍然是人在雪球编辑器里点。
+ *   它推的是**全文**，和上面那段短帖是两样东西（理由和七档见 `src/dev/wechatsyncPlan.ts`）。
  * ⚠ 只有 X 有**官方的预填地址**（intent 链接），另外两家点过去只是开站点，
  *   字还得自己粘 —— 按钮上的措辞两档不一样，别顺手统一成「打开 X 发帖」。
  *
@@ -239,6 +243,13 @@ const communityFor = (
     platform
   );
 
+/**
+ * 哪几篇已经推到雪球草稿箱了（`xueqiuDrafts.ts`）。没推过的整行不画。
+ * ★ 时区**由这儿传进去**（`config.site.timezone`），账里存的是 UTC ——
+ *   直接截字符串的读数比北京时间慢 8 小时。
+ */
+const draftLog = readDrafts();
+
 const items = groups.map(({ entry, answers }) => {
   const collection = entry.collection as ShareKind;
   const url = absoluteUrl(entry);
@@ -296,6 +307,10 @@ const items = groups.map(({ entry, answers }) => {
         actionLabel: "打开 X 发帖 ↗",
         meta: `${xWeightedLength(text)} / ${X_LIMIT}`,
         note: undefined as string | undefined,
+        draftable: false,
+        draftC: "",
+        draftS: "",
+        drafts: [] as { label: string; tier: string; url?: string }[],
       },
       ...ACTIVE_PLATFORMS.map(p => {
         const post = communityFor(entry, answers, url, p);
@@ -317,6 +332,26 @@ const items = groups.map(({ entry, answers }) => {
            *   正是 docs/engineering-notes.md 第三节那个 `SC 13D` 的形态。
            */
           note: p.calibrated ? undefined : p.calibrationNote,
+          /**
+           * 【2026-09-23】能不能「推一篇长文到草稿箱」—— **跟着平台表的 mode 走**，
+           * 不是写死雪球：哪天那一行改回 manual，这个按钮跟着消失（端点那边也会拒）。
+           */
+          draftable: p.mode === "draft",
+          /** 推的时候带给 `/_xueqiu/draft` 的那两个参数（它按它们再查一次，页面不传内容）。 */
+          draftC: entry.collection,
+          draftS: entrySlug(entry.collection, entry.id, entry.filePath).replace(
+            /^\/+/,
+            ""
+          ),
+          /**
+           * 这一组在账上推过的每一篇。★ 组里每一份的 key 都去查：放不下的时候
+           * 是每份各推一篇（xueqiuArticle.ts 的 planDrafts），只查代表那一条会漏掉其余几篇。
+           */
+          drafts: draftRecordsFor(keys, draftLog).map(r => ({
+            label: draftLabel(r, config.site.timezone) ?? "",
+            tier: r.tier,
+            url: r.draftUrl,
+          })),
         };
       }),
     ],
@@ -376,6 +411,17 @@ const items = groups.map(({ entry, answers }) => {
               {p.modeWhy}
             </p>
           ))}
+          {/* ★【2026-09-23】推雪球长文之前卡在哪一步 —— 切到雪球那一栏才去问
+              （/_xueqiu/status），问的时候顺手把桥起起来。五档两两不同：
+              没配 token / 端口被占 / 扩展没连上 / 雪球没登录 / 就绪。
+              ⚠ 没问之前**整行不画**，不许先印一句"就绪"或者空着一个框。 */}
+          <p
+            data-xueqiu-bridge
+            hidden
+            role="status"
+            aria-live="polite"
+            class="mt-2 text-xs leading-relaxed"
+          />
         </div>
       )
     }
@@ -454,6 +500,76 @@ const items = groups.map(({ entry, answers }) => {
                       ⚠ 这个平台有没核对过的参数：{block.note}
                     </p>
                   )}
+                  {/* ★【2026-09-23 用户要的】推一篇**长文**到雪球草稿箱（Wechatsync 扩展）。
+                      ⚠ 它推的是**全文**，不是上面那段短帖 —— 两样东西，所以那句话
+                      必须写在按钮旁边，否则人看着上面那段点下去，拿回来的是另一篇。
+                      ⚠ 只存草稿：发布那一下你在雪球编辑器里点（为什么，见 wechatsyncPlan.ts）。 */}
+                  {block.draftable && (
+                    <div
+                      data-xueqiu-draft
+                      class="border-border mt-3 rounded-md border border-dashed p-3"
+                    >
+                      <p class="text-muted-foreground text-xs leading-relaxed">
+                        长文：把<strong>全文</strong>
+                        （不是上面这段）推到雪球草稿箱，你在雪球编辑器里看一眼表格和列表有没有走样，再点发布。
+                        同一个问题的几份合成一篇，每份前面一个「智能体（模型）」小标题。
+                      </p>
+                      <p class="mt-2 flex flex-wrap items-center gap-2">
+                        <button
+                          type="button"
+                          data-xueqiu-push
+                          data-c={block.draftC}
+                          data-s={block.draftS}
+                          class="border-border bg-surface hover:border-border-strong inline-flex items-center rounded-md border px-3 py-1.5 text-sm font-medium transition-colors"
+                        >
+                          推长文到雪球草稿箱
+                        </button>
+                        <span
+                          data-xueqiu-links
+                          class="inline-flex flex-wrap gap-2"
+                        >
+                          {block.drafts
+                            .filter(d => d.url)
+                            .map((d, i, all) => (
+                              <a
+                                href={d.url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                class="text-sm underline decoration-1 underline-offset-4"
+                              >
+                                {all.length > 1
+                                  ? `打开草稿 ${i + 1} ↗`
+                                  : "打开草稿 ↗"}
+                              </a>
+                            ))}
+                        </span>
+                      </p>
+                      {/* 推过没有 —— 三档，措辞和颜色两两不同（xueqiuDrafts.ts）。
+                          没推过整行不画，那是完成态。 */}
+                      {block.drafts.map(d => (
+                        <p
+                          data-xueqiu-logged
+                          class="mt-2 text-xs"
+                          style={
+                            d.tier === "drafted"
+                              ? "color:#15803d"
+                              : d.tier === "failed"
+                                ? "color:#dc2626"
+                                : "color:#a16207"
+                          }
+                        >
+                          {d.label}
+                        </p>
+                      ))}
+                      <p
+                        data-xueqiu-status
+                        hidden
+                        role="status"
+                        aria-live="polite"
+                        class="mt-2 text-xs leading-relaxed whitespace-pre-wrap"
+                      />
+                    </div>
+                  )}
                 </div>
               ))}
             </article>
@@ -516,6 +632,211 @@ const items = groups.map(({ entry, answers }) => {
       localStorage.setItem(TAB_KEY, id);
     } catch {
       // 存不住不影响这一次切换（隐私模式 / 配额满），只是下次回到默认。
+    }
+    // 【2026-09-23】切到雪球那一栏才去问推长文的状态（顺手起桥）。
+    const bridgeLine = document.querySelector<HTMLElement>(
+      "[data-xueqiu-bridge]"
+    );
+    if (bridgeLine) {
+      if (id === "xueqiu") void refreshXueqiuStatus();
+      else bridgeLine.hidden = true;
+    }
+  }
+
+  /* ── 推长文到雪球草稿箱（【2026-09-23 用户要的】）─────────────────────
+     判据全在 src/dev/wechatsyncPlan.ts；这儿只有 DOM 和时序。 */
+
+  /** 七档的颜色 —— 页面这一侧唯一一份。「还没轮到推」那四档用同一个琥珀色、措辞各不同。 */
+  const DRAFT_TIER_COLOR: Record<string, string> = {
+    drafted: "#15803d",
+    unconfirmed: "#a16207",
+    failed: "#dc2626",
+    not_logged_in: "#a16207",
+    no_extension: "#a16207",
+    no_token: "#a16207",
+    port_busy: "#a16207",
+  };
+
+  let statusAsked = 0;
+  /**
+   * 问一次 `/_xueqiu/status`。**十秒内不重复问**：它会让扩展去雪球读一次登录态，
+   * 来回切标签不该每一下都打一次雪球。
+   */
+  async function refreshXueqiuStatus(force = false) {
+    const line = document.querySelector<HTMLElement>("[data-xueqiu-bridge]");
+    if (!line) return;
+    if (!force && Date.now() - statusAsked < 10_000) {
+      line.hidden = false;
+      return;
+    }
+    statusAsked = Date.now();
+    line.hidden = false;
+    line.style.color = "";
+    line.textContent = "推长文：正在问扩展…";
+    try {
+      const res = await fetch("/_xueqiu/status", {
+        headers: { "X-Requested-With": "lwj-xueqiu" },
+      });
+      const data = (await res.json()) as { ready?: boolean; label?: string };
+      line.style.color = data.ready ? "#15803d" : "#a16207";
+      line.textContent = `推长文：${data.label ?? "（状态接口没回话）"}`;
+    } catch (err) {
+      line.style.color = "#dc2626";
+      line.textContent = `推长文：问不到状态（${String(err)}）—— dev server 还开着吗？`;
+    }
+  }
+
+  /** 正在推没有。⚠ 全局一个 —— 端点那边同一时刻也只收一篇。 */
+  let pushing = false;
+
+  async function pushDraft(btn: HTMLButtonElement) {
+    if (pushing) return;
+    const box = btn.closest<HTMLElement>("[data-xueqiu-draft]");
+    const status = box?.querySelector<HTMLElement>("[data-xueqiu-status]");
+    const links = box?.querySelector<HTMLElement>("[data-xueqiu-links]");
+    if (!status || !links) return;
+
+    pushing = true;
+    // ⚠ 推的时候**所有**推长文的按钮一起锁上：点了另一篇会撞上端点那把锁，
+    //   拿回一句「上一篇还没推完」—— 一次凭空的失败。
+    const all = [
+      ...document.querySelectorAll<HTMLButtonElement>("[data-xueqiu-push]"),
+    ];
+    for (const b of all) b.disabled = true;
+    const label = btn.textContent;
+    btn.textContent = "推送中…";
+    status.hidden = false;
+    status.style.color = "";
+
+    // 秒表：图多的时候扩展要把每张图下载再转存到雪球，会等很久。
+    // ★ 秒数是真的；那一句"大概在干什么"刻意不写 —— 我们看不到扩展里的进度，
+    //   编一个进度条比没有更坏（同 /_xhs 那一条）。
+    const started = Date.now();
+    const tick = () => {
+      const sec = Math.round((Date.now() - started) / 1000);
+      status.textContent =
+        `推送中 · 已用 ${sec} 秒\n` +
+        `扩展在你的 Chrome 里转存图片、存草稿；图多的时候要一两分钟。` +
+        `（我们看不到它里面的进度，秒数是真的。）`;
+    };
+    tick();
+    const timer = window.setInterval(tick, 1000);
+
+    try {
+      const res = await fetch("/_xueqiu/draft", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-Requested-With": "lwj-xueqiu",
+        },
+        body: JSON.stringify({ c: btn.dataset.c, s: btn.dataset.s }),
+      });
+      const text = await res.text();
+      type One = {
+        tier?: string;
+        head?: string;
+        detail?: string;
+        draftUrl?: string;
+        title?: string;
+        raw?: string;
+        estimate?: number;
+        combined?: number;
+        truncated?: { kept: number; total: number; cut: string[] };
+      };
+      let data: One & { results?: One[]; notPushed?: { title: string }[] };
+      try {
+        data = JSON.parse(text);
+      } catch {
+        // ⚠ 没回 JSON（403 那一档就是纯文本）—— 那也是一种"看不懂"，照实说。
+        data = {
+          tier: "unconfirmed",
+          head: "？看不懂回话",
+          detail: text.slice(0, 400),
+        };
+      }
+      /**
+       * 两种形状：推了（`results`，一篇或几篇）/ 还没轮到推（单条，没有 results）。
+       * ★ 放不下时是每份各推一篇（xueqiuArticle.ts 的 planDrafts），一次点击可能出好几篇 ——
+       *   每一篇都要有自己那一行和自己的「打开草稿」，不许只报第一篇。
+       */
+      const results: One[] = Array.isArray(data.results)
+        ? data.results
+        : [data];
+      const notPushed = data.notPushed ?? [];
+      const tiers = results.map(r => r.tier ?? "");
+      // 整块的颜色：全存上才是绿的；有一篇不确定 / 还没轮到推就是琥珀；全失败才是红的。
+      status.style.color = tiers.every(tr => tr === "drafted")
+        ? DRAFT_TIER_COLOR.drafted!
+        : tiers.every(tr => tr === "failed")
+          ? DRAFT_TIER_COLOR.failed!
+          : "#a16207";
+
+      const lines: string[] = [];
+      if (results.length > 1 || notPushed.length > 0) {
+        const n = results.length + notPushed.length;
+        lines.push(`这一组放不下一篇，分成 ${n} 篇推：`);
+      }
+      results.forEach((r, i) => {
+        const shape = r.combined
+          ? `（${r.combined} 份合成一篇）`
+          : r.truncated
+            ? `（放进 ${r.truncated.kept}/${r.truncated.total} 节；没放进来的：${r.truncated.cut.join(" / ")}；末尾有全文链接）`
+            : "";
+        const tag = results.length > 1 ? `${i + 1}. ` : "";
+        lines.push(`${tag}${r.head ?? `？认不出的结果：${r.tier}`}`);
+        if (r.title !== undefined) {
+          lines.push(
+            `   「${r.title}」${shape}${r.estimate ? ` · 约 ${r.estimate} 字（按 HTML 算）` : ""}`
+          );
+        }
+        if (r.detail) lines.push(`   ${r.detail}`);
+        if (r.raw && r.tier !== "drafted")
+          lines.push(`   — 扩展原话 —\n   ${r.raw}`);
+      });
+      for (const np of notPushed) {
+        lines.push(
+          `— 没轮到推：「${np.title}」（前面那篇出了问题，停下了，没往下推）`
+        );
+      }
+      status.textContent = lines.join("\n");
+
+      // 每一篇存上的草稿都给一个链接（换掉账上那几个旧的：这一次推的才是现在的）。
+      const urls = results.map(r => r.draftUrl).filter((u): u is string => !!u);
+      if (urls.length > 0) {
+        links.replaceChildren(
+          ...urls.map((u, i) => {
+            const a = document.createElement("a");
+            a.href = u;
+            a.target = "_blank";
+            a.rel = "noopener noreferrer";
+            a.className = "text-sm underline decoration-1 underline-offset-4";
+            a.textContent =
+              urls.length > 1 ? `打开草稿 ${i + 1} ↗` : "打开草稿 ↗";
+            return a;
+          })
+        );
+      }
+    } catch (err) {
+      status.style.color = "#dc2626";
+      status.textContent = `✗ 请求没发出去：${String(err)} —— dev server 还开着吗？`;
+    } finally {
+      // ⚠ 秒表必须在这儿停：不停它会一直盖掉刚写上去的结果。
+      window.clearInterval(timer);
+      for (const b of all) b.disabled = false;
+      btn.textContent = label;
+      pushing = false;
+      // 推完再问一次状态：可能刚才发现没登录 / 扩展断了。
+      void refreshXueqiuStatus(true);
+    }
+  }
+
+  function bindXueqiu() {
+    for (const btn of document.querySelectorAll<HTMLButtonElement>(
+      "[data-xueqiu-push]"
+    )) {
+      if (btn.dataset.bound === "1") continue;
+      btn.dataset.bound = "1";
+      btn.addEventListener("click", () => void pushDraft(btn));
     }
   }
 
@@ -603,10 +924,12 @@ const items = groups.map(({ entry, answers }) => {
 
   initTabs();
   bind();
+  bindXueqiu();
   focusHash();
   document.addEventListener("astro:page-load", () => {
     initTabs();
     bind();
+    bindXueqiu();
     focusHash();
   });
   /**

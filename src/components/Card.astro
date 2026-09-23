@@ -41,7 +41,6 @@ type Answer = {
     agent?: string;
     model?: string;
     pubDatetime: Date;
-    modDatetime?: Date | null;
     timezone?: string;
   };
 };
@@ -78,8 +77,8 @@ type Props = {
     /** 标题前面那个小方块（【2026-09-23】现在只有教程有这一格，后台上传）。
      *  没传就不画 —— 完成态，不是待补。见 src/config/entryIcon.ts。 */
     icon?: ImageMetadata;
+    /** 列表上印的就是它（创建时间）。**不收 `modDatetime`**：理由在底下时间那一行。 */
     pubDatetime: Date;
-    modDatetime?: Date | null;
     timezone?: string;
   };
   /**
@@ -137,7 +136,6 @@ const {
   origin,
   contributor,
   pubDatetime,
-  modDatetime,
   timezone,
   icon,
 } = data;
@@ -315,7 +313,7 @@ const hasMeta =
     }
 
     {
-      /* ★ 显式传三个 prop，不 spread data 的剩余字段：
+      /* ★ 显式传 prop，不 spread data 的剩余字段：
          结构类型上做 rest 解构 TS 会报，而且 spread 位置**不做多余属性检查** ——
          原来那版 symbolSource / gateWaived 全都无声地传进了 Datetime，
          等于把这一半类型检查藏掉了。 */
@@ -331,7 +329,11 @@ const hasMeta =
               每一行的顺序对齐（出处 · 时长 · 时间）。同一个列表里两种卡片把
               同一组信息排成两个顺序，读者得认两遍。 */}
           {minutes !== undefined && <ReadingTime {minutes} />}
-          <Datetime {pubDatetime} {modDatetime} {timezone} precision="date" />
+          {/* ★【2026-09-23 用户要的】列表上印**创建时间**，刻意不传 modDatetime。
+              列表按创建时间排（src/utils/createdOrder.ts），这里印更新时间的话，
+              改过的老稿子印着新日期、却排在后面 —— 一列日期看起来是乱序的。
+              改没改过、哪天改的，在详情页标题下那个时间上（hover 写着「更新于」）。 */}
+          <Datetime {pubDatetime} {timezone} precision="date" />
         </div>
       )
     }
@@ -466,10 +468,10 @@ const hasMeta =
                         {answerMinutes !== undefined && (
                           <ReadingTime minutes={answerMinutes} />
                         )}
-                        {/* 列表上只到日（用户定的）；几点几分在 hover 和详情页里。 */}
+                        {/* 列表上只到日（用户定的）；几点几分在 hover 和详情页里。
+                            印的是创建时间、不传 modDatetime，理由同单条卡那一行。 */}
                         <Datetime
                           pubDatetime={answer.data.pubDatetime}
-                          modDatetime={answer.data.modDatetime}
                           timezone={answer.data.timezone}
                           precision="date"
                         />

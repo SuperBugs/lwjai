@@ -9,6 +9,25 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { escapeForMdxBody, ImportError, planImport } from "./importPlan";
+import { SYMBOL_CODES, unknownSymbols } from "../../src/config/symbols";
+
+/**
+ * 「表里有 / 表里没有」这两个探针**从标的表自己推出来**，不许点名写某只票。
+ *
+ * 【2026-09-23 红过一次】原来三条用例里写着「INTC / AMD 表里没有」「ARM 表里有」——
+ * 写的那天是真的，而那张表是**人在后台随时会加行的内容**：这天一次批量登记
+ * 把它从十几只扩到 181 只，三条用例当场红、`pnpm build` 第三步挂掉，
+ * **而产品代码一个字都没错**。
+ *
+ * 同一个形态这是第三次（9-21 的 `answerOrder.test.ts` 读了人排过序的表、
+ * `importTags.test.ts` 点名断言「财报」在标签表里）。判据要钉的是**行为** ——
+ * 「表里有的不记进 newSymbols，表里没有的记」—— 那跟今天表里登记了哪几只票无关。
+ */
+/** 表里真有的第一只。表是空的时候这一组用例没有意义，下面有自检。 */
+const IN_TABLE = SYMBOL_CODES[0];
+/** 形状合法、但不可能被登记的代码。真被登记了，下面那句自检会大声红。 */
+const NOT_IN_TABLE = "ZZQQ";
+const NOT_IN_TABLE_2 = "ZZWW";
 
 /**
  * 号池：盘上已经有 1000~1002（四个集合共用一个池子，所以这里**不分集合**）。
@@ -52,7 +71,6 @@ test("标题取第一个一级标题并从正文摘走；标的从标题认出�
   const p = base({ agent: "spark", model: "gemini-3-pro" });
   assert.equal(p.title, "TSLA｜特斯拉");
   assert.deepEqual(p.symbols, ["TSLA"]);
-  assert.deepEqual(p.newSymbols, [{ code: "TSLA", name: "特斯拉" }]);
   assert.equal(p.symbolSource, "title");
   assert.ok(!p.body.includes("# TSLA｜特斯拉"), "一级标题还留在正文里，站上会印两遍");
   assert.ok(p.body.startsWith("分析："), "摘掉标题后正文从第二行开始");
@@ -112,7 +130,6 @@ test("「研究对象：NVDA（英伟达）」那一行优先于标题（subject
   const md = `# 一篇标题里没有代码的稿子\n\n研究对象：NVDA（英伟达）\n\n正文一段。`;
   const p = base({ markdown: md, agent: "claude", model: "claude-opus-5" });
   assert.deepEqual(p.symbols, ["NVDA"]);
-  assert.deepEqual(p.newSymbols, [{ code: "NVDA", name: "英伟达" }]);
   assert.equal(p.symbolSource, "subject_line");
 });
 
@@ -142,15 +159,32 @@ test("显式 --symbol 是 manual 档，并且要像个代码", () => {
  *      `ImportPlan.newSymbols` 和 src/config/symbols.ts 文件头。
  */
 test("好几只标的：并起来去重，表里没有的记进 newSymbols", () => {
+  // 前提自检：探针得真的一个在表里、两个不在，否则下面测的是另一件事
+  // （docs/engineering-notes.md 坑 17 那个形态）。
+  assert.ok(IN_TABLE, "标的表是空的 —— 这一组用例没有可用的探针");
+  assert.deepEqual(unknownSymbols([IN_TABLE!]), [], `${IN_TABLE} 不在表里`);
+  assert.deepEqual(
+    unknownSymbols([NOT_IN_TABLE, NOT_IN_TABLE_2]).sort(),
+    [NOT_IN_TABLE, NOT_IN_TABLE_2].sort(),
+    "探针代码被登记进标的表了，给这一组换两个"
+  );
+
   const p = base({
     agent: "codex",
-    symbol: "ARM", // 表里有（站上写过）
-    symbolName: "Arm",
-    symbols: ["INTC", "arm", "AMD"], // INTC / AMD 表里没有；arm 和上面是同一只
+    symbol: IN_TABLE, // 表里有
+    symbolName: "某某",
+    // 两个表里没有的；小写那个和上面是同一只，要被去重
+    symbols: [NOT_IN_TABLE, IN_TABLE!.toLowerCase(), NOT_IN_TABLE_2],
   });
-  assert.deepEqual(p.symbols, ["ARM", "INTC", "AMD"]);
-  assert.deepEqual(p.newSymbols, [{ code: "INTC" }, { code: "AMD" }]);
-  assert.match(p.frontmatter, /^symbols: \["ARM", "INTC", "AMD"\]$/m);
+  assert.deepEqual(p.symbols, [IN_TABLE, NOT_IN_TABLE, NOT_IN_TABLE_2]);
+  assert.deepEqual(p.newSymbols, [
+    { code: NOT_IN_TABLE },
+    { code: NOT_IN_TABLE_2 },
+  ]);
+  assert.match(
+    p.frontmatter,
+    new RegExp(`^symbols: \\["${IN_TABLE}", "${NOT_IN_TABLE}", "${NOT_IN_TABLE_2}"\\]$`, "m")
+  );
   assert.ok(
     p.warnings.some(w => w.includes("标的表")),
     `新登记了两只票却没在报告里说一句：${JSON.stringify(p.warnings)}`
@@ -158,12 +192,23 @@ test("好几只标的：并起来去重，表里没有的记进 newSymbols", () 
 });
 
 test("标的表里已经有的那只，不再报「已经替你加进去了」", () => {
-  // ★ 反面用例：`newSymbols` 要是不过滤，每导一条都会说一遍"新登记了 ARM"，
+  // ★ 反面用例：`newSymbols` 要是不过滤，每导一条都会说一遍"新登记了 X"，
   //   而那句话会被当成背景噪音 —— 真正新加一只票的那次也就一起被无视了。
-  const p = base({ agent: "codex", symbol: "ARM" });
-  assert.deepEqual(p.symbols, ["ARM"]);
+  assert.ok(IN_TABLE, "标的表是空的 —— 这条用例没有可用的探针");
+  const p = base({ agent: "codex", symbol: IN_TABLE });
+  assert.deepEqual(p.symbols, [IN_TABLE]);
   assert.deepEqual(p.newSymbols, []);
   assert.ok(!p.warnings.some(w => w.includes("标的表")));
+});
+
+test("表里没有的那只**要**记进 newSymbols（和标签刚好相反）", () => {
+  // 这一条是上面那条的正面：丢掉一个标的等于把这条内容从 /s/<代码> 上整个摘出去，
+  // 所以导入口不丢、自动登记并说一句。理由在 src/config/symbols.ts 文件头。
+  assert.deepEqual(unknownSymbols([NOT_IN_TABLE]), [NOT_IN_TABLE]);
+  const p = base({ agent: "codex", symbol: NOT_IN_TABLE, symbolName: "某某" });
+  assert.deepEqual(p.symbols, [NOT_IN_TABLE]);
+  assert.deepEqual(p.newSymbols, [{ code: NOT_IN_TABLE, name: "某某" }]);
+  assert.ok(p.warnings.some(w => w.includes("标的表")));
 });
 
 test("智能体：不在登记表里就抛；没给就是哨兵 + 警告（问答的警告要说明发不出去）", () => {

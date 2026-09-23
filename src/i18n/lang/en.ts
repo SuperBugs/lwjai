@@ -159,9 +159,18 @@ export default {
     searchAll: "Search everything",
     count: "{{count}} result(s)",
     empty: "No {{kind}} matching “{{term}}”",
-    // Must read differently from `empty`: this is "can't search", not "found nothing".
+    emptyAll: "Nothing on this site matches “{{term}}”",
+    viewAll: "See all {{count}} results",
+    // Must read differently from `empty` / `emptyAll`: this is "can't search", not "found nothing".
     unavailable:
       "The search index has not been generated yet — it is a build artefact, run `pnpm build` once.",
+  },
+  symbolFilter: {
+    label: "Search tickers",
+    placeholder: "Ticker or company name, e.g. TSLA, Tesla…",
+    count: "{{count}} of {{total}} tickers",
+    empty: "No ticker matches “{{term}}”.",
+    searchAll: "Search the whole site for “{{term}}”",
   },
   provenance: {
     ai: "This one is AI-generated (models make numbers up).",

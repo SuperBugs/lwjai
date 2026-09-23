@@ -154,14 +154,29 @@ export function communityBody(
     blocks.push([label, desc].filter(Boolean).join("\n"));
   }
 
+  blocks.push(`——\n${communityFooter(src, platform).join("\n")}`);
+
+  return blocks.join("\n\n");
+}
+
+/**
+ * 页脚那几行：`研究报告 · 2026-09-23` / `全文：<地址>` / 免责。
+ *
+ * ★ 抽出来是因为**雪球长文**（`xueqiuArticle.ts`）也要印同一个页脚 ——
+ *   【2026-09-23】在那之前它只活在上面这个函数里，长文那边要么抄一份、要么没有。
+ *   抄一份的那天，就是短帖和长文一个带免责、一个不带，而四处全绿（坑 8 的形态）。
+ * ★ 链接和免责**各自跟着平台表走**（`urlInBody` / `disclaimer`），不是这儿的判断。
+ */
+export function communityFooter(
+  src: Pick<CommunityPostSource, "kindLabel" | "date" | "url">,
+  platform: SocialPlatform
+): string[] {
   const footer = [`${src.kindLabel} · ${src.date}`];
   if (platform.urlInBody && src.url.trim() !== "") {
     footer.push(`全文：${src.url.trim()}`);
   }
   if (platform.disclaimer) footer.push(platform.disclaimer);
-  blocks.push(`——\n${footer.join("\n")}`);
-
-  return blocks.join("\n\n");
+  return footer;
 }
 
 /**

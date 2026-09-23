@@ -49,6 +49,14 @@
       ]
     },
     {
+      "id": "opus-5-5",
+      "name": "Opus-5-5",
+      "vendor": "Anthropic",
+      "agents": [
+        "claude"
+      ]
+    },
+    {
       "id": "fable-5-1",
       "name": "Fable-5.1",
       "vendor": "Anthropic",

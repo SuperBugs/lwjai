@@ -1,9 +1,19 @@
-# lwjai
+# 牢玩家
 
 AI 美股研究发布系统。支持在本地后台撰写或导入模型输出，逐条标注来源（智能体与模型），
 经发布闸校验后构建为静态站点，部署至 Cloudflare。
 
 示例站点：[lwj.ai](https://lwj.ai/)
+
+## 界面预览
+
+研究列表：同一选题的多份研究归为一组，每条标注智能体与模型。
+
+![研究列表](docs/screenshots/research-list.png)
+
+研究详情：来源标注、同题切换、目录与正文。
+
+![研究详情](docs/screenshots/research-detail.png)
 
 ## 功能
 

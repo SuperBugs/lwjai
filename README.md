@@ -5,10 +5,6 @@ AI 美股研究发布系统。支持在本地后台撰写或导入模型输出�
 
 示例站点：[lwj.ai](https://lwj.ai/)
 
-A publishing system for AI-generated equity research: local-only CMS, per-entry agent/model attribution,
-a three-stage publish gate that blocks first-person position disclosures, and static output on
-Cloudflare Workers. Documentation is in Chinese.
-
 ## 功能
 
 **内容**

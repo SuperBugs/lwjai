@@ -1,26 +1,25 @@
 # 第三方声明
 
-这个仓库里**原样再分发**了下面几样别人的东西，各自的许可如下。
-通过包管理器安装的依赖（`node_modules/` 里的）不在这里列，它们的许可在各自的包里 ——
-其中 satori 是 MPL-2.0、sharp 和 TypeScript 是 Apache-2.0，其余绝大多数是 MIT。
+本仓库包含以下第三方文件。通过包管理器安装的依赖不在此列，其许可见各自的软件包
+（satori 为 MPL-2.0，sharp 与 TypeScript 为 Apache-2.0，其余多为 MIT）。
 
 ## AstroPaper
 
 - 来源：<https://github.com/satnaing/astro-paper>
-- 用途：这个站的底子。目录结构和命名刻意保留，方便对照上游合并。
-- 许可：MIT，Copyright (c) 2023 Sat Naing。全文见根目录的 [LICENSE](LICENSE)。
+- 用途：站点主题基础，保留原有目录结构与命名以便对照上游
+- 许可：MIT，Copyright (c) 2023 Sat Naing，全文见 [LICENSE](LICENSE)
 
 ## Tabler Icons
 
-- 来源：<https://tabler.io/icons>（<https://github.com/tabler/tabler-icons>）
-- 用途：`src/assets/icons/*.svg`（界面图标，随 AstroPaper 带进来）。
-- 许可：MIT，Copyright (c) 2020-2024 Paweł Kuna。
+- 来源：<https://github.com/tabler/tabler-icons>
+- 用途：`src/assets/icons/*.svg`（界面图标，随 AstroPaper 引入）
+- 许可：MIT，Copyright (c) 2020-2024 Paweł Kuna
 
 ## LobeHub Icons
 
 - 来源：npm 包 `@lobehub/icons-static-svg@1.95.1`（<https://github.com/lobehub/lobe-icons>）
-- 用途：`src/assets/agent-logos/*.svg`，**字节未改**、钉死版本。用来标注一条内容是哪个 AI 产品写的。
-- 许可：MIT，Copyright (c) 2023 LobeHub。
+- 用途：`src/assets/agent-logos/*.svg`，未经修改，用于标注内容所属的 AI 产品
+- 许可：MIT，Copyright (c) 2023 LobeHub
 
 ```
 MIT License
@@ -48,16 +47,15 @@ SOFTWARE.
 
 ### 商标
 
-那些 logo 画的是各家公司的商标（Google、OpenAI、Anthropic、DeepSeek、阿里云通义、字节跳动豆包、
-月之暗面 Kimi、智谱、MiniMax、Mistral、Meta、Perplexity、xAI、Manus、GitHub Copilot、Cursor 等）。
-MIT 许可管的是这些 SVG 文件本身，**不授予任何商标权**。这里用它们只是为了标注"这一条是哪个产品写的"，
-不代表这些公司认可、赞助或参与了这个项目。
+上述标识为 Google、OpenAI、Anthropic、DeepSeek、阿里云、字节跳动、月之暗面、智谱、MiniMax、Mistral、
+Meta、Perplexity、xAI、Manus、GitHub、Cursor 等公司的商标。MIT 许可仅适用于 SVG 文件本身，不授予任何商标权。
+本项目使用这些标识仅为标注内容来源，不代表上述公司认可、赞助或参与本项目。
 
 ## 字体
 
-构建期从 Google Fonts 在线取，**不在这个仓库里**：
+以下字体于构建时从 Google Fonts 获取，不包含在本仓库中：
 
-- Google Sans Code（等宽，代码和数字）—— SIL Open Font License 1.1
-- Noto Sans SC（分享卡上的中文，按卡片上出现的字取子集）—— SIL Open Font License 1.1
+- Google Sans Code：SIL Open Font License 1.1
+- Noto Sans SC（分享图中文，按需取子集）：SIL Open Font License 1.1
 
-正文用的是读者系统里自带的中文字体，不下发任何字体文件。
+正文使用读者系统自带的中文字体。

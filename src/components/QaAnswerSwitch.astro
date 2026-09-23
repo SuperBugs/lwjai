@@ -1,0 +1,310 @@
+---
+import type { CollectionEntry } from "astro:content";
+import { agentDisplayName, findAgent } from "@/config/agents";
+import { modelSlot, modelSlotLabel } from "@/config/models";
+import { entryUrl } from "@/utils/getPostPaths";
+import { useTranslations, tplStr } from "@/i18n";
+import config from "@/config";
+import AgentLogo from "./AgentLogo.astro";
+
+/**
+ * 同一组里的几条内容，**并排一行、点一下就换一条**。
+ * 问答是「同一个问题的几条回答」，研究稿是「同一个选题的几份研究」——
+ * **同一个组件、同一套判据**，只有措辞按集合分。
+ *
+ * 【2026-09-20 加】这个模块存在的理由就是"同一个东西不同智能体写得不一样"，
+ * 但在这之前，其他几条只在**正文读完之后**的「相关条目」里列着 ——
+ * 读者得先读完一整篇，才知道旁边还有两篇可以对着看。对比这件事要在**读之前**
+ * 就摆出来，所以这一条挪到了正文上方。
+ *
+ * ★ 页脚那块带摘要的卡片列表**没有删**：这里是一排短芯片（谁写的 + 什么模型），
+ *   那里是带摘要的卡片。读之前要的是"有几条、都是谁"，读完之后要的是
+ *   "下一条讲了什么"。两处回答的是两个问题。
+ *
+ * ## 三档，和 docs/engineering-notes.md 第二节对齐
+ *
+ * 这个组件只管**有兄弟**那一档（`siblings.length > 0`）。另外两档在调用方：
+ *   - 没填组、也没有别的条目指向本条 → 只写过一份，**完成态**，整块不渲染；
+ *   - 填了组却没对上 → 页脚那句「目前只有这一份」，**待补**。
+ * 把后两档合并成"都不显示"，就等于让"选错了"和"真的只有一份"长得一样。
+ *
+ * ⚠ 本条也画进去，而且**画成当前项**（不是链接）。只列"其他几条"的话，
+ *   读者看到的是"另外 2 个"，得自己推算一共 3 个 —— 而标题说的就是 3 个。
+ */
+type Groupable = CollectionEntry<"posts"> | CollectionEntry<"qa">;
+
+type Props = {
+  /** 哪个集合（posts / qa）。措辞、地址、正文那一格的 id 都按它分。 */
+  collection: "posts" | "qa";
+  /** 本条。 */
+  current: Groupable;
+  /** 同一组的其他条目（本条已排除，由 qaSiblings 给出）。 */
+  siblings: Groupable[];
+  /**
+   * 本条的摘要（【2026-09-22 用户要的】摆进这个框里、切换那排的下面）。
+   * ⚠ 不给的话这一块只在**有同组条目**时才出现 —— 传了它，单独一份的页面
+   *   也会有这个框（里面只有摘要）。两种情况见下面模板那段。
+   */
+  description?: string;
+  class?: string;
+};
+
+const {
+  collection,
+  current,
+  siblings,
+  description,
+  class: className = "",
+} = Astro.props;
+// getRelativeLocaleUrl 要一个确定的 locale；`Astro.currentLocale` 类型上可选，
+// 兜到站点默认（和四个详情页同一个写法）。
+const locale = Astro.currentLocale ?? config.site.lang;
+const t = useTranslations(locale);
+
+/**
+ * 按集合分的三样东西：措辞、正文那一格的 id。
+ *
+ * ★ **只有这一处**按集合分叉。别在下面的模板里再写第二个 `collection === "qa"` ——
+ *   那样加第三个集合时要去两个地方各改一次，而漏掉一处的症状是"这一页文案不对"。
+ * ⚠ `bodyId` 是这个组件和详情页之间的约定：脚本要把那一格换成转圈。
+ *   qa 是 `#answer`、posts 是 `#article`，两边都由 `detailParity.test.ts` 钉着
+ *   （连同那一格必须带的 `transition:name`）。
+ */
+const KIND = {
+  qa: {
+    count: t.qa.answersCount,
+    navLabel: t.qa.answersNavLabel,
+    switching: t.qa.switching,
+    bodyId: "answer",
+  },
+  posts: {
+    count: t.post.takesCount,
+    navLabel: t.post.takesNavLabel,
+    switching: t.post.switching,
+    bodyId: "article",
+  },
+}[collection];
+
+/** 一条在这一排里怎么称呼：谁写的（· 什么模型）。 */
+function label(entry: Groupable): string {
+  const { agent, model } = entry.data;
+  const who = agentDisplayName(agent, t.qa.unspecifiedAgent);
+  // 三档判据只有 modelSlot 一处（docs/engineering-notes.md 第二节）：人写的这一格 undefined，
+  // 什么都不拼；AI 写的没标才拼一句「模型未标注」。
+  const what = modelSlotLabel(
+    modelSlot(findAgent(agent)?.kind, model),
+    t.qa.unspecifiedModel
+  );
+  return what ? `${who} · ${what}` : who;
+}
+
+/** 本条排在最前，其余按 pool 顺序（新到旧）—— 读者是从本条出发的。 */
+const answers = [
+  { entry: current, isCurrent: true },
+  ...siblings.map(entry => ({ entry, isCurrent: false })),
+];
+---
+
+{
+  /**
+   * 【2026-09-22 用户定的两条】
+   *   ① 顶上那句「这个选题有 N 份报告，点一下换着看：」**删了** ——
+   *      底下就是那几个可点的名字，那句话在说读者已经看见的事。
+   *      ⚠ 那个计数没有丢，它成了这一块的 `aria-label`：屏幕上不显示，但读屏
+   *        进到这一块时仍然会念「这个选题有 2 份报告」—— 一排没有任何说明的
+   *        药丸对读屏用户来说是"两个链接"，那正是这个控件的用处所在。
+   *        （`KIND.count` 因此还活着；顺带它也是 `t.post.takesCount` 的唯一用处了。）
+   *   ② **本条的摘要摆进这个框里、在那排名字下面**。
+   *
+   * ★ 于是这一块有**两种存在的理由**，缺一档就少一件东西：
+   *     有同组的 → 一排可切换的名字 ＋ 摘要
+   *     只写过一份 → 只有摘要（这是完成态，不是"这里本该有个切换排"）
+   *   所以下面的条件是 `siblings.length > 0 || description`，
+   *   **不是**原来那个只看 siblings 的条件 —— 只看它的话，单独一份的那些页面
+   *   会连摘要一起没有，而那一句是用户刚要求摆到顶上的东西。
+   */
+}
+{
+  (siblings.length > 0 || description) && (
+    <nav
+      data-pagefind-ignore
+      data-qa-answer-switch
+      data-switching-label={KIND.switching}
+      data-body-id={KIND.bodyId}
+      aria-label={
+        siblings.length > 0
+          ? tplStr(KIND.count, { count: String(answers.length) })
+          : KIND.navLabel
+      }
+      class:list={["app-note", className]}
+    >
+      <ul
+        class:list={[
+          "flex flex-wrap items-center gap-2",
+          siblings.length === 0 && "hidden",
+        ]}
+      >
+        {answers.map(({ entry, isCurrent }) => (
+          <li>
+            {isCurrent ? (
+              /* 当前这一条不是链接：指向自己的链接点了没反应，读者只会以为坏了。
+                 aria-current 让读屏也知道"你在这一条上"。
+                 【2026-09-22】前面那个小记号：这一排正是"同一个问题几个智能体"
+                 摆在一起的地方，一眼分得开谁是谁的价值在这儿最高。
+                 判据同别处一处（agentIconSlot），这里只递 id。 */
+              <span
+                aria-current="true"
+                class="border-foreground bg-foreground text-background inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-medium"
+              >
+                <AgentLogo agent={entry.data.agent} />
+                {label(entry)}
+              </span>
+            ) : (
+              /* ★ 地址用 `entryUrl`，不要自己拼。`entrySlug` 返回的那一段**自带前导
+                 斜杠**（它是给 getStaticPaths 当路由参数用的），手拼 `qa/${…}` 出来的是
+                 `/qa//zz-probe/` —— 多一个斜杠，链接照样能点、只是地址难看，
+                 没有任何一处会报错。`entryUrl` 连集合前缀、语言路由和 base 一起管了。 */
+              <a
+                href={entryUrl(collection, entry.id, entry.filePath, locale)}
+                class="border-border text-muted-foreground hover:border-foreground hover:text-foreground inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs transition-colors"
+              >
+                <AgentLogo agent={entry.data.agent} />
+                {label(entry)}
+              </a>
+            )}
+          </li>
+        ))}
+      </ul>
+      {/* 本条的摘要（【2026-09-22 用户定的位置】：切换那一排**下面**、同一个框里）。
+          加粗 + 比正文大半号，和列表卡片上那一句同一个分量 —— 它是这一页的提要，
+          不是正文的第一段。
+          ★【2026-09-23 用户问的「摘要为什么是灰的」】颜色和字号**必须自己写**：
+            外面这个框是 `app-note`（global.css：灰字 + text-sm，"样板话 / 背景信息"
+            那一档），不写就整个继承过来。挪进框里那一版就是这么变成灰字、
+            手机上 14px 的（比 17px 的正文还小）—— 而列表卡片上那一句 9-21 刚按
+            用户要求从灰字提成正文色。detailParity.test.ts 钉着这两样。 */}
+      {description && (
+        <p
+          class:list={[
+            "text-foreground text-lg leading-relaxed font-semibold text-pretty",
+            siblings.length > 0 && "mt-3",
+          ]}
+        >
+          {description}
+        </p>
+      )}
+    </nav>
+  )
+}
+
+{
+  /*
+   * ── 切换的手感（2026-09-20）──────────────────────────────────────────────
+   *
+   * 这一排的链接走的就是普通换页（ClientRouter）。不加干预时，换页是**整页**交叉淡化：
+   * 页头、标题、这一排、页脚全部淡一遍，正文旧的淡出、新的淡入 —— 两页除了正文几乎
+   * 一模一样，读者看到的就是整屏"闪"一下，然后字变了（用户原话「很生硬并且会闪屏」）。
+   *
+   * 想要的是：点一下 → 正文那一格换成转圈 → 新回答到了再显示出来。其它地方不动。
+   *
+   * 做法（脚本 + 下面那段样式，都只在**从这一排点出去**的那次换页里生效）：
+   *   ① astro:before-preparation：判断触发换页的元素在不在这一排里（sourceElement）。
+   *      是 → 给 <html> 挂 data-qa-switching，把 #answer 的内容换成转圈，
+   *      并给 loader 兜一个最短时长 —— 静态页从 CDN 回来不到一百毫秒，不兜的话转圈
+   *      一闪而过，看起来还是"啪一下换了"。
+   *   ② astro:before-swap：把那个标记也写到新文档的 <html> 上。ClientRouter 换页时会
+   *      **整个替换** <html> 的属性（swapRootAttributes），不写过去它就在动画开始前丢了。
+   *   ③ 样式：带标记时，整页那一组（root）不做交叉淡化，旧的直接不画、新的直接画 ——
+   *      于是页头、标题、这一排、页脚原地不动；只有 #answer（transition:name="qa-answer"，
+   *      在 qa/[...slug]/index.astro 上）走 Astro 的 fade：从转圈淡到新回答。
+   *      标题不闪还靠一件事：两页的 <h1> 同名（按问题组起名），见那一页的注释。
+   *   ④ astro:after-swap：换页默认滚回顶部；切换回答时把滚动位置放回去 ——
+   *      这一排就在标题底下，读者点它的时候手还在那，页面别跳。
+   *
+   * 标记在**每一次**换页开始时先清掉，只在切换回答那次重新挂上：浏览器后退、点页脚
+   * 相关条目，都还是普通换页。
+   *
+   * ★ 没有原生 View Transitions 的浏览器：Astro 走 fallback，本来就没有整页淡化，
+   *   #answer 那一格的 fade 由 Astro 生成的 fallback 规则接管 —— 转圈照样先出现。
+   * ★ 转圈是 `animate-spin`（无限动画）。Astro 的 fallback 会等"新出现的动画"跑完
+   *   再换页，但它明确跳过 infinite 的（router.ts 的 isInfinite），所以不会等死。
+   */
+}
+<style is:global>
+  :root[data-qa-switching]::view-transition-old(root) {
+    animation: none;
+    opacity: 0;
+  }
+  :root[data-qa-switching]::view-transition-new(root) {
+    animation: none;
+  }
+</style>
+
+<script>
+  import type {
+    TransitionBeforePreparationEvent,
+    TransitionBeforeSwapEvent,
+  } from "astro:transitions/client";
+
+  const SWITCHING = "data-qa-switching";
+  /** 转圈至少停留这么久：比这短的话读者只看见"啪一下换了"，转圈等于没有。 */
+  const MIN_SPIN_MS = 400;
+  /** 切换回答那次换页里要放回去的滚动位置；其它换页是 undefined。 */
+  let keepScrollY: number | undefined;
+
+  function spinner(label: string): HTMLElement {
+    const box = document.createElement("div");
+    box.setAttribute("role", "status");
+    box.className =
+      "text-muted-foreground flex items-center gap-3 py-10 text-sm";
+    const ring = document.createElement("span");
+    ring.setAttribute("aria-hidden", "true");
+    ring.className =
+      "inline-block size-5 shrink-0 animate-spin rounded-full border-2 border-current border-t-transparent motion-reduce:animate-none";
+    box.append(ring);
+    box.append(document.createTextNode(label));
+    return box;
+  }
+
+  document.addEventListener("astro:before-preparation", e => {
+    const ev = e as TransitionBeforePreparationEvent;
+    const root = document.documentElement;
+    root.removeAttribute(SWITCHING);
+    keepScrollY = undefined;
+
+    const nav = ev.sourceElement?.closest<HTMLElement>(
+      "[data-qa-answer-switch]"
+    );
+    // 正文那一格的 id 由这一排自己带过来（qa 是 answer、posts 是 article）——
+    // 写死一个的话，另一个集合上切换时转圈根本不出现，而链接照常能点，零报错。
+    const answer = nav
+      ? document.getElementById(nav.dataset.bodyId ?? "")
+      : null;
+    if (!nav || !answer) return;
+
+    root.setAttribute(SWITCHING, "");
+    keepScrollY = window.scrollY;
+    answer.replaceChildren(spinner(nav.dataset.switchingLabel ?? ""));
+
+    const load = ev.loader;
+    ev.loader = async () => {
+      const started = performance.now();
+      await load();
+      const left = MIN_SPIN_MS - (performance.now() - started);
+      if (left > 0) await new Promise(r => setTimeout(r, left));
+    };
+  });
+
+  document.addEventListener("astro:before-swap", e => {
+    const ev = e as TransitionBeforeSwapEvent;
+    if (document.documentElement.hasAttribute(SWITCHING)) {
+      ev.newDocument.documentElement.setAttribute(SWITCHING, "");
+    }
+  });
+
+  document.addEventListener("astro:after-swap", () => {
+    if (keepScrollY === undefined) return;
+    window.scrollTo({ top: keepScrollY, left: 0, behavior: "instant" });
+    keepScrollY = undefined;
+  });
+</script>

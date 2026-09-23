@@ -1,0 +1,147 @@
+---
+import type { HTMLAttributes } from "astro/types";
+import { getRelativeLocaleUrl } from "astro:i18n";
+import { ROUTES } from "@/config/routes";
+import IconRss from "@/assets/icons/IconRss.svg";
+import IconArrowRight from "@/assets/icons/IconArrowRight.svg";
+import Socials from "./Socials.astro";
+import { useTranslations } from "@/i18n";
+import config from "@/config";
+
+type Props = {
+  noMarginTop?: boolean;
+} & HTMLAttributes<"footer">;
+
+const { noMarginTop = false, class: className, ...attrs } = Astro.props;
+
+const locale = Astro.currentLocale ?? config.site.lang;
+const t = useTranslations(locale);
+const currentYear = new Date().getFullYear();
+
+// ★ 从 `astro-paper.config.ts` 的 site.url 派生，不写死 —— 域名全站只有那一处来源。
+// 换域名时这一行自己跟着走，不会留下一个写着旧域名的版权行。
+const siteHost = new URL(config.site.url).host;
+
+/** 版权那一行右边那条链接的目标：/about 里「免责声明」那一节。
+ *
+ * ★ 锚点 `#免责声明` 对应 `src/content/pages/about.md` 里的 `## 免责声明`
+ *   （标题文本直接当 id，rehype 生成）。**改那个标题 = 这条链接静默失效**：
+ *   页面照常打开、只是停在顶部，构建全绿、没有任何测试会红。
+ *
+ * 【2026-09-21】它和 RSS / 频道一起从首页 `#outro` 挪到了这里（用户要的）。
+ * 挪过来之后这条链接**每一页都有** —— 首页原来那一版只有首页看得见，
+ * 而读者是从详情页进站的。 */
+const disclaimerUrl = `${getRelativeLocaleUrl(locale, ROUTES.about)}#免责声明`;
+
+const TELEGRAM = "telegram";
+
+/** 频道那一条的目标**从 socials 里取**，不在这儿再写一遍 URL ——
+ *  换频道只改 `astro-paper.config.ts` 那一处，否则迟早出现两个页面指向两个地方，
+ *  而且是那种没人会发现的不一致（两处都能点开，只是进了不同的地方）。
+ *
+ *  ★ 只在 `socials` 里找。`shareLinks` 里**也有一条叫 telegram**、用的还是同一个
+ *    图标 —— 那是文章页的「分享到」（`t.me/share/url?url=`），指向本文、不是频道。
+ *
+ *  ★ 找不到时整条不渲染。这里**不摆空状态**：读者不需要知道"这个站还没有频道"。
+ *    真正要防的是另一头 —— 一句「Telegram 频道 →」后面跟一个死链。 */
+const telegramChannel = config.socials.find(s => s.name === TELEGRAM)?.url;
+
+/**
+ * 这一行里**已经有一条带文字的链接**的渠道 —— 图标那一组要跳过它们。
+ *
+ * 【2026-09-21 用户要的】原来这一行是「小飞机 𝕏 ✉ · RSS 订阅 · Telegram 频道 →」，
+ * 小飞机和「Telegram 频道」是同一个入口画了两遍（用户原话：「都重复了」）。
+ * 留下的是**带文字**那一条：它说得出"去哪儿、去干什么"，一个 logo 说不出。
+ *
+ * ★ 和上面那条 `find` 共用 `TELEGRAM` 这一个常量。以后再加带文字的链接时，
+ *   把名字加进这个数组，图标那一份自己就没了 —— 两个地方各写一份名字的话，
+ *   加第二条时要么图标重复、要么链接失灵，而两种都不报错。
+ * ★ 这不是把那条配置删掉：`socials` 里的 telegram 还养着上面那个 URL 和首页
+ *   JSON-LD 的 `sameAs`，删了它两处一起静默消失（理由写在 Socials.astro 的 Props 上）。
+ */
+const NAMED_IN_FOOTER = [TELEGRAM];
+---
+
+<footer
+  class:list={["app-layout", { "mt-auto": !noMarginTop }, className]}
+  {...attrs}
+>
+  {
+    /* 版权行是**次要信息**：灰字、小一号。原来它和正文同色同号，
+       在页面最下面变成一块和内容一样重的东西 —— 页脚的通行做法是
+       让它退到背景里，需要的人找得到就行。
+
+       ── 【2026-09-21 用户要的】页脚现在收两样从首页挪下来的东西 ──
+       左边（版权那一组）：版权 · 保留所有权利 · **免责声明**
+       右边（联系方式那一组）：社交图标 · **RSS 订阅** · **Telegram 频道**
+
+       ⚠ 桌面上是 `sm:flex-row-reverse`，所以**源码里在前的那一组显示在右边**。
+         两组各自成块，不许把它们摊平成一排 —— 摊平之后「免责声明」会挨到
+         RSS 旁边去，而它属于版权那一侧（一句法律声明和一个订阅入口不是同类）。
+
+       ⚠ 免责链接原来只在首页有（`#outro`）。挪到页脚 = 每一页都有，
+         这是这次改动的**要点**：读者是从详情页进站的，首页那一份他多半没看过。
+         别为了"页脚干净"再把它摘回首页。 */
+  }
+  <div
+    class="border-border text-muted-foreground flex flex-col items-center justify-between gap-y-4 border-t py-8 text-sm sm:flex-row-reverse sm:py-6"
+  >
+    {
+      /* 联系方式那一组。`flex-wrap` 不是装饰：窄屏上图标 + 两条带字的链接
+         一行放不下，会自己折行，`gap-y-2` 管折了之后的行距。 */
+    }
+    <div class="flex flex-wrap items-center justify-center gap-x-4 gap-y-2">
+      <Socials exclude={NAMED_IN_FOOTER} />
+
+      <a
+        target="_blank"
+        href={`${import.meta.env.BASE_URL.replace(/\/?$/, "/")}rss.xml`}
+        class="hover:text-foreground inline-flex items-center gap-x-1.5 transition-colors"
+      >
+        <IconRss class="size-4 rtl:-rotate-90" aria-hidden="true" />
+        {t.footer.subscribe}
+      </a>
+
+      {
+        /* ★ Telegram 那一条**带文字**，不许缩成一个 logo。
+           【2026-09-21】这一行原来是「小飞机 + 这句话」两份，用户要求去掉重复的那份 ——
+           **留下来的是这一句**，图标那边由 `NAMED_IN_FOOTER` 跳过（见上面那段）。
+           留文字不留图标不是随手选的：一个 Telegram logo 只说得出"有个 Telegram"，
+           说不出那是**频道**（单向广播、进去发不了言）。
+           ⚠ 所以这句话现在是全站唯一说明这个入口通向哪里的地方，别再缩回图标。
+           ⚠ 文案说的是「频道」不是「群」，那是核实过的
+             （见 `src/i18n/types.ts` 里 `joinChannel` 的注释）—— 别顺手改回"群"。 */
+        telegramChannel && (
+          <a
+            href={telegramChannel}
+            target="_blank"
+            rel="noopener noreferrer"
+            class="hover:text-foreground inline-flex items-center gap-x-1.5 underline decoration-1 underline-offset-4 transition-colors"
+          >
+            {t.footer.joinChannel}
+            <IconArrowRight class="size-4 rtl:-rotate-180" />
+          </a>
+        )
+      }
+    </div>
+
+    {
+      /* 版权那一组。`whitespace-nowrap` 管的是「免责声明」四个字不许被从词中间
+         劈开 —— 链接文字断行比正文断行显眼得多（它是带下划线的一块）。 */
+    }
+    <div
+      class="flex flex-col items-center whitespace-nowrap sm:flex-row sm:gap-x-0"
+    >
+      <span>{t.footer.copyright} &#169; {currentYear} {siteHost}</span>
+      <span class="hidden sm:inline">&nbsp;|&nbsp;</span>
+      <span>{t.footer.allRightsReserved}</span>
+      <span class="hidden sm:inline">&nbsp;|&nbsp;</span>
+      <a
+        href={disclaimerUrl}
+        class="hover:text-foreground underline decoration-1 underline-offset-4 transition-colors"
+      >
+        {t.footer.disclaimer}
+      </a>
+    </div>
+  </div>
+</footer>

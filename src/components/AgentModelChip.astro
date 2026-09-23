@@ -1,0 +1,152 @@
+---
+import { findAgent, UNSPECIFIED_AGENT } from "@/config/agents";
+import { modelSlot, modelSlotLabel } from "@/config/models";
+import { useTranslations } from "@/i18n";
+import AgentLogo from "./AgentLogo.astro";
+
+/**
+ * 出处芯片：这条内容是**哪个智能体**写的 / 答的，**底下跑的是哪个模型** ——
+ * 一张芯片，写成「智能体（模型）」。
+ *
+ * 【2026-09-21 用户要的】在这之前是并排两张（`AgentChip` + `ModelChip`）。
+ * 两张的问题不是占地方，是**读起来像两件事**：一行里「Google Spark」「Gemini-3-Pro」
+ * 两个方框并排，和旁边的标的、标签一样是四个平级的方块，而模型其实是智能体的下一级。
+ * 合成一张之后，那一行上"这是谁写的"只占一格。
+ *
+ * ## 判据一个都没变，还是那两处
+ *
+ *   - 哪个智能体：`src/config/agents.ts` 的 `findAgent()` + 哨兵 `UNSPECIFIED_AGENT`
+ *   - 模型那一格该画什么：`src/config/models.ts` 的 `modelSlot()` / `modelSlotLabel()`
+ *     （.md 导出口、分享卡、搜索索引读的也是它）
+ *
+ * ★ **合并不许把档位压掉**（docs/engineering-notes.md 第二节）。两维各三档，合起来在屏幕上仍然两两不同：
+ *
+ *   | 智能体 | 模型 | 长什么样 |
+ *   |---|---|---|
+ *   | 登记表里有 | 有 | 实线：`Google Spark (Gemini-3-Pro)` |
+ *   | 登记表里有（AI） | 没标 | 实线，括号里灰字：`OpenAI Codex (模型未标注)` ← **待补** |
+ *   | 「我自己」 | 不适用 | 实线：`我自己`，**不挂括号** —— 人写的没有模型这回事 |
+ *   | 没标 / 查不到 | 没标 | 虚线灰字：`来源未标注` —— 旁边再挂一个「模型未标注」只是噪音 |
+ *   | 没标 / 查不到 | 有 | 虚线灰字 + 括号里的模型名 —— "知道模型、不知道产品"是真会发生的（直接调 API） |
+ *
+ *   边框跟着**智能体**那一维走（实线 = 这一格有确定答案，虚线 + 无填充 = 这一格还空着，
+ *   全站"未完成"的统一记号）；模型那一维靠括号里的字和颜色分档。
+ *   ⚠ 别把「模型未标注」那一档省成不挂括号：那样"还没标模型"和"人写的、没有模型"
+ *     在屏幕上字节级相同，而前者是待补、后者是完成态。
+ *
+ * ★【2026-09-22 用户要的】名字前面多了一个 16px 的**记号**（`AgentLogo.astro`）。
+ *   它是**第三维**，判据在 `src/config/agentIcons.ts` 的 `agentIconSlot()`，
+ *   和上面那两维一样是四档、一样不许压（后台还没挑图标 ≠ 来源未标注）。
+ *   这张芯片不参与那个判断，只把 `agent` 递过去。
+ *
+ * ★ 纯展示，**不要加 href**。【2026-09-20】这张芯片曾经链去 /ai/<id>，
+ *   那套智能体索引连同链接一起拆掉了：标记是给读者看出处的，不是一种组织内容的方式。
+ */
+type Props = {
+  agent?: string;
+  /** 那个智能体底下跑的是哪个模型。 */
+  model?: string;
+  size?: "sm" | "lg";
+  class?: string;
+};
+
+const { agent, model, size = "sm", class: className = "" } = Astro.props;
+const t = useTranslations(Astro.currentLocale);
+
+const found = findAgent(agent);
+const isUnspecified = !agent || agent === UNSPECIFIED_AGENT;
+const entry = isUnspecified ? undefined : found;
+/** 登记表里没有这个 id —— 只进悬停提示，不进可见文本（不许冒出一个假名字）。 */
+const orphanAgentId = !isUnspecified && !found ? agent : undefined;
+
+// 判的是登记表里的 kind，不是 id 字面量（docs/engineering-notes.md 第二节）。
+const slot = modelSlot(found?.kind, model);
+const modelLabel = modelSlotLabel(slot, t.qa.unspecifiedModel);
+const modelEntry = slot.tier === "known" ? slot.entry : undefined;
+const orphanModelId = slot.tier === "unspecified" ? slot.orphanId : undefined;
+
+const agentLabel = entry ? entry.name : t.qa.unspecifiedAgent;
+
+/** 产品名是拉丁字母（OpenAI Codex / Google Spark …）就用等宽（主题自带的 Google Sans Code）：
+ *  一列上下对得齐，和 SymbolChip 里的代码同一处理。
+ *  中文名（「我自己」「来源未标注」）不套等宽 —— 那个字体里没有汉字字形，
+ *  会掉到系统字体、基线对不上。 */
+const latin = (s: string) => /^[\x20-\x7E]+$/.test(s);
+
+/** 悬停提示：两维各自的厂商和一句说明，中间一条竖线分开。
+ *  名字本身已经是「厂商 产品」（OpenAI Codex）时不再重复一次厂商。 */
+const describe = (
+  e: { name: string; vendor: string; note?: string } | undefined
+): string | undefined =>
+  e
+    ? [
+        e.name,
+        e.vendor === "—" || e.name.includes(e.vendor) ? null : e.vendor,
+        e.note,
+      ]
+        .filter(Boolean)
+        .join(" · ")
+    : undefined;
+
+/** 只有"查不到这个 id"那两档才给排查线索 —— 「还没标」那一档可见文本已经把话说完了。 */
+const hints = [
+  describe(entry),
+  orphanAgentId &&
+    `登记表里没有「${orphanAgentId}」这个智能体 —— 可能是表里删掉了，而这条还在用它。`,
+  describe(modelEntry),
+  orphanModelId &&
+    `登记表里没有「${orphanModelId}」这个模型 —— 可能是表里删掉了，而这条还在用它（src/config/models.ts）。`,
+].filter(Boolean) as string[];
+const title = hints.length > 0 ? hints.join(" | ") : undefined;
+---
+
+<span
+  class:list={[
+    // 形状和 SymbolChip / Tag 同一处定义（`app-chip`，src/styles/global.css）。
+    // ★ 两档由**哪个 utility** 决定，不是在这儿拼 class：
+    //   有填充 = 这一格有确定答案；虚线无填充 = 这一格还空着。
+    //   【2026-09-22 扁平化之后这两档更分得开】—— 以前都有边框，只差虚实和底色。
+    entry ? "app-chip" : "app-chip-empty",
+    size === "lg" ? "text-base" : "text-sm",
+    className,
+  ]}
+  title={title}
+>
+  {
+    /* 【2026-09-22 用户要的】智能体那个小记号。四档判据在 agentIconSlot()，
+       这张芯片一个字都不参与 —— 它只是把 `agent` 原样递过去。
+       ★ **四档都画**，包括「来源未标注」那一档（一圈虚线 + `?`）：一排芯片里
+         每一张的第一个元素都是同样大小的记号，名字于是从同一条竖线上起头。
+         那一档不画的话，「有出处」和「没出处」的两张芯片文字左边界差 24px，
+         看着像其中一张没对齐 —— 而它要说的是「这一格还空着」。
+       ⚠ 这里**不许再写 `ms-*` / `gap-*`**：符号和名字之间的间距由 `app-chip`
+         的 `gap-2` 一处给（chips.test.ts 的那条钉着，2026-09-22 那一轮就是
+         被括号上那个多余的 `ms-1` 咬过一次）。 */
+  }
+  <AgentLogo {agent} {size} />
+  <span
+    class:list={[
+      "font-semibold tracking-wide",
+      { "font-mono": latin(agentLabel) },
+    ]}
+  >
+    {agentLabel}
+  </span>
+  {
+    /* 模型那一维。`modelLabel === undefined` 就是 `modelSlot()` 的 `none` 档
+       （人写的 / 两格都没标），整个括号不渲染 —— 见上面那张表。 */
+    modelLabel && (
+      <span
+        class:list={[
+          // ⚠ 这里**不要**再写 `ms-1`：两段之间的间距由 `app-chip` 的 `gap-2` 给
+          //   （【2026-09-22】扁平化那一轮收进去的）。两份加在一起是 12px，
+          //   一排芯片里只有这张的括号会往外多挪 4px。
+          // 待补那一档灰字：括号里印的是「模型未标注」，它和一个真的模型名
+          // 不许长得一样。known 档跟着芯片本身的颜色走。
+          slot.tier === "unspecified" && "text-muted-foreground",
+          { "font-mono": latin(modelLabel) },
+        ]}
+      >{`(${modelLabel})`}</span>
+    )
+  }
+</span>

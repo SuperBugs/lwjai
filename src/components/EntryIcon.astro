@@ -1,0 +1,122 @@
+---
+import { Image } from "astro:assets";
+import type { ImageMetadata } from "astro";
+import { toTransitionName } from "@/utils/toTransitionName";
+import { entryIconFormatIssue, entryIconFormatOf } from "@/config/entryIcon";
+
+/**
+ * 条目图标：标题前面那个小方块（【2026-09-23 用户要的】嘉信开户挂嘉信的图标）。
+ * 现在只有教程有这一格。三档、为什么不收 SVG、为什么和截图放同一个目录：
+ * `src/config/entryIcon.ts` 文件头。
+ *
+ * ## 这个组件只在「传了」那一档出现
+ *
+ * 没传 = 调用方**整个不渲染它**（完成态，卡片和原来一字不差）；坏图 = 构建红
+ * （schema 按扩展名拦一道，下面渲染前按真格式再拦一道，**抛**而不是画）。
+ * 所以这里没有"占位"那一档 —— 别给它加一个灰方块或首字母牌：
+ * 虚线 / 占位在全站的语言里是"这一格还空着、待补"，而没传图标的教程不欠任何东西。
+ *
+ * ## 为什么是白底圆角方块
+ *
+ * 上传的图有两种：
+ *   - **App 图标**（正方形、自带底色）—— 推荐的那种。`object-contain` 在正方形框里
+ *     正好铺满，白底完全被盖住，看起来就是一枚 App 图标。
+ *   - **透明底的 logo**（官网下的那种）—— 深色字的 logo 放在深色模式的页面上会**隐身**，
+ *     而浅色下一切正常，改的人多半在浅色下看，看不出来（智能体 logo 那边实测踩过同一个坑，
+ *     见 `src/config/agentIcons.ts` 的 `tone`）。垫一块白底之后两个主题下都看得见 ——
+ *     深色下是一枚白色的 App 图标，这是各家 App 在深色界面里本来的样子。
+ * ★ 所以白底是写死的 `bg-white`，**不是**主题色：跟着主题变的话，透明 logo 在深色下
+ *   又回到隐身那一档。一圈 `ring-black/10` 只在浅色下起作用（白块放在白卡片上要有个边）。
+ * ★ 圆角是**按比例**的（22%，App 图标那个比例），不是 `rounded-md` / `rounded-app`：
+ *   同一个形状要画成 40px 和 56px 两档，固定像素的圆角在两档上是两种形状。
+ *   theme.css 那条"只注册一档圆角"管的是**容器**；这是一种图形，形状只在这里写一次。
+ *
+ * ## 为什么走 `<Image>`、而且 `layout="none"`
+ *
+ * ⚠ 只许经 `<Image>`：它把图交给 sharp 重新编码成 webp、剥掉元数据。直接拿
+ *   `src.src` 去画 `<img>` 的话，构建会把**原文件**逐字节拷进 dist（坑 15 的形态）。
+ * ★ `layout="none"` 是承重的：astro.config.ts 全站配了 `layout: "constrained"`（给正文截图用），
+ *   不显式关掉的话这枚 44px 的图标也会被当成正文图 —— 生成一串到 1920 宽的 srcset，
+ *   挂上 `data-astro-image`，再被 `@layer astro.images` 里那条 `height: auto` 改掉高度，
+ *   非正方形的 logo 就不再在方框里居中。
+ * ★ 只生成一张：最大那一档（详情页 56px）的两倍。卡片那档用同一张缩下去 ——
+ *   列表点进详情页，浏览器直接走缓存。`fit="contain"` 让 sharp 按比例缩进 112×112，
+ *   不裁：宽 logo 裁成正方形就只剩中间几个字母。
+ *
+ * ## 转场
+ *
+ * 带一个 view-transition-name（`<集合>-icon-<id>`），列表点进详情页时图标和标题
+ * 一起滑过去。名字**只在这里算**：卡片和详情页都用这个组件，两边不可能对不上。
+ * ⚠ 一页上同一个条目只许渲染一次它（和卡片标题同一条约束）：重名的
+ *   view-transition-name 会让浏览器**整个跳过**那次转场，且不报错。
+ *
+ * ## 无障碍
+ *
+ * `alt=""`：两个调用点**旁边永远是标题**，读屏念一遍标题就够了；
+ * 再念一句「嘉信的图标」是同一件事念两遍（同 AgentLogo.astro 那条）。
+ */
+type Props = {
+  src: ImageMetadata;
+  /** 集合 key + 条目 id：只用来起转场名。 */
+  collection: string;
+  id: string;
+  /** `card` 40 / 44px（列表卡片标题前）· `page` 48 / 56px（详情页 <h1> 前）。 */
+  size?: "card" | "page";
+  class?: string;
+};
+
+const {
+  src,
+  collection,
+  id,
+  size = "card",
+  class: className = "",
+} = Astro.props;
+
+/**
+ * 画之前拿**真格式**再比一次 —— 按文件内容探出来的，不是扩展名。不收就抛（构建红）。
+ * schema 那一道只看得到扩展名（内容层校验时图还没读，见 entryIcon.ts 的
+ * `entryIconFormatOf`），这一道才是权威。
+ *
+ * ⚠ 顺手兜住两种"画出来了但是错的"：
+ *   - 拿到**字符串**：Astro 运行时找不到那张图，会把这一格退回成那串路径
+ *     （`astro/dist/content/runtime.js` 的 `updateImageReferencesInData`）。
+ *     `<Image>` 拿到字符串当远程图去画 —— 页面上一张裂开的图，构建是绿的。
+ *   - 拿到**函数**：那是 Astro 把 SVG 换成的组件，`format` 是 svg，下面那条拦住它。
+ */
+const broken =
+  typeof src === "string"
+    ? `拿到的是一串路径「${src}」，不是一张图 —— 文件多半不在了（或者被挪走了）`
+    : entryIconFormatIssue(entryIconFormatOf(src));
+if (broken) {
+  throw new Error(`${collection}/${id} 的图标画不出来：${broken}`);
+}
+
+/** 生成的那一张的边长：`page` 那档在 sm 以上是 56px，两倍屏要 112。 */
+const RENDER_PX = 112;
+
+const box = size === "page" ? "size-12 sm:size-14" : "size-10 sm:size-11";
+const transitionName = toTransitionName(`${collection}-icon-${id}`);
+---
+
+<span
+  aria-hidden="true"
+  class:list={[
+    "inline-flex shrink-0 overflow-hidden rounded-[22%] bg-white ring-1 ring-black/10",
+    box,
+    className,
+  ]}
+  style={`view-transition-name: ${transitionName}`}
+>
+  <Image
+    src={src}
+    alt=""
+    width={RENDER_PX}
+    height={RENDER_PX}
+    fit="contain"
+    layout="none"
+    loading={size === "page" ? "eager" : "lazy"}
+    draggable="false"
+    class="size-full object-contain"
+  />
+</span>

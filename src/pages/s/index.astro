@@ -1,0 +1,74 @@
+---
+import { getCollection } from "astro:content";
+import { getRelativeLocaleUrl } from "astro:i18n";
+import Layout from "@/layouts/Layout.astro";
+import Header from "@/components/Header.astro";
+import Breadcrumb from "@/components/Breadcrumb.astro";
+import Main from "@/components/Main.astro";
+import EmptyState from "@/components/EmptyState.astro";
+import Footer from "@/components/Footer.astro";
+import { getUniqueSymbols } from "@/utils/getUniqueSymbols";
+import { coverageLabel } from "@/utils/coverageLabel";
+import { useTranslations } from "@/i18n";
+import config from "@/config";
+
+// ★ 两个集合一起汇总。
+//   【2026-09-18 侦察实测】只喂 posts 的后果不是"索引里少几只票"，而是**死链**：
+//   问答页上照样渲染 SymbolChip，链接指向 /s/{slug}，而 /s/[symbol] 的
+//   getStaticPaths 只从 posts 里推路径 —— 只有问答提到过的那只票，
+//   那一页根本没生成。构建全绿，点下去 404。
+const posts = await getCollection("posts", ({ data }) => !data.draft);
+const qaEntries = await getCollection("qa", ({ data }) => !data.draft);
+const symbols = getUniqueSymbols([...posts, ...qaEntries]);
+
+const locale = Astro.currentLocale ?? config.site.lang;
+const t = useTranslations(locale);
+
+// 「3 篇研究 · 2 条问答」—— 分开报、为 0 的那档不出现。
+// 【2026-09-20】原来这里和 /s/[symbol] 各写一份，智能体索引要用第三份时抽到了
+// src/utils/coverageLabel.ts（零 import，有单测）。这里的每一只票至少有一边非 0。
+---
+
+<Layout
+  title={`${t.pages.symbolsTitle} | ${config.site.title}`}
+  description={t.pages.symbolsDesc}
+>
+  <Header />
+  <Breadcrumb />
+
+  <Main pageTitle={t.pages.symbolsTitle} pageDesc={t.pages.symbolsDesc}>
+    {
+      /* ★ 空状态单独说一句，而不是摆一个空的 <ul>。
+         "一只都还没写"和"这一页坏了"在屏幕上必须长得不一样。 */
+      symbols.length === 0 ? (
+        <EmptyState message={t.pages.symbolsEmpty} />
+      ) : (
+        /* ★ 这里的格子**整块就是一个 `<a>`**，所以用 `app-card-interactive`
+           （悬停抬起 + 边框提档）。列表页的 Card 不是链接，只能提边框 ——
+           两者的差别是刻意的，见 global.css 里那两条 utility 的说明。 */
+        <ul class="grid grid-cols-[repeat(auto-fill,minmax(12rem,1fr))] gap-3">
+          {symbols.map(s => (
+            <li>
+              <a
+                href={getRelativeLocaleUrl(locale, `s/${s.slug}`)}
+                class="app-card app-card-interactive block p-4"
+              >
+                {/* 代码用等宽：一列代码上下对得齐，扫起来快得多 */}
+                <span class="font-mono text-lg font-semibold tracking-wide">
+                  {s.code}
+                </span>
+                {/* 没有中文名就什么都不显示 —— 不编，也不摆一个"—" */}
+                {s.name && <span class="mt-0.5 block truncate">{s.name}</span>}
+                <span class="text-muted-foreground mt-2 block text-sm">
+                  {coverageLabel(s.postCount, s.qaCount)}
+                </span>
+              </a>
+            </li>
+          ))}
+        </ul>
+      )
+    }
+  </Main>
+
+  <Footer />
+</Layout>

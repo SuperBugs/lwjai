@@ -1,0 +1,191 @@
+/* ─────────────────────────────────────────────────────────────────────────────
+ * 打印样式表 —— 站上「打印 / 存成 PDF」那个按钮背后的全部实现。
+ *
+ * ## 为什么 PDF 是这么做的，不是生成一个 .pdf 文件
+ *
+ * 三条路都实跑过（2026-09-18），另外两条各死在一条具体证据上：
+ *
+ *   - **客户端 JS 库**（jsPDF / html2canvas）：jsPDF 4.2.1 写中文**不抛异常**，
+ *     产出一个合法、能打开、拉丁字母完全正常的 PDF，里面中文是 WinAnsi 乱码
+ *     （`苹果公司` → `ùgQlSø`）。这是 docs/engineering-notes.md 坑 6（satori 豆腐块）的逐字重演，
+ *     而且更隐蔽 —— 那次至少是空方块，这次是看起来像别的文字。
+ *     html2canvas 1.4.1 则在这个站上**当场抛错**：Tailwind 4 的 `oklch()` 它不认，
+ *     产物 CSS 里有 32 处。它还会把文字整个栅格化（PDF 里选不中、搜不到）。
+ *   - **构建期 headless Chrome**：Cloudflare Workers Builds 的构建镜像 apt 清单里
+ *     **一个字体包都没有**（没有 fonts-*、没有 fontconfig）。本机 Windows 上烤出来
+ *     内嵌的是 MicrosoftYaHeiUI，一切正常；同一段代码在 CI 上只会产出豆腐块、
+ *     exit 0、dist 里多出一堆看着正常的 .pdf。**本机复现不了的那种错。**
+ *     另外 puppeteer 的 postinstall 被 package.json 的 `onlyBuiltDependencies`
+ *     白名单挡着，而 CF 的构建命令被红线 3 钉死在 `pnpm build`。
+ *
+ * 交给读者的浏览器打印，中文字体就是他系统里的那套 —— 零依赖、零构建链改动、
+ * 零新路由（因此也零 sitemap / pagefind 副作用）。代价是读者要在打印对话框里
+ * 选一下「另存为 PDF」。
+ *
+ * ## ★★ 这个文件绝对不许被包进 `@layer` ★★
+ *
+ * `theme.css` 里的 `[data-theme="dark"] { --foreground: … }` 是**无 layer** 的，
+ * 而 CSS 的规矩是**无 layer 的规则永远赢过任何 layer 里的规则，与源码顺序无关**。
+ * 实测：把下面的强制亮色规则包进 `@layer base`，`getComputedStyle(body).color`
+ * 纹丝不动 —— 构建全绿、类型全绿、打印出来照旧是灰的。
+ * `typography.css` 用的正是 `@layer base`，照抄那个写法就会踩这一脚。
+ *
+ * 同理，`global.css` 里这份的 `@import` **必须排在 `./theme.css` 之后** ——
+ * 两边特异性都是 (0,1,0)，媒体查询不加特异性，所以只由源码顺序决定谁赢。
+ * ───────────────────────────────────────────────────────────────────────────── */
+
+@media print {
+  /* ── 1. 强制亮色 ─────────────────────────────────────────────────────────
+   *
+   * 【实测，这一维最贵的一条】读者开着深色模式点打印时，**不是"看不清"，
+   * 是层级倒挂**：Chrome 的 economy 模式会自动加深前景色，于是正文
+   * `#f0f0f3` 被压成 `#9d9d9f`（对白纸 2.71:1，低于 WCAG 正文要求的 4.5:1），
+   * 而小字免责声明 `#a3a3a9` 被压成 `#525255`（7.79:1）——
+   * **小字比正文还黑**。整页的信息层级是反的。
+   *
+   * ⚠ 而最自然的"修复"动作会让它更糟：给 body 加 `print-color-adjust: exact`
+   * （想保住 shiki 代码块配色时一定会想到这个）会**关掉**那层自动加深，
+   * 正文原样以 `#f0f0f3` 落到白纸上 = 1.14:1，**肉眼看不见**。
+   * 所以这里的做法是把变量本身换成亮色那一组，不动 color-adjust。 */
+  [data-theme="dark"] {
+    --background: #ffffff;
+    --surface: #ffffff;
+    --foreground: #1d1d1f;
+    --accent: #1d1d1f;
+    --accent-foreground: #ffffff;
+    --muted: #e8e8ed;
+    --muted-foreground: #6e6e73;
+    --border: #d2d2d7;
+    --border-strong: #a1a1aa;
+    --card-shadow: none;
+    --card-shadow-hover: none;
+  }
+
+  /* 纸是白的，页底色印出来只是浪费墨。 */
+  html,
+  body {
+    background: #ffffff !important;
+    color: #1d1d1f !important;
+  }
+
+  /* ── 2. 只留正文 ─────────────────────────────────────────────────────────
+   *
+   * `body` 的直接子元素是 Header / BackButton / main#main-content / Footer
+   * （布局里是一个 `<slot />`，这几个是平级的）。一条规则全清掉，
+   * 比逐个点名稳 —— 以后上游加一个页头组件，这里不用跟着改。 */
+  body > *:not(#main-content) {
+    display: none !important;
+  }
+
+  /* 正文里那些"不是内容"的块。`data-print-hide` 是显式钩子：
+   * 下载区（本来就是这个按钮所在的块）、分享按钮、上一篇/下一篇。
+   * ⚠ **免责声明那个 `<aside class="app-note">` 不在这个名单里，它必须印出来** ——
+   *   文件离开这个站之后，那段话是读者唯一的上下文。 */
+  [data-print-hide],
+  #btt-btn-container,
+  .progress-container,
+  .copy-code,
+  .heading-link {
+    display: none !important;
+  }
+
+  #main-content {
+    max-width: none !important;
+    padding: 0 !important;
+    margin: 0 !important;
+  }
+
+  /* ── 3. 出处回链 ─────────────────────────────────────────────────────────
+   * 屏幕上是 `hidden`，只有打印时放出来。没有它，读者手上那份 PDF 就是一份
+   * 没有出处的文件。用页面元素而不是 `@page` 的 margin box：margin box 放不下
+   * 一整条 URL，而且 Chrome 会在它上面**再叠一层自己的页眉页脚**（实测，页面关不掉，
+   * 只有读者能在打印对话框里取消勾选）。 */
+  [data-print-source] {
+    display: block !important;
+    margin-bottom: 1.5rem;
+    color: #6e6e73 !important;
+    word-break: break-all;
+  }
+
+  /* ── 4. 代码块：长行会被静默截断 ───────────────────────────────────────
+   *
+   * 【实测】shiki 的 `overflow-x: auto` 是**内联样式**，所以必须 `!important`
+   * 才盖得掉。不盖的话屏幕上能横向滚动的长行，打印出来就是"到纸边为止"，
+   * 后半截**无声消失** —— 页面正常、构建正常，只有对着 PDF 一行行看才发现。
+   * 站里 `shikiConfig.wrap` 是 false，所以这一条一定会中。
+   *
+   * ⚠ 不给代码块加 `print-color-adjust: exact` 来保 night-owl 的配色：
+   *   那套色（#d6deeb / #c5e478 / #ecc48d）在白纸上是 1.3~1.5:1，等于没印。
+   *   上面第 1 节已经把主题变量换成亮色那组，代码块跟着走 min-light。 */
+  pre,
+  pre code,
+  .astro-code {
+    white-space: pre-wrap !important;
+    overflow: visible !important;
+    word-break: break-word;
+    border: 1px solid #d2d2d7 !important;
+  }
+
+  /* 宽表：屏幕上横向滚（typography.css 的 .table-scroll），纸上滚不了 ——
+   * 放开 overflow，宁可撑出页边，也别把后半截无声裁掉（和上面代码块同一个病）。 */
+  .table-scroll {
+    overflow: visible !important;
+  }
+
+  /* 纸上没有横向滚动，屏幕那条"每列至少 7rem"的下限在这里只会把表推出页边。
+   * 放开下限，让表按纸宽重排 —— 挤一点，但一个字都不丢。 */
+  .table-scroll table {
+    min-width: 0 !important;
+  }
+
+  /* ── 5. 分页 ─────────────────────────────────────────────────────────── */
+  @page {
+    size: A4;
+    /* 上下留白比左右大：浏览器自己那行页眉页脚（关不掉）要落在这里，
+     * 留窄了会和正文挤在一起。 */
+    margin: 18mm 14mm;
+  }
+
+  h1,
+  h2,
+  h3,
+  h4 {
+    break-after: avoid-page;
+    page-break-after: avoid;
+  }
+
+  /* 图、表、代码块、提示框被拦腰截成两页是最影响可读性的一种分页。 */
+  img,
+  figure,
+  table,
+  pre,
+  blockquote,
+  .app-note,
+  .app-callout {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  img {
+    max-width: 100% !important;
+    height: auto !important;
+  }
+
+  /* 段落孤行寡行。CJK 正文里一行孤零零留在页顶比西文更扎眼。 */
+  p,
+  li {
+    orphans: 3;
+    widows: 3;
+  }
+
+  /* ── 6. 正文里的链接：把地址印出来 ─────────────────────────────────────
+   * 纸上点不动。只处理 http(s) 外链 —— 站内相对链接印出来是
+   * 「(/posts/foo)」，对手里拿着纸的人毫无用处，反而把正文撑花。
+   * 标题锚点（.heading-link）上面已经整个隐藏了。 */
+  #main-content a[href^="http"]::after {
+    content: " (" attr(href) ")";
+    font-size: 0.85em;
+    color: #6e6e73;
+    word-break: break-all;
+  }
+}

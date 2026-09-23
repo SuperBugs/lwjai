@@ -1,0 +1,565 @@
+---
+import { type CollectionEntry, getCollection, render } from "astro:content";
+import { getRelativeLocaleUrl } from "astro:i18n";
+import PostLayout from "@/layouts/PostLayout.astro";
+import Header from "@/components/Header.astro";
+import Footer from "@/components/Footer.astro";
+import Datetime from "@/components/Datetime.astro";
+import ReadingTime from "@/components/ReadingTime.astro";
+import SymbolChip from "@/components/SymbolChip.astro";
+import AgentModelChip from "@/components/AgentModelChip.astro";
+import Tag from "@/components/Tag.astro";
+import RelatedEntries from "@/components/RelatedEntries.astro";
+import SymbolLookupLinks from "@/components/SymbolLookupLinks.astro";
+import TableOfContents from "@/components/TableOfContents.astro";
+import JumpLink from "@/components/JumpLink.astro";
+import { tocItems } from "@/utils/tocItems";
+
+import ArticleEnhancements from "@/components/ArticleEnhancements.astro";
+import { entryUrl, getPostSlug } from "@/utils/getPostPaths";
+import { getSortedPosts } from "@/utils/getSortedPosts";
+import { symbolSlug } from "@/utils/getUniqueSymbols";
+import { qaGroupKey, qaSiblings, relatedBySymbol } from "@/utils/related";
+import { sortAnswers } from "@/config/answerOrder";
+import QaAnswerSwitch from "@/components/QaAnswerSwitch.astro";
+import { resolvePromptRef } from "@/utils/resolvePromptRef";
+import { readingStats } from "@/utils/readingTime";
+import { entryOgImageUrl } from "@/utils/ogImageUrl";
+import { slugifyStr } from "@/utils/slugify";
+import { toTransitionName } from "@/utils/toTransitionName";
+import EditPost from "./_components/EditPost.astro";
+import DownloadLinks from "@/components/DownloadLinks.astro";
+import CopyLinkButton from "@/components/CopyLinkButton.astro";
+import BackButton from "./_components/BackButton.astro";
+import BackToTopButton from "./_components/BackToTopButton.astro";
+import AdjacentPostNav from "./_components/AdjacentPostNav.astro";
+import { SEARCH_FILTER_KEY, SEARCH_KINDS } from "@/config/searchKinds";
+import { searchMetaAttr } from "@/utils/searchMeta";
+import { tplStr, useTranslations } from "@/i18n";
+import config from "@/config";
+
+export async function getStaticPaths() {
+  const posts = await getCollection("posts");
+  const sortedPosts = getSortedPosts(posts);
+  // ★ 「关于这只票的其他研究和问答」从两个集合推，且都过 getSortedPosts（草稿不算）。
+  //   判据在 src/utils/related.ts（本篇排除、BRK.B 和 BRK-B 同票），有单测。
+  const pool = getSortedPosts([...sortedPosts, ...(await getCollection("qa"))]);
+
+  return sortedPosts.map((post, index) => {
+    // 同一个选题、其他智能体的研究：和问答同一个判据（src/utils/related.ts）。
+    // 只在 posts 内部找 —— qaSiblings 自己比集合，不会把同名的问答拉进来。
+    // 同 /q 那一页：组内顺序读后台「回答排序」那张表（src/config/answerOrder.ts），
+    // 而且必须裹在这一行 —— 切换排、页脚相关条目、relatedBySymbol 的排除共用它。
+    const siblings = sortAnswers(
+      qaSiblings(sortedPosts, post, post.data.questionKey)
+    );
+    return {
+      params: { slug: getPostSlug(post.id, post.filePath) },
+      props: {
+        post,
+        siblings,
+        // ★ 已经列在「其他智能体的研究」里的不再出现在「关于这只票」那一块 ——
+        //   同一条两张卡会带同一个 view-transition-name，动画整个被跳过且不报错。
+        related: relatedBySymbol(pool, post, post.data.symbols, siblings),
+        // sortedPosts is newest-first, so "older" (prev) is a higher index
+        // and "newer" (next) is a lower index.
+        prevPost:
+          index < sortedPosts.length - 1
+            ? {
+                id: sortedPosts[index + 1].id,
+                title: sortedPosts[index + 1].data.title,
+                filePath: sortedPosts[index + 1].filePath,
+              }
+            : null,
+        nextPost:
+          index > 0
+            ? {
+                id: sortedPosts[index - 1].id,
+                title: sortedPosts[index - 1].data.title,
+                filePath: sortedPosts[index - 1].filePath,
+              }
+            : null,
+      },
+    };
+  });
+}
+
+type AdjacentPost = {
+  id: string;
+  title: string;
+  filePath: string | undefined;
+} | null;
+
+type Props = {
+  post: CollectionEntry<"posts">;
+  /** 同一个选题、其他智能体的研究（本篇已排除）。 */
+  siblings: CollectionEntry<"posts">[];
+  /** 同一只票的其他研究和问答（本篇和 siblings 都已排除），新在前。 */
+  related: (CollectionEntry<"posts"> | CollectionEntry<"qa">)[];
+  prevPost: AdjacentPost;
+  nextPost: AdjacentPost;
+};
+
+const { post, siblings, related, prevPost, nextPost } = Astro.props;
+const locale = Astro.currentLocale ?? config.site.lang;
+const t = useTranslations(locale);
+
+const {
+  title,
+  description,
+  ogImage: initOgImage,
+  canonicalURL,
+  pubDatetime,
+  modDatetime,
+  timezone,
+  tags,
+  hideEditPost,
+  symbols,
+  agent,
+  model,
+  questionKey,
+} = post.data;
+
+const { Content, headings } = await render(post);
+
+/** 有没有目录 —— 决定正文那一格在 xl 以上开不开两列网格。
+ *  判据和 TableOfContents 内部**是同一个函数**，不在这儿再数一遍（tocItems.ts 顶部那段）。 */
+const hasToc = tocItems(headings).length > 0;
+
+/** 阅读时长 / 字数是估的（readingTime.ts），页面上带「预计」。 */
+const reading = readingStats(post.body ?? "");
+
+/** 搜索结果里那两个小标签「智能体: …」「模型: …」（Pagefind 的 data-pagefind-meta）。
+ *  【2026-09-20】名字和上面两张芯片读同一份判据，三档不合并 —— 见 src/utils/searchMeta.ts。 */
+const searchMeta = searchMetaAttr(
+  {
+    agent: t.searchUi.metaAgent,
+    model: t.searchUi.metaModel,
+    unspecifiedAgent: t.qa.unspecifiedAgent,
+    unspecifiedModel: t.qa.unspecifiedModel,
+  },
+  agent,
+  model
+);
+
+/** 页脚「关于这只票」最多列几条；全部去 /s/<代码>。 */
+const RELATED_LIMIT = 5;
+const relatedShown = related.slice(0, RELATED_LIMIT);
+/**
+ * 「{{symbol}} 的全部内容」那个入口 —— **只有一只票时才有**。
+ * 站上没有"好几只票的合集页"这种地址，硬凑一个只能指向其中一只，
+ * 那是替读者选了一只（理由写在 i18n/types.ts 的 `bySymbolAll` 上）。
+ * 多标的那一条的入口是标题底下那排芯片，一只一张。
+ */
+const onlySymbol = symbols.length === 1 ? symbols[0] : undefined;
+const symbolIndexUrl = onlySymbol
+  ? getRelativeLocaleUrl(locale, `s/${symbolSlug(onlySymbol)}`)
+  : undefined;
+
+// ★ 「这篇是用哪份提示词跑出来的」。引用不存在 / 是草稿 → 这里抛，构建红
+//   （Astro 的 reference() 自己不查）。【2026-09-23】.md 导出口原来也读它、把提示词标题
+//   写进文件头；导出件改成正文原文之后只剩这一处调用 —— 这一行因此就是那道构建期检查本身。
+const promptEntry = await resolvePromptRef(post);
+const promptUrl = promptEntry
+  ? entryUrl("prompts", promptEntry.id, promptEntry.filePath, locale)
+  : undefined;
+
+let ogImageUrl: string | undefined;
+
+if (typeof initOgImage === "string") {
+  ogImageUrl = initOgImage;
+} else if (initOgImage?.src) {
+  ogImageUrl = initOgImage.src;
+}
+
+// 没有手填 ogImage 就用生成的分享卡（dynamicOgImage 关着时是 undefined，
+// Layout 回落到默认图）。地址形状和 [...slug]/index.png.ts 那条路由同源。
+if (!ogImageUrl) {
+  ogImageUrl = entryOgImageUrl("posts", post.id, post.filePath, locale);
+}
+
+const ogImage = ogImageUrl
+  ? new URL(ogImageUrl, Astro.url.origin).href
+  : undefined;
+---
+
+<PostLayout
+  title={`${title} | ${config.site.title}`}
+  headline={title}
+  description={description}
+  ogImage={ogImage}
+  canonicalURL={canonicalURL}
+  pubDatetime={pubDatetime}
+  modDatetime={modDatetime}
+>
+  <Header />
+
+  <BackButton />
+
+  {
+    /* ★ `data-pagefind-filter` 让搜索页能按「研究 / 问答」分面筛选。
+       **这个标注和 `search.astro` 里的 UI 配置缺一不生效，而且两边都不报错**：
+       只标不配 → 索引里有分面、界面上没有入口；只配不标 → 界面什么都不显示。
+       两种情况下搜索都照常返回结果，构建也是绿的。
+       问答详情页标的是 `kind:问答`（同一个 filter 键，不同的值）。 */
+  }
+  <main
+    id="main-content"
+    class:list={["app-layout", { "mt-8": !config.features.showBackButton }]}
+    data-pagefind-body
+    data-pagefind-filter={`${SEARCH_FILTER_KEY}:${SEARCH_KINDS.posts}`}
+    data-pagefind-meta={searchMeta}
+  >
+    <h1
+      style={{
+        // 【2026-09-20】名字按**选题组**起，和列表里折叠后那张卡（Card 传了 answers 时）
+        // 一致：从卡片点进来标题原地接上；在同一个选题的几份研究之间切换时两页 <h1>
+        // 同名，标题**一动不动** —— 各起各的名的话，同一行字会闪一下。
+        // ⚠ 页脚「相关条目」里的卡不传 answers、仍按单条起名，否则和这个 <h1> 撞名。
+        viewTransitionName: toTransitionName(`posts-group-${qaGroupKey(post)}`),
+      }}
+      class="text-accent inline-block text-3xl font-bold tracking-tight text-pretty sm:text-4xl"
+    >
+      {title}
+    </h1>
+
+    <div class="mt-4 mb-2 flex flex-wrap items-center gap-x-3 gap-y-2">
+      {
+        /* ★ 顺序是**名称（标的）→ 标签 → 智能体（模型）→ 时间**，和列表卡片上那一行
+           逐项对齐（【2026-09-21 用户定的】）。同一组信息在列表和详情页上换个顺序，
+           读者就得把它们当成两组东西重新认一遍。
+           【2026-09-20 挪上来的】出处和日期原来沉在页脚的免责 <aside> 里 ——
+           读者要先知道这几样，再决定怎么读下面的结论。
+           ★ 标签**不在页脚再来一份**：同一页上同一排标签出现两次，读者会以为
+             下面那排是别的东西（【2026-09-21】页脚那个 <ul> 同日删了）。 */
+      }
+      {symbols.map(code => <SymbolChip {code} size="lg" />)}
+      {
+        tags.length > 0 && (
+          <ul class="flex flex-wrap items-center gap-2">
+            {tags.map(tag => (
+              <Tag tag={slugifyStr(tag)} tagName={tag} size="lg" />
+            ))}
+          </ul>
+        )
+      }
+      {
+        /* 谁写的、底下跑的是哪个模型 —— 一张芯片，写成「智能体（模型）」。
+           【2026-09-21】原来是并排两张（AgentChip + ModelChip）。两维各三档
+           合起来在屏幕上仍然两两不同，那张表在 AgentModelChip.astro 里。 */
+      }
+      <AgentModelChip {agent} {model} size="lg" />
+      <Datetime {pubDatetime} {modDatetime} {timezone} size="lg" />
+      {
+        /* 【2026-09-21 用户要的】「阅读预计」四个字换成一个眼睛图标
+           （`ReadingTime.astro`）。带 hedge 的整句没删，挡到了 title / 读屏那一侧 ——
+           这个数是估的，理由写在那个组件开头。字数跟在后面，两段说的是同一件事
+           （这篇有多长），所以合在一格里、中间那个·留着。 */
+      }
+      <span
+        class="text-muted-foreground inline-flex items-center gap-x-1.5 text-sm sm:text-base"
+      >
+        <ReadingTime minutes={reading.minutes} size="lg" />
+        <span aria-hidden="true">·</span>
+        <span>
+          {
+            tplStr(t.reading.chars, {
+              chars: reading.chars.toLocaleString("en-US"),
+            })
+          }
+        </span>
+      </span>
+      {
+        /* 【2026-09-21 用户要的】「提示词：<标题>」**排在阅读时长后面**，进这一行 ——
+           原来它在正文上方那个 <aside> 里，和来路那句一起。那个 <aside> 同日删了
+           （来路那句用户不要，见下面那段注释），这一条就没有别的落点了，
+           而它本来就属于"这一篇是怎么来的"那一组信息（智能体 · 模型 · 标的 · 时间）。
+
+           ★ 只有 frontmatter 里填了 prompt 才渲染。没填 = 不是用站上的提示词跑的
+             （**完成态**），不摆一句「未标注」—— 研究稿完全可以是别处跑的，那不是待补。
+           ⚠ 引用了但解析不到是**构建失败**（`resolvePromptRef`，页首已经抛了），
+             走不到这里，所以这里不需要第二道兜底。 */
+        promptEntry && promptUrl && (
+          <span class="text-muted-foreground text-sm sm:text-base">
+            {t.post.promptUsed}
+            <a
+              href={promptUrl}
+              class="underline decoration-1 underline-offset-4"
+            >
+              {promptEntry.data.title}
+            </a>
+          </span>
+        )
+      }
+      {
+        /* 【2026-09-20】下载 / 复制全文 / 打印那三样**也放在这一行**，只留图标、
+           文字进悬停提示。正文后面那一份（`bar` 档）没删：这里是"我已经决定要带走它"的
+           快捷入口，那里是读完之后的出口，两处服务的是两个时刻。
+           ★ 同一个组件、同一段脚本，靠 `variant` 分档 —— 复制一个组件出来的那天起，
+             "复制全文必须运行时 fetch 那条 .md"就有了两份副本，而 export.test.ts 的
+             D 组只认 DownloadLinks.astro 一个文件。 */
+      }
+      {
+        /* 【2026-09-21 用户要的】下载 / 复制 / PDF / 转发**挨在一起**，
+           四个图标一个间距。在这之前转发那个是外层那一行的直接成员，
+           吃的是 `gap-x-3`（12px），而另外三个在 DownloadLinks 自己的
+           `gap-1`（4px）里 —— 一眼看过去像"三个按钮和另一个东西"。
+           ★ `flex-wrap` 不能省：复制全文失败时 DownloadLinks 会放出一整块说明
+             （`basis-full`），没有 wrap 它会被挤进这一行压成一条缝。
+           ★【2026-09-21 用户要的】这四个图标**靠那一行的最右边**（`ms-auto`）。
+             在这之前它们紧跟在「使用的提示词：…」后面，而那一段的长短每篇都不一样 ——
+             于是同一排按钮在每一页上都停在不同的横坐标，翻页时它们在跳。
+             靠右之后四页同一个位置。
+             ⚠ 用 `ms-auto` 不用 `justify-between`：那一行是 `flex-wrap` 的，
+               `justify-between` 会把**每一行**的成员都摊开（窄屏上折行之后尤其难看），
+               而这里要的只是"这一格推到它那一行的右头"。 */
+      }
+      <div class="ms-auto flex flex-wrap items-center gap-1">
+        <DownloadLinks
+          variant="icons"
+          collection="posts"
+          id={post.id}
+          filePath={post.filePath}
+          title={title}
+        />
+        {
+          /* 【2026-09-21 用户要的】转发按钮：点一下把本篇地址复制走，提示「已复制该文链接」。
+             ★ 和正文后面那一排里的「复制本文链接」**是同一个组件**（`variant` 分档），
+               不是照着抄了一个 —— 复制的是 `entryUrl` 算死的**规范地址**，
+               不是 `location.href`（读者手上那个可能带 utm、带锚点、或者是预览域名）。
+               抄第二份的那天，两处就会开始复制两个不同的地址，而页面上零症状。 */
+        }
+        <CopyLinkButton
+          variant="icon"
+          collection="posts"
+          id={post.id}
+          filePath={post.filePath}
+        />
+      </div>
+      <span
+        aria-hidden="true"
+        class:list={[
+          "text-muted-foreground max-sm:hidden",
+          { hidden: !config.features.editPost?.enabled || hideEditPost },
+        ]}
+      >
+        |
+      </span>
+      <EditPost {hideEditPost} {post} class="max-sm:hidden" />
+    </div>
+
+    {
+      /* 【2026-09-20】这里原来还有一行时效提示（「写于上面标的时间…距今 N 天」，AgeNotice）。
+         用户要的：研究和回答页都不要，挪进「关于」页说一次 —— 日期本身就印在上面那一行。 */
+    }
+
+    {
+      /* 【2026-09-21 用户要的】这里原来是正文上方那个 <aside>，里面两行：
+       *   ① 来路那句 `t.provenance[provenanceOf("posts", { agent })]`
+       *      （「这一篇是 AI 生成的（模型会编数字）。」）—— **整条删掉**。
+       *   ② 「提示词：<标题>」—— **挪进上面那行元信息**，排在阅读时长后面。
+       *
+       * ★ 删掉①之后，「这一篇是谁写的」在这一页上由**上面那行的 AgentModelChip**
+       *   回答（三档各自长得不一样，判据没变），全站口径由 /about 免责声明首句
+       *   「本站所有内容均为AI生成」兜着。
+       * ⚠ `.md` 导出口那一侧当时**没有**跟着删（明知的分叉）；【2026-09-23】也删了 ——
+       *   用户要的：下载 / 复制拿到的就是正文原文，站方一个字都不加。于是「谁写的」
+       *   **只剩上面那张芯片在说**，`export.test.ts` E 组「页面那一侧」那张期望表钉着它。 */
+    }
+
+    {
+      /* ★【2026-09-20】同一个选题的几份研究，摆在那行芯片底下 ——
+         和问答页同一个组件、同一个位置、同一套判据（QaAnswerSwitch.astro）。
+         对比这件事要在**读之前**就摆出来：在这之前，其他智能体写的同题研究只在
+         正文读完之后的「相关条目」里，读者得先读完一整篇才知道旁边还有可对照的。 */
+    }
+    <QaAnswerSwitch
+      collection="posts"
+      {siblings}
+      current={post}
+      {description}
+      class="mt-5"
+    />
+
+    {
+      /* 目录：六到十一节的长文，三节以上才出现，见 TableOfContents.astro。
+         ★ **两份都在 DOM 里**，靠断点各显各的：
+           - 这一份是窄屏用的折叠块，`xl:hidden` **不许去掉** ——
+             去掉的症状是大屏上目录出现两遍（一个在这儿、一个在左边侧栏），
+             而页面不报错、构建全绿。`scripts/gate/toc.test.ts` 钉着。
+           - 侧栏那一份在下面那个网格里。 */
+    }
+    <TableOfContents {headings} class="mt-6 xl:hidden" />
+
+    {
+      /* 【2026-09-20 用户要的】xl（≥1280px）以上：目录钉在左边，正文在右边。
+         窄屏什么都没变 —— 下面这些 `xl:` 类在断点以下一条都不生效，
+         这个 div 就是个透明的包裹。
+
+         ★ `hasToc &&` 那一半是**功能性的**，不是洁癖：目录不够三节时不画，
+           而网格是写死两列的 —— 不跟着塌回一列的话，左边空着 13rem 的一条白带，
+           正文被推到右边。判据和组件内部是同一个（`tocItems()`），不是这里再数一遍。
+
+         ★ `minmax(0,1fr)` 不许写成 `1fr`：后者等于 `minmax(auto,1fr)`，
+           而这个站的研究稿里几乎每篇都有宽表格 —— `auto` 下限会让那一列
+           被表格顶宽，整个网格撑破版心，侧栏被挤没。 */
+    }
+    {
+      /* 【2026-09-21 用户要的】正文右上角的「跳到末尾」。放在这儿而不是别处：
+         右下角那个浮动圆钮滚过 200px 才出现，而"不想读完、直接看结论"这个念头
+         在刚打开、还没滚的时候最强。滚动逻辑不在这个组件里，见它顶部那段。 */
+    }
+    <JumpLink to="end" class="mt-6" />
+
+    <div
+      class:list={[
+        hasToc && "xl:grid xl:grid-cols-[13rem_minmax(0,1fr)] xl:gap-x-8",
+      ]}
+    >
+      <TableOfContents {headings} variant="rail" class="mt-8" />
+      <article
+        id="article"
+        transition:name="post-body"
+        class:list={[
+          "mt-8 w-full",
+          "app-prose max-w-app",
+          "prose-pre:bg-(--shiki-light-bg) dark:prose-pre:bg-(--shiki-dark-bg)",
+        ]}
+      >
+        <Content />
+      </article>
+    </div>
+
+    <hr class="my-8 border-dashed" />
+
+    <EditPost class="sm:hidden" {hideEditPost} {post} />
+
+    <BackToTopButton />
+
+    {
+      /* 【2026-09-21 用户要的】标签那一排**挪到标题底下那行元信息里了**（见上面），
+         这里原来那个 `<ul>` 整块删掉 —— 同一页上同一排标签印两遍，底下那遍看起来
+         像是另一种东西。四个详情页同一天一起改的。
+         （同日还修掉过一个：那个 `<ul>` 曾经是**无条件**渲染的，空列表不可见但
+         上下外边距照吃，一篇没打标签的稿子在正文和按钮之间多出 40px 空白 ——
+         挪进元信息行之后这条不复存在，元信息行本来就有别的成员。） */
+    }
+
+    {
+      /* 【2026-09-21 用户要的】这里原来是每篇都挂的免责 <aside>
+       *   （「不构成任何投资建议。站长没有买入任何股票…文中的数据可能有误…」）——
+       *   **整块删了**，四个详情页同一天一起删。
+       *
+       * ⚠ 免责现在只剩**两处**：/about 那一整节，以及**每一页页脚**那条
+       *   「免责声明」链接（`Footer.astro`，2026-09-21 从首页挪下来的）。
+       *   在这之前是三处，而 `src/i18n/types.ts` 里 `footer.disclaimer` 那条注释
+       *   写着"撑住它的是另外两处" —— 那句话同日改了，别让它继续指向一个已经没有的落点。
+       * ⚠ `.md` 导出口那一侧当时一个字没删（`t.download.exportNotice`）；
+       *   【2026-09-23】也删了（导出件就是正文原文），所以免责**只有**上面这两处。 */
+    }
+
+    {
+      /* 文末那一排出口。【2026-09-21 用户要的最终形态】**整排靠右**，四个按钮：
+        复制本文链接 · 下载 Markdown · 复制全文 · 打印 / 存成 PDF。
+
+        ★ **「分享到：」那一排（`ShareLinks`）去掉了** —— 用户原话「分享就不要了」。
+          组件文件本身**留着**（`_components/ShareLinks.astro`，上游 AstroPaper 的文件，
+          `seo.test.ts` 还钉着它的 `data-pagefind-ignore`），只是四个详情页都不再挂它。
+          真要把分享加回来，先读那个文件顶部那段说明。
+        ★ 顺序、图标、文字**和标题底下那行的四个图标逐项对齐**（2026-09-21 用户要的）：
+          下载 MD · 复制全文 · 另存 PDF · 复制链接。同一页上同样四个动作出现两次，
+          一次带字一次只有图标 —— 顺序一换，读者就得把它们当成两组东西重新认一遍。
+          ⚠ 所以**改哪一处都要改另一处**：那一行在上面 `<DownloadLinks variant="icons">`
+            和它后面那个 `<CopyLinkButton variant="icon">` 的先后，就是这里的先后。
+        ⚠ 这个容器**不许加 `data-print-hide`**：DownloadLinks 还会吐一个
+          `<p data-print-source>`（打印件顶上那条出处回链），它是这个容器的子节点 ——
+          父节点 `display:none` 之后，print.css 里那条 `display:block !important`
+          再也救不回来，读者手上那份 PDF 就成了一份没有出处的文件。
+          两个子组件各自带着 data-print-hide，容器只需要 `print:block`
+          （打印时别用 flex 那一套去摆唯一剩下的那行地址）。
+        ⚠ 窄屏仍是 `justify-center`：四个按钮在手机上会折成两行，靠右会把第二行
+          顶到一边去，看着像没对齐。靠右只在 `md:` 以上。 */
+    }
+    {
+      /* 【2026-09-21 用户要的】正文**底部右侧**的「跳到开头 ↑」，和正文右上角那个
+         「跳到末尾 ↓」配成一对（同一个组件，`to` 分档）。
+         ★ 它一进视口，右下角那个浮动圆钮就让位（BackToTopButton 里的 `takenOver`）——
+           用户原话：「当到底部的时候就应该变成文字跳到开头」。两个同时在屏幕上
+           指着同一个动作，就是同一个入口画了两遍。 */
+    }
+    <JumpLink to="top" class="mb-4" />
+
+    <div
+      class="mb-8 flex flex-wrap items-center justify-center gap-x-5 gap-y-3 md:justify-end print:block"
+    >
+      <DownloadLinks
+        collection="posts"
+        id={post.id}
+        filePath={post.filePath}
+        title={title}
+      />
+      <CopyLinkButton
+        collection="posts"
+        id={post.id}
+        filePath={post.filePath}
+      />
+    </div>
+
+    <hr class="my-8 border-dashed" />
+
+    {
+      /* ★ 同一个选题、其他智能体的研究 —— 和问答页那一块逐条同构（同一个组件、
+         同一套判据），排在「关于这只票」前面：同题对照比同票旁证更近。
+         三档，和问答那边一字不差：
+           - 有兄弟 → 列出来（完成态）；
+           - 填了选题组却没兄弟 → 说一句「目前只有这一份」（待补：多半是选的那条被删了）；
+           - 两者都没有 → 只写过一份，整块不渲染（完成态）。
+         ⚠ 条件**不能只看自己填没填键**：一组里的第一条是没有键的
+         （它被创建时还没有"已有选题"可挑），那样写它的整块会消失，
+         而它明明有两份研究指向它。 */
+      (siblings.length > 0 || questionKey) && (
+        <RelatedEntries
+          heading={t.post.siblingsHeading}
+          entries={siblings}
+          emptyMessage={t.post.siblingsOnlyThis}
+        />
+      )
+    }
+
+    {
+      /* ★ 同一只票的其他研究和问答。只有讲单只票的稿子才有这一块（一只都没勾 = 完成态，
+         不是"没有相关内容"）。勾了票但站上没别的 → 说一句「目前只有这一篇」，
+         不许整块消失 —— 那样"没别的"和"这一块坏了"长得一样。
+         ★【2026-09-22】勾了好几只时那句话换成「这几只票…」（两档，见 i18n/types.ts），
+           标题里几只票用「 / 」并排。
+         「去原始来源核对」那行也挂在这里：读者要核数字，最先要的就是这只票的 EDGAR。 */
+      symbols.length > 0 && (
+        <RelatedEntries
+          heading={tplStr(t.related.bySymbolHeading, {
+            symbol: symbols.join(" / "),
+          })}
+          entries={relatedShown}
+          emptyMessage={
+            onlySymbol
+              ? t.related.bySymbolOnlyThis
+              : t.related.bySymbolOnlyThisMulti
+          }
+          moreHref={related.length > 0 ? symbolIndexUrl : undefined}
+          moreLabel={tplStr(t.related.bySymbolAll, {
+            symbol: onlySymbol ?? "",
+          })}
+        >
+          <SymbolLookupLinks slot="intro" {symbols} class="mb-4" />
+        </RelatedEntries>
+      )
+    }
+
+    <AdjacentPostNav {prevPost} {nextPost} />
+  </main>
+  <Footer />
+  {
+    /* 进度条 / 锚点 / 代码复制 / 灯箱。原来是这个文件末尾一段上游内联脚本、只有研究稿页有，
+       【2026-09-20】抽成组件后四页都挂，detailParity.test.ts 钉着。 */
+  }
+  <ArticleEnhancements />
+</PostLayout>

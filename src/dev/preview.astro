@@ -1,0 +1,180 @@
+---
+import { getEntry } from "astro:content";
+import Layout from "@/layouts/Layout.astro";
+import Header from "@/components/Header.astro";
+import Main from "@/components/Main.astro";
+import Footer from "@/components/Footer.astro";
+import { collectionSpec, NUMBERED_COLLECTIONS } from "@/config/collections";
+// ⚠ `astro check` 会对这一行报一条 ts(6133)「declared but never read」的**提示**
+//   （不是 error，不拦构建）。那是误报：下面那个 `return Astro.redirect(...)` 是
+//   frontmatter 里的顶层 return，语言服务把它之后的代码当成不可达了，于是看不见
+//   第 95 行那次调用。**别顺手把这个 import 删掉** —— 删了这一页当场编不过，
+//   而"能看的条目直接跳走"那一档正是它唯一的用处。
+import { entryUrl } from "@/utils/getPostPaths";
+import { previewTier } from "./previewPlan";
+
+/**
+ * 预览中转 —— `/_preview?c=<集合>&s=<号>`，**只在 `pnpm dev` 里存在**
+ * （和 /_gate、/_publish 同一条路：astro.config.ts 里按 isDev 用 injectRoute 挂上，
+ * 文件不在 src/pages 下，生产构建里没有这条路由）。
+ *
+ * 后台编辑页右上角「…」菜单里那条 **Preview** 链到这里（Keystatic 原生的
+ * `collection({ previewUrl })`，地址由 `previewPlan.ts` 的 `previewUrlFor()` 拼）。
+ *
+ * **这一页几乎总是一闪而过**：能看的条目直接 302 跳到它的真实地址。
+ * 它存在只是为了那两档看不了的 —— 为什么不直接把 previewUrl 指向 `/r/{slug}`，
+ * 四档分别是什么，全写在 `previewPlan.ts` 开头。一句话：**草稿在 dev 里也没有页面**，
+ * 而"先存草稿、预览、再发布"恰恰是最常走的那条路。
+ *
+ * ⚠ 这一页读的是**磁盘上**那份 .md（`getEntry`）。后台里没按 Save 的改动不在里面 ——
+ *   Keystatic 的未保存草稿在浏览器的 IndexedDB 里，服务端看不见。下面每一档都说了这句。
+ */
+
+/**
+ * ★ 这一行是**承重的**，别按 lint 的提示删掉。
+ *
+ * 【2026-09-21 实测】没有它的时候，这一页照常渲染、照常 200，但
+ * `Astro.url.searchParams` 是**空的** —— 静态输出模式下 Astro 把这一页当成预渲染的，
+ * 查询串根本不会进来。症状：每一次预览都落进最后那一档「这个地址预览不了 ——
+ * 收到的是 c=（空）s=（空）」。**看起来像后台那条链接坏了**，而真正坏的是这儿。
+ *
+ * ⚠ `astro/no-prerender-export-outside-pages` 会对这一行报错，说"prerender 只在
+ * pages/ 目录里有效"。**那条规则在这儿是误报**：它按路径判断，而这一页是
+ * astro.config.ts 里用 `injectRoute` 挂成真路由的（同 publish-run.ts /
+ * import-run.ts，那两个是 .ts 所以规则没管）。所以下面显式 disable 一行，
+ * 不是把规则整个关掉。
+ */
+// eslint-disable-next-line astro/no-prerender-export-outside-pages
+export const prerender = false;
+
+const params = Astro.url.searchParams;
+const collection = params.get("c") ?? "";
+const slug = params.get("s") ?? "";
+
+const spec = collectionSpec(collection);
+const routable = spec !== undefined && spec.urlPrefix !== null;
+
+/**
+ * 取一条。`getEntry` 的集合名必须是**字面量**（它的类型是从 content.config.ts 推的），
+ * 所以这里只能是一个写死的 switch。
+ *
+ * ⚠ 写死的名单在这个仓库里默认是坏味道（docs/engineering-notes.md 坑 7），所以下面那个自检必须在：
+ *   加了第五个编号集合而忘了补这里，症状是**那个集合的每一次预览都说"盘上没有这一条"**
+ *   —— 一句听起来完全合理、而且永远出现的假话。宁可让这一页当场抛。
+ */
+async function findEntry(key: string, id: string) {
+  switch (key) {
+    case "posts":
+      return await getEntry("posts", id);
+    case "qa":
+      return await getEntry("qa", id);
+    case "guides":
+      return await getEntry("guides", id);
+    case "prompts":
+      return await getEntry("prompts", id);
+    default:
+      return undefined;
+  }
+}
+
+const COVERED = ["posts", "qa", "guides", "prompts"];
+{
+  const missing = NUMBERED_COLLECTIONS.filter(k => !COVERED.includes(k));
+  if (missing.length > 0) {
+    throw new Error(
+      `/_preview 的 findEntry 漏了集合：${missing.join(" / ")}。\n` +
+        `getEntry 的集合名只能是字面量，所以那个 switch 得手动补上一条 —— ` +
+        `不补的话那个集合的每一次预览都会说"盘上没有这一条"，而那是假话。`
+    );
+  }
+}
+
+const entry = routable ? await findEntry(collection, slug) : undefined;
+const tier = previewTier({
+  routable,
+  found: entry !== undefined,
+  draft: entry?.data.draft === true,
+});
+
+if (tier === "open" && entry) {
+  return Astro.redirect(entryUrl(collection, entry.id, entry.filePath));
+}
+
+/** 回后台那一条的地址。集合名和号都是从查询串来的，原样拼回去。 */
+const backToAdmin = `/keystatic/collection/${encodeURIComponent(collection)}/item/${encodeURIComponent(slug)}`;
+/** 它**本该**有的公开地址 —— 只有「草稿」那一档用得上（"这个地址现在是 404"）。 */
+const publicUrl =
+  spec && spec.urlPrefix !== null && slug ? `/${spec.urlPrefix}/${slug}` : null;
+---
+
+<Layout title="预览（仅 dev）">
+  <Header />
+  <Main
+    pageTitle="预览"
+    pageDesc="后台「Preview」点过来的中转页。能看的条目会直接跳走，看不了的在这儿说明原因。"
+  >
+    {
+      tier === "draft" && (
+        <div class="app-callout mt-4">
+          <p class="font-semibold">这一条是草稿，站上没有这个地址。</p>
+          <p class="mt-2">
+            草稿<strong>不生成页面</strong>（判据在
+            <code class="mx-1">src/utils/postFilter.ts</code>），所以
+            {publicUrl && <code class="mx-1">{publicUrl}</code>}现在是 404 ——
+            这不是预览坏了，是它按定义还没有公开地址。
+          </p>
+          <p class="mt-2">
+            想看它发出去长什么样：回后台把「草稿（不生成页面）」的勾去掉、存盘，
+            再点一次 Preview。⚠ 取消勾选本身不等于发布 ——
+            真正发出去还要提交推送。
+          </p>
+        </div>
+      )
+    }
+    {
+      tier === "missing" && (
+        <div class="app-callout mt-4">
+          <p class="font-semibold">盘上找不到这一条。</p>
+          <p class="mt-2">
+            最常见的原因是<strong>还没按 Save</strong>：这一页读的是磁盘上那份
+            .md， 后台里没保存的改动存在浏览器本地（IndexedDB），服务端看不见。
+          </p>
+          <p class="mt-2">
+            另一种可能是地址刚改过 —— 现在找的是
+            <code class="ms-1">
+              {collection}/{slug}
+            </code>
+            。
+          </p>
+        </div>
+      )
+    }
+    {
+      tier === "unknown" && (
+        <div class="app-callout mt-4">
+          <p class="font-semibold">这个地址预览不了。</p>
+          <p class="mt-2">
+            收到的是 <code>c={collection || "（空）"}</code>
+            <code class="ms-2">s={slug || "（空）"}</code> ——
+            要么这个集合不在登记表里，要么它没有按条目的详情路由（比如单页）。
+          </p>
+          <p class="mt-2">
+            正常情况下这一页只会被后台那条 Preview 链过来，链接由
+            <code class="ms-1">previewUrlFor()</code>{" "}
+            拼。手敲地址进来的话对一眼参数。
+          </p>
+        </div>
+      )
+    }
+    {
+      tier !== "open" && (
+        <p class="mt-6">
+          <a class="underline" href={backToAdmin}>
+            ← 回后台编辑这一条
+          </a>
+        </p>
+      )
+    }
+  </Main>
+  <Footer />
+</Layout>

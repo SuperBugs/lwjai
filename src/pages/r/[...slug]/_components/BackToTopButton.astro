@@ -1,0 +1,278 @@
+---
+import IconArrowNarrowUp from "@/assets/icons/IconArrowNarrowUp.svg";
+import { useTranslations } from "@/i18n";
+
+const t = useTranslations(Astro.currentLocale);
+
+/**
+ * 阅读位置指示器 —— 一个浮动圆钮，**方向跟着滚动走**，外面一圈是进度环。
+ *
+ * 【2026-09-21 用户要的，整块重画】在这之前它是两副样子：手机上一个圆钮，
+ * 桌面上一条 `md:sticky md:float-end` 的**药丸**，带边框、挤在正文和下载那排之间
+ * （用户原话：「好丑」）。桌面那一份还占着正文的布局空间 —— 它是 float，
+ * 所以正文最后一段会绕着它排。现在两档合成一个：不占布局的浮动圆钮，没有边框。
+ *
+ * ★ 位置见下面 class 里那段：xl 以上它**不在视口角上**，而是在正文右边那条空白里、
+ *   纵向中间偏下（用户纠正过一次：「放在文章旁边中间偏下的位置，不是系统右下角」）。
+ *
+ * ## 方向三档，读者永远点不到一个"什么都不干"的按钮
+ *
+ *   在页面顶端（≤8px）  → 强制**向下**（往上已经没地方去了）
+ *   在页面底端（≤8px）  → 强制**向上**
+ *   中间               → 跟着**上一次滚动的方向**：往下滚就是 ↓，往上滚就是 ↑
+ *
+ * ⚠ 中间那一档有个 6px 的抖动阈值。不设的话，触控板的回弹、iOS 的橡皮筋
+ *   都会让箭头来回翻 —— 一个自己乱转的箭头比没有这个按钮更糟。
+ *
+ * ★ 两端那两档**不是锦上添花**：不强制的话，读者一路往下滚到底，箭头停在 ↓，
+ *   点下去页面纹丝不动 —— 一个"按了没反应"的按钮，正是 docs/engineering-notes.md 第二节
+ *   最不许出现的那种东西（看不出坏了的坏按钮）。
+ *
+ * ## 进度圈
+ *
+ * 按钮**底下一层**（`-z-10`）垫一个大一圈的 `conic-gradient`，露在外面的那一圈
+ * 就是读者看见的进度环。已读部分是 `--accent`，未读部分是 `--border`（一条底圈）——
+ * 未读画成 `transparent` 的话，读到 5% 时屏幕上是一小段悬空的弧，看着像渲染坏了。
+ *
+ * ⚠ 这一层必须比按钮**大**（`scale-110`），盖住了就什么都看不见，而代码"看起来是对的"。
+ *
+ * ## 正文首尾那两个文字入口也走这段脚本
+ *
+ * 【2026-09-21】正文右上角「跳到末尾」和正文底部右侧「跳到开头」都是
+ * `JumpLink.astro`（一个组件两个方向）。它们**不自己写滚动逻辑**，只挂
+ * `data-jump-end` / `data-jump-top`，由下面这段一起绑 —— 各写一份的那天，
+ * 一处用 smooth、一处不用，或者一处忘了 `prefers-reduced-motion`，
+ * 而三处看起来都在工作。
+ *
+ * 到底之后圆钮**让位**给底部那行字（`takenOver`），所以那行字不在 = 圆钮一直显示。
+ */
+---
+
+{
+  /* data-pagefind-ignore：「回到顶部」是按钮文案，不是任何一篇的内容。
+     【2026-09-20 实测】在那之前搜「回到顶部」命中全站每一页。
+     ⚠ id 和这个属性**必须在同一个标签上、id 在前**：seo.test.ts 那条正则
+       (`id="btt-btn-container"[^>]*data-pagefind-ignore`) 认的是这个形状；
+       print.css 第 2 节也按这个 id 把它从纸上去掉。 */
+}
+<div
+  id="btt-btn-container"
+  data-pagefind-ignore
+  class:list={[
+    "fixed z-50",
+    /**
+     * ★【2026-09-21 用户纠正】位置分两档，判据是**正文旁边有没有空白**。
+     *
+     *   窄屏（< xl）：视口右下角。正文已经占满版心，旁边没有地方可放。
+     *   xl 以上：**挪进正文右边那条空白里，纵向中间偏下** —— 用户原话
+     *            「应该放在文章旁边中间偏下的位置，不是放在系统右下角」。
+     *            钉在视口角上的浮动钮是个"系统控件"，而这是**这篇文章的**
+     *            位置指示器，它该跟着正文走。左边是目录侧栏，右边是它，对称。
+     *
+     * ★ 横向那个算式跟着版心走，不是写死的像素：
+     *     版心 `max-w-app` 在 xl 是 `max-w-5xl` = 64rem，半宽 32rem；
+     *     圆钮 `size-12` = 3rem，和正文留 1.5rem 的缝 →
+     *     圆钮右边缘离视口右侧 = 50% − (32 + 1.5 + 3)rem = 50% − 36.5rem。
+     *   ⚠ 改 `max-w-app` 的 xl 那一档时**这里要跟着改**：对不上的症状是圆钮
+     *     压在正文上，或者飘到屏幕外面去（视口窄时 `inset-e` 会变成负值）。
+     *     xl 断点是 80rem，而这个算式在 ≥73rem 就非负，够不着那条边界。
+     *
+     * ⚠ `calc()` 里的 `−` 两侧必须是**下划线**：方括号里不许有裸空格，而 CSS 的
+     *   减号两侧必须有空格。写成 `calc(50%-36.5rem)` 那条 utility 根本生成不出来，
+     *   圆钮会退回视口右下角 —— 而构建、类型、测试四处全绿。
+     */
+    "inset-e-5 bottom-6",
+    "xl:inset-e-[calc(50%_-_36.5rem)] xl:top-[60%] xl:bottom-auto xl:-mt-6",
+    // 藏起来时往下沉一点并缩小一圈 —— 出现时是"浮上来"，不是凭空闪现。
+    "pointer-events-none translate-y-4 scale-95 opacity-0",
+    "transition duration-300 ease-out motion-reduce:transition-none",
+  ]}
+>
+  {
+    /* ★ 下面那三处初始值（`aria-label` / `title` / 箭头上的 `rotate-180`）
+       **必须是向下那一档**，和脚本里 `let dir = "down"` 对齐。
+
+       【写这个组件时当场踩到】markup 写成向上（箭头不转、名字「回到顶部」）而脚本
+       从 `"down"` 起步时，第一次滚动调的是 `setDir("down")` —— 和当前值相同，
+       那个函数直接 `return`，**DOM 一次都没被改过**。于是读者看到一个 ↑、
+       写着「回到顶部」的按钮，点下去却滚到页面底部。零报错、零构建症状，
+       只有真去点它的人撞得到。
+
+       这一档在页面顶端本来也就是对的：那儿往上已经没地方可去。
+
+       ⚠ 这段注释**不许挪回属性之间**。`{/* … *​/}` 夹在两个 HTML 属性中间
+         `astro check` 能过，但 `prettier --write` 会把它重排成语法错误的东西
+         （实测：`Unterminated string literal` + `':' expected`）—— 也就是说
+         格式化一次就炸，而改之前那一刻是绿的。 */
+  }
+  <button
+    data-button="back-to-top"
+    type="button"
+    data-label-top={t.post.backToTop}
+    data-label-bottom={t.post.jumpToEnd}
+    aria-label={t.post.jumpToEnd}
+    title={t.post.jumpToEnd}
+    class:list={[
+      "group bg-surface text-foreground relative grid size-12 place-items-center",
+      // ★ 没有边框（用户要的）：和正文分开靠阴影 + 外面那圈进度环。
+      "rounded-full shadow-lg",
+      "hover:text-accent transition-colors",
+    ]}
+  >
+    <span
+      id="progress-indicator"
+      class="absolute inset-0 -z-10 block scale-110 rounded-full bg-transparent"
+    ></span>
+    {
+      /* 一个箭头图标转 180° 就是另一个方向 —— 两张图标各画一份的话，
+         翻转那一下是"换图"，不是"转过来"，而用户要的正是那个动画。 */
+    }
+    <IconArrowNarrowUp
+      data-btt-arrow
+      class="size-5 rotate-180 transition-transform duration-300 ease-out motion-reduce:transition-none"
+      aria-hidden="true"
+    />
+  </button>
+</div>
+
+<script is:inline data-astro-rerun>
+  function backToTop() {
+    const root = document.documentElement;
+    const container = document.querySelector("#btt-btn-container");
+    const btn = document.querySelector("[data-button='back-to-top']");
+    const ring = document.querySelector("#progress-indicator");
+    const arrow = btn && btn.querySelector("[data-btt-arrow]");
+    if (!root || !container || !btn || !ring || !arrow) return;
+
+    /** 正文底部那行「跳到开头」。圆钮看见它就让位，见下面 `takenOver`。 */
+    const handoff = document.querySelector("[data-jump-top]");
+
+    /** 离两端多近算"已经到头了"。 */
+    const EDGE = 8;
+    /** 小于这个位移不翻方向 —— 挡触控板回弹和 iOS 橡皮筋。 */
+    const JITTER = 6;
+    /** 滚过这么多才把按钮放出来：一进页面就糊一个圆钮在正文上太吵。 */
+    const SHOW_AFTER = 200;
+
+    const reduceMotion = window.matchMedia(
+      "(prefers-reduced-motion: reduce)"
+    ).matches;
+    const behavior = reduceMotion ? "auto" : "smooth";
+
+    let dir = "down";
+    let anchor = root.scrollTop;
+    let shown = null;
+
+    function setDir(next) {
+      if (next === dir) return;
+      dir = next;
+      const label =
+        next === "down" ? btn.dataset.labelBottom : btn.dataset.labelTop;
+      // 圆钮上一个字都不显示，所以名字只能挂在这两处 —— 不换的话，
+      // 屏幕阅读器会对着一个往下滚的按钮念「回到顶部」。
+      btn.setAttribute("aria-label", label);
+      btn.setAttribute("title", label);
+      arrow.classList.toggle("rotate-180", next === "down");
+    }
+
+    function maxScroll() {
+      return Math.max(0, root.scrollHeight - root.clientHeight);
+    }
+
+    function update() {
+      const max = maxScroll();
+      const top = root.scrollTop;
+
+      const percent = max > 0 ? (top / max) * 100 : 0;
+      ring.style.setProperty(
+        "background-image",
+        `conic-gradient(var(--accent) ${percent}%, var(--border) ${percent}%)`
+      );
+
+      if (top <= EDGE) {
+        setDir("down");
+        anchor = top;
+      } else if (max - top <= EDGE) {
+        setDir("up");
+        anchor = top;
+      } else if (Math.abs(top - anchor) >= JITTER) {
+        setDir(top > anchor ? "down" : "up");
+        anchor = top;
+      }
+
+      /**
+       * ★ 正文底部那行「跳到开头」一进视口，圆钮就**让位**（用户要的：
+       *   「当到底部的时候就应该变成文字跳到开头」）。
+       *
+       *   判的是**那行字看得见没有**，不是"离底部还有多少像素" —— 后者要挑一个
+       *   魔数，而页脚多长、相关条目有几条每页都不一样，挑出来的数必然在某些页面上
+       *   早让位、在另一些页面上晚让位。看得见就让位，定义本身就是要的那件事。
+       *   页面上没有那行字时（防御性）这一项为 false，圆钮照旧管到底。
+       */
+      const takenOver =
+        handoff !== null &&
+        handoff.getBoundingClientRect().top < window.innerHeight;
+      const visible = top > SHOW_AFTER && !takenOver;
+      if (visible !== shown) {
+        container.classList.toggle("opacity-0", !visible);
+        container.classList.toggle("translate-y-4", !visible);
+        container.classList.toggle("scale-95", !visible);
+        // ⚠ 不只是透明度：`opacity-0` 的按钮照样挡得住底下的链接。
+        container.classList.toggle("pointer-events-none", !visible);
+        shown = visible;
+      }
+    }
+
+    function jump(to) {
+      window.scrollTo({ top: to === "down" ? maxScroll() : 0, behavior });
+    }
+
+    btn.addEventListener("click", () => jump(dir));
+
+    // 正文首尾那两个文字入口（JumpLink.astro）—— 同一个动作，同一段实现。
+    [
+      ["[data-jump-end]", "down"],
+      ["[data-jump-top]", "up"],
+    ].forEach(([sel, dirTo]) => {
+      document.querySelectorAll(sel).forEach(el => {
+        if (el.dataset.jumpBound === "1") return;
+        el.dataset.jumpBound = "1";
+        el.addEventListener("click", () => jump(dirTo));
+      });
+    });
+
+    let ticking = false;
+    document.addEventListener(
+      "scroll",
+      () => {
+        if (ticking) return;
+        ticking = true;
+        window.requestAnimationFrame(() => {
+          update();
+          ticking = false;
+        });
+      },
+      { passive: true }
+    );
+    update();
+  }
+  /**
+   * ★ **必须等 DOM 解析完再绑**，不能在解析到这儿的当场跑。
+   *
+   * 【2026-09-21 实测踩到】这是 `is:inline` 脚本，浏览器解析到它就**同步执行**，
+   * 而它要找的两样东西一个在它上面、一个在它下面：
+   *   `<JumpLink to="end">`（正文右上角）在上面 —— 找得到；
+   *   `<JumpLink to="top">`（正文底部右侧）在下面 —— **那一刻还不存在**。
+   * 于是 `[data-jump-top]` 查出来是 null，症状有两个，都不报错：
+   *   ① 底部那个「跳到开头」点了纹丝不动（死按钮）；
+   *   ② `handoff` 是 null → `takenOver` 恒为 false → 到底之后圆钮不让位，
+   *      和那行字同时杵在屏幕上。
+   * 最阴的是 ClientRouter：站内跳过来时脚本是**换页后**重跑的，DOM 已经齐了，
+   * 两样都正常 —— 只有直接打开 / 刷新这一页才坏。
+   */
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", backToTop, { once: true });
+  } else {
+    backToTop();
+  }
+</script>

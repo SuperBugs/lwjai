@@ -1,0 +1,88 @@
+---
+import type { GetStaticPaths } from "astro";
+import { getCollection } from "astro:content";
+import Layout from "@/layouts/Layout.astro";
+import Header from "@/components/Header.astro";
+import Breadcrumb from "@/components/Breadcrumb.astro";
+import Main from "@/components/Main.astro";
+import Card from "@/components/Card.astro";
+import EmptyState from "@/components/EmptyState.astro";
+import CollectionSearch from "@/components/CollectionSearch.astro";
+import { SEARCH_KINDS } from "@/config/searchKinds";
+import Footer from "@/components/Footer.astro";
+import Pagination from "@/components/Pagination.astro";
+import { getSortedPosts } from "@/utils/getSortedPosts";
+import { foldQaGroups } from "@/utils/qaGroups";
+import { useTranslations } from "@/i18n";
+import config from "@/config";
+
+/**
+ * 问答列表页。形状是**刻意**照着 `posts/[...page].astro` 抄的 ——
+ * 上游（AstroPaper）哪天改了列表页，两处能对照着合过来。
+ *
+ * 【2026-09-20】同一个问题的几条回答**折成一张卡**（foldQaGroups，判据和详情页那排
+ * 「其他智能体的回答」同一把钥匙）：问题只印一遍，底下每条回答一行。分页按卡数分。
+ *
+ * ★【2026-09-18 实测】文件名里的 `[...page]` 不是命名风格，是硬性的：
+ *   Astro 把分页参数名写死成字符串 "page"，路由里没有 `[...page]` / `[page]`
+ *   这一段时 `paginate()` 直接抛 PageNumberParamNotFound。
+ *   也就是说把这个文件改名成 `index.astro` 会让整个 /qa 在构建期炸掉。
+ */
+export const getStaticPaths = (async ({ paginate }) => {
+  const entries = await getCollection("qa", ({ data }) => !data.draft);
+
+  // ★ 必须过 getSortedPosts()：它内部的 postFilter 是「草稿 / 定时未到的条目
+  //   不生成页面」的**唯一**机制，顺带也决定了它们不进 sitemap、不进 Pagefind。
+  //   自己在这里写过滤逻辑会重踩 docs/engineering-notes.md 坑 1 ——
+  //   dev 里看得见、dist 里页面根本不生成、而构建是绿的。
+  return paginate(foldQaGroups(getSortedPosts(entries)), {
+    pageSize: config.posts.perPage,
+  });
+}) satisfies GetStaticPaths;
+
+const { page } = Astro.props;
+
+const locale = Astro.currentLocale ?? config.site.lang;
+const t = useTranslations(locale);
+---
+
+<Layout
+  title={`${t.pages.qaTitle} | ${config.site.title}`}
+  description={t.pages.qaDesc}
+>
+  <Header />
+
+  <Breadcrumb />
+
+  <Main pageTitle={t.pages.qaTitle} pageDesc={t.pages.qaDesc}>
+    {
+      /* 集合一条都没有时不摆检索框 —— 一个搜什么都搜不到的框，
+        在界面上和"搜索坏了"长得一样。 */
+    }
+    {page.total > 0 && <CollectionSearch kind={SEARCH_KINDS.qa} />}
+    {
+      /* ★ 空状态是一个画出来的框，不是一个空 <ul>。
+         Astro 的 paginate 在数据为空时**照样生成第 1 页**，所以 /qa 这一页
+         一定存在；那一页什么都没有的时候，读者看到的必须是「真的还没写」，
+         而不是一片疑似坏掉的空白（docs/engineering-notes.md 第二节：空状态和失败状态
+         必须长得不一样）。为什么是框不是一行灰字，见 EmptyState.astro 的头注释。 */
+      page.data.length === 0 ? (
+        <EmptyState message={t.pages.qaEmpty} />
+      ) : (
+        <ul>
+          {page.data.map(({ entry, answers }) => (
+            <Card {...entry} {answers} />
+          ))}
+        </ul>
+      )
+    }
+  </Main>
+
+  {
+    /* 分页大小复用 config.posts.perPage —— 没有单独的 qa 配置块，这是刻意的：
+      多一处配置就多一处"两边不一致而谁都不报错"的地方。 */
+  }
+  <Pagination {page} />
+
+  <Footer noMarginTop={page.lastPage > 1} />
+</Layout>

@@ -1,0 +1,71 @@
+---
+import IconArrowNarrowUp from "@/assets/icons/IconArrowNarrowUp.svg";
+import { useTranslations } from "@/i18n";
+
+type Props = {
+  /** 往哪儿跳。`end` = 页面底部，`top` = 页面开头。 */
+  to: "end" | "top";
+  class?: string;
+};
+const { to, class: className = "" } = Astro.props;
+const t = useTranslations(Astro.currentLocale);
+
+const isEnd = to === "end";
+const label = isEnd ? t.post.jumpToEnd : t.post.backToTop;
+
+/**
+ * 正文**右上角 / 右下角**那两个小跳转（「跳到末尾 ↓」/「跳到开头 ↑」）。
+ *
+ * 【2026-09-21】先有的是右上角那个（用户在截图上框了位置：「在框选的这里美观地
+ * 加一个跳到末尾的功能」）。同日他又指了正文**底部右侧**：到底之后那个浮动圆钮
+ * 该"变成文字跳到开头"。所以这是**一个组件两个方向**，不是两个组件 ——
+ * 抄第二份的那天，两处的滚动行为、`prefers-reduced-motion` 判断、无障碍名
+ * 就开始各走各的，而两处看起来都在工作（docs/engineering-notes.md 坑 8）。
+ *
+ * ## 为什么正文首尾各一个，而不是只靠那个浮动圆钮
+ *
+ * 圆钮**滚过 200px 才出现**，而且到底之后会让位给下面这个文字（见
+ * `BackToTopButton.astro` 里 `takenOver` 那一段）。也就是说页面的**两端**
+ * 恰恰是圆钮不在的时候 —— 而"我不想读完，直接看结论"和"读完了，回去看别的"
+ * 这两个念头，正好就发生在这两端。
+ *
+ * ## 这里**不写滚动逻辑**
+ *
+ * 只挂 `data-jump-end` / `data-jump-top`，实现在 `BackToTopButton.astro`
+ * 那段脚本里（它把页面上带这两个属性的元素一起绑上）。
+ * ⚠ 所以这个组件**只能和 BackToTopButton 一起挂**：单独挂上去按钮画得出来、
+ *   点下去毫无反应，且零报错。`scripts/gate/detailParity.test.ts` 钉着四页都成对。
+ *
+ * ## 样子
+ *
+ * 一句灰字 + 一个箭头，**没有边框、没有底色**（用户对那个带框旧按钮的原话是「好丑」）。
+ * 次要入口不该和正文抢注意力，悬停才变成正文色。
+ *
+ * `data-pagefind-ignore`：按钮文案不是任何一篇的内容 —— 漏了的话搜「跳到末尾」
+ * 命中全站每一页（`seo.test.ts` 为同一个形态钉着七处）。
+ * `data-print-hide`：纸上点不动。
+ */
+---
+
+<div
+  data-pagefind-ignore
+  data-print-hide
+  class:list={["flex justify-end", className]}
+>
+  <button
+    type="button"
+    data-jump-end={isEnd ? "" : undefined}
+    data-jump-top={isEnd ? undefined : ""}
+    class="text-muted-foreground hover:text-foreground inline-flex items-center gap-1 text-sm transition-colors"
+  >
+    {label}
+    {
+      /* 同一张箭头图标转 180° 当向下用 —— 两张图各画一份的话，哪天换图标
+         就会只换掉一处，而两处都"看起来对"。 */
+    }
+    <IconArrowNarrowUp
+      class:list={["size-4", isEnd && "rotate-180"]}
+      aria-hidden="true"
+    />
+  </button>
+</div>

@@ -1,0 +1,124 @@
+---
+import { getCollection } from "astro:content";
+import { getRelativeLocaleUrl } from "astro:i18n";
+import type { GetStaticPathsOptions } from "astro";
+import IconRss from "@/assets/icons/IconRss.svg";
+import Layout from "@/layouts/Layout.astro";
+import Header from "@/components/Header.astro";
+import Main from "@/components/Main.astro";
+import Breadcrumb from "@/components/Breadcrumb.astro";
+import Card from "@/components/Card.astro";
+import Footer from "@/components/Footer.astro";
+import Pagination from "@/components/Pagination.astro";
+import SymbolLookupLinks from "@/components/SymbolLookupLinks.astro";
+import { getUniqueSymbols, symbolSlug } from "@/utils/getUniqueSymbols";
+import { getSortedPosts } from "@/utils/getSortedPosts";
+import { foldQaGroups } from "@/utils/qaGroups";
+import { coverageLabel } from "@/utils/coverageLabel";
+import { tplStr, useTranslations } from "@/i18n";
+import config from "@/config";
+
+export async function getStaticPaths({ paginate }: GetStaticPathsOptions) {
+  // ★ 路径必须从**两个集合**推。只喂 posts 的话，"只有问答提到过"的那只票
+  //   压根不会出现在这里，而问答页上的 SymbolChip 照样链到 /s/{slug} ——
+  //   一个没生成的页面。构建不报错（getStaticPaths 不知道有人会链过来）。
+  const posts = await getCollection("posts", ({ data }) => !data.draft);
+  const qaEntries = await getCollection("qa", ({ data }) => !data.draft);
+  const entries = [...posts, ...qaEntries];
+  const symbols = getUniqueSymbols(entries);
+
+  return symbols.flatMap(symbolEntry => {
+    // 页内按时间混排两种条目 —— 一只票下面"研究说了什么"和"问它的时候模型说了什么"
+    // 本来就是交替发生的，按集合分成两段反而要读者自己去对时间。
+    // ★【2026-09-22】一条内容可以勾好几只票，所以这里是 `some` 而不是相等 ——
+    //   一条同时讲 ARM / INTC 的问答，这两页上都该有它。
+    const symbolEntries = getSortedPosts(
+      entries.filter(({ data }) =>
+        data.symbols.some(code => symbolSlug(code) === symbolEntry.slug)
+      )
+    );
+
+    // 同一个问题的几条回答折成一张卡（src/utils/qaGroups.ts）；研究稿原样一条一卡。
+    return paginate(foldQaGroups(symbolEntries), {
+      params: { symbol: symbolEntry.slug },
+      props: {
+        code: symbolEntry.code,
+        name: symbolEntry.name,
+        // ★ 分开传，不传 `symbolEntry.total`。理由见下面 `coverage` 的注释。
+        postCount: symbolEntry.postCount,
+        qaCount: symbolEntry.qaCount,
+      },
+      pageSize: config.posts.perPage,
+    });
+  });
+}
+
+const { page, code, name, postCount, qaCount } = Astro.props;
+
+const label = name ? `${code}（${name}）` : code;
+
+/**
+ * 「3 篇研究 · 2 条问答」。
+ *
+ * ★ 原来这里写的是「共 N 篇」，N 取自当时 `SymbolEntry` 上那个单一的 `count`。
+ *   收了 qa 之后那个数变成两个集合的合计，**字面意思就错了** ——
+ *   读者会以为这只票有 N 篇研究。所以拆开说。
+ *   （`SymbolEntry.total` 还在，但它只该用在"总量确实是要说的那个数"的地方，
+ *   比如分页总数，不是这一句。）
+ *   为 0 的那一档整段不出现：至少有一边非 0，否则这只票根本不会进标的表。
+ *   【2026-09-20】判据抽到 src/utils/coverageLabel.ts，/s 两页共用一份。
+ */
+const coverage = coverageLabel(postCount, qaCount);
+
+const locale = Astro.currentLocale ?? config.site.lang;
+const t = useTranslations(locale);
+
+/** 这只票的 feed：`/s/<代码>/rss.xml`（src/pages/s/[symbol]/rss.xml.ts）。
+ *  和那条路由从同一批集合推路径，所以这里链到的一定存在。 */
+const feedHref = `${getRelativeLocaleUrl(locale, `s/${symbolSlug(code)}`).replace(/\/+$/, "")}/rss.xml`;
+const feedTitle = tplStr(t.feed.subscribeSymbol, { symbol: code });
+---
+
+<Layout
+  title={`${label} | ${config.site.title}`}
+  description={`${label} 的全部研究与问答：${coverage}。`}
+>
+  {
+    /* 阅读器的自动发现：粘这一页地址进 Feedly / Inoreader 时，读到的是这只票的 feed，
+       不是全站那条。全站那条在 Layout 里已经有一份。 */
+  }
+  <link
+    slot="head"
+    rel="alternate"
+    type="application/rss+xml"
+    title={feedTitle}
+    href={new URL(feedHref, config.site.url).href}
+  />
+  <Header />
+  <Breadcrumb />
+
+  <Main pageTitle={label} pageDesc={`这只票下的全部内容：${coverage}。`}>
+    {
+      /* 「去原始来源核对」直达链接（EDGAR / Yahoo / Nasdaq）+ 这只票的 RSS。
+         站上每一页都在说"回原始来源核对"，这一行是那条路的入口；
+         每一页都印（不只第一页）—— 翻到第 2 页的人同样要核。 */
+    }
+    <div class="mb-6 flex flex-wrap items-center gap-x-5 gap-y-2">
+      <SymbolLookupLinks symbols={[code]} />
+      <a
+        href={feedHref}
+        class="text-muted-foreground hover:text-foreground inline-flex items-center gap-x-1.5 text-sm underline decoration-1 underline-offset-4 transition-colors"
+      >
+        <IconRss class="size-4 rtl:-rotate-90" aria-hidden="true" />
+        {feedTitle}
+      </a>
+    </div>
+    <ul>
+      {page.data.map(({ entry, answers }) => <Card {...entry} {answers} />)}
+    </ul>
+  </Main>
+
+  <Pagination {page} />
+
+  <Footer noMarginTop={page.lastPage > 1} />
+</Layout>

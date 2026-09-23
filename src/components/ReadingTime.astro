@@ -1,0 +1,67 @@
+---
+import IconEye from "@/assets/icons/IconEye.svg";
+import { tplStr, useTranslations } from "@/i18n";
+
+/**
+ * 「预估阅读时长」那一格 —— **一个眼睛图标 + 一个数字**。
+ *
+ * 【2026-09-21 用户要的】屏幕上那几个字（「阅读预计」）换成图标，
+ * 卡片和四个详情页都换。
+ *
+ * ## 为什么要有这个组件
+ *
+ * 在这之前六处（卡片 ×2 + 四个详情页）各写一遍
+ * `tplStr(t.reading.minutes, { minutes })`。加图标之后那一句变成"图标 + 数字 +
+ * 无障碍名字"三件事，抄六份的那天就是其中一两处没有无障碍名字的那天 ——
+ * 而那正是屏幕上看不出来的一处。
+ *
+ * ## ★ 「预计」两个字没有被删掉，只是不在屏幕上了
+ *
+ * 这个数是 `readingTime.ts` 按粗读速度**估**出来的，不是量出来的。
+ * docs/engineering-notes.md 记着这条：写成「阅读 14 分钟」是把估计说成事实，而读者没有办法
+ * 看出区别。所以现在是**两个串两个出口**，和这个站处理时间的做法一样
+ * （屏幕上印裸的、时区名收进 `title`）：
+ *
+ *   屏幕上（视觉）   `t.reading.minutes`      「14 分钟」＋ 一个眼睛图标
+ *   hover / 读屏     `t.reading.minutesTitle` 「阅读预计 14 分钟」
+ *
+ * ⚠ 所以那个 `sr-only` 的整句**不是可有可无的装饰**：删掉它，读屏用户听到的
+ *   就只剩一个孤零零的「14 分钟」（图标是 `aria-hidden` 的），既不知道那是什么
+ *   的 14 分钟，也不知道它是个估计。`readingTime.test.ts` 钉着这两个串各自该有什么。
+ *
+ * ⚠ 图标用眼睛是用户点的。说明一句：多数文章系统里**眼睛 = 阅读量、钟表 = 阅读时长**，
+ *   这里跟着的是分钟数 —— 真觉得读者会误读成阅读量，换 `IconClock` 只改这一个文件。
+ */
+interface Props {
+  /** `readingStats().minutes`。**已经是"至少 1"**，这里不再兜底。 */
+  minutes: number;
+  /** 详情页那一行比卡片大一号（和它旁边的芯片、时间一致）。 */
+  size?: "sm" | "lg";
+  class?: string;
+}
+
+const { minutes, size = "sm", class: className = "" } = Astro.props;
+const t = useTranslations(Astro.currentLocale);
+const full = tplStr(t.reading.minutesTitle, { minutes });
+---
+
+<span
+  class:list={[
+    "text-muted-foreground inline-flex items-center gap-x-1 whitespace-nowrap",
+    className,
+  ]}
+  title={full}
+>
+  <IconEye
+    aria-hidden="true"
+    class:list={["shrink-0", size === "lg" ? "size-[1.05em]" : "size-4"]}
+  />
+  {/* 读屏念整句（含「预计」），眼睛图标和数字都对它隐藏 —— 否则会念两遍。 */}
+  <span class="sr-only">{full}</span>
+  <span
+    class:list={["text-sm", { "sm:text-base": size === "lg" }]}
+    aria-hidden="true"
+  >
+    {tplStr(t.reading.minutes, { minutes })}
+  </span>
+</span>

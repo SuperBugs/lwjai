@@ -1,0 +1,284 @@
+---
+import IconShare from "@/assets/icons/IconShare.svg";
+import { entryUrl } from "@/utils/getPostPaths";
+import { useTranslations } from "@/i18n";
+import config from "@/config";
+
+/**
+ * 「复制链接」—— 一键把本篇的地址拷到剪贴板。
+ *
+ * ## 为什么不塞进 ShareLinks
+ *
+ * 和 `DownloadLinks.astro` 同样的三条理由，这里逐条都成立：
+ *   1. `ShareLinks` 原来**没有** `data-pagefind-ignore`（【2026-09-20】补上了）。照抄进去，
+ *      全站每一篇都能被搜到「复制链接」四个字 —— 而这四个字不是任何一篇的内容。
+ *   2. 它是上游 AstroPaper 的文件，改它等于给以后的上游合并埋冲突。
+ *   3. 它内部走 `LinkButton`，而 `LinkButton` 只渲染 `<a>` / `<span>`，
+ *      **渲不出 `<button>`**。复制不是导航，用 `<a href="#">` 是错语义
+ *      （键盘用户按空格不触发，屏幕阅读器念成"链接"，还会往地址栏塞个 `#`）。
+ *
+ * ## 复制的是**规范地址**，不是 `location.href`
+ *
+ * 读者手里那个地址可能带着 `?utm_source=…`、带着 `#some-heading`、或者干脆是
+ * 预览域名（`*.pages.dev`）/ 局域网 IP。把它原样分享出去，收到的人点开可能
+ * 404、也可能被带上一串跟踪参数。所以这里用 `entryUrl` + `config.site.url`
+ * 在构建期算死 —— 和 `DownloadLinks` 里那个打印回链是同一个值。
+ * 地址一律由 `entryUrl` 算，**不许手拼字符串**：手拼 `/posts/${id}` 会在
+ * qa / guides 上静默产出错的链接，而且是复制出去之后才发现。
+ *
+ * ## 三档状态，一档都不许省
+ *
+ * docs/engineering-notes.md 第二节那条在这个按钮上就是字面意思：
+ *
+ *   | 状态 | 界面 |
+ *   |---|---|
+ *   | 还没点 | 「复制链接」 |
+ *   | 复制成功 | 「已复制」+ 强调色，两秒后自己退回去 |
+ *   | **复制失败** | 「没复制成功」+ **把地址露出来让人手动复制**，且不会自己消失 |
+ *
+ * 第三档不是假想的：`navigator.clipboard` 在**非安全上下文里根本不存在**
+ * （`pnpm dev --host` 之后用 http://192.168.x.x 打开就是这种情况），
+ * 而且就算存在，浏览器也可能因为"文档没有焦点"或权限策略把 `writeText()` 拒掉。
+ * 这类失败**没有任何视觉痕迹** —— 点一下，什么都没发生，读者以为复制上了，
+ * 粘出来是上一次剪贴板里的东西。所以失败必须比成功更显眼。
+ *
+ * 没有走 `document.execCommand("copy")` 兜底：它已废弃、在部分浏览器里
+ * **静默返回 false**（又是一个"看起来成功了"），而失败档露出来的那个输入框
+ * 已经把文字替读者选好了，离手动复制只差一个 Ctrl+C。
+ *
+ * ## 按钮默认是 `hidden` 的，由脚本放出来
+ *
+ * 关掉 JS 的读者点它只会毫无反应 —— 那是这个项目最不许出现的东西：
+ * 一个看不出坏了的坏按钮。所以先藏着，脚本绑上事件的那一刻才显示。
+ * 没有 JS 时读者看到的是 `ShareLinks` 那排纯 `<a>`，那些照常能用。
+ * （`hidden` 属性压得住 `inline-flex`：Tailwind 4 的 preflight 里那条
+ *  `[hidden]{display:none!important}` 在 `@layer base`，`!important` 跨层
+ *  反序生效，赢过 utilities。别改成 `class="hidden"` 再去 toggle 类名。）
+ */
+
+type Props = {
+  /** 集合名（posts / qa / guides）。 */
+  collection: string;
+  id: string;
+  filePath?: string;
+  /**
+   * 两档画法，判据和 `DownloadLinks.astro` 的 `variant` 逐条对齐：
+   *   - `"bar"`（默认）—— 正文后面那一排里带字的按钮：🔗 复制本文链接。
+   *   - `"icon"` —— 【2026-09-21 用户要的】标题底下那行元信息里的**转发按钮**，
+   *     只有图标，字进 `title` 和一个 sr-only 的 span。
+   *
+   * ★ 两档**用同一个图标**（`IconShare`）。【2026-09-21 用户要的：
+   *   「图标要和文章顶部的几个图标一致」】—— 文末那一排和标题底下那一行
+   *   现在是同样四个动作，同样四个图标，只差显不显示文字。
+   *   在这之前 `bar` 档用的是一个内联的锁链 SVG（上游那一版留下来的），
+   *   于是同一个按钮在一页上有两张脸。
+   * ⚠ 所以这个组件里**只剩一处图标**。哪天想给某一档换个图标，先想清楚
+   *   为什么同一个动作需要两张脸 —— 上一版就是这么分叉的。
+   */
+  variant?: "bar" | "icon";
+};
+
+const { collection, id, filePath, variant = "bar" } = Astro.props;
+const compact = variant === "icon";
+const t = useTranslations(Astro.currentLocale);
+
+const canonicalUrl = new URL(
+  entryUrl(collection, id, filePath, Astro.currentLocale),
+  config.site.url
+).href;
+
+/**
+ * 按钮形状。**两档都和 `DownloadLinks` 对应那一档逐个类名对齐** ——
+ * 它们在同一行里并排（文末那排四个按钮、标题底下那行四个图标），
+ * 差一档圆角、少一层底色都看得出来。
+ *
+ * 【2026-09-21】`bar` 档原来是 `rounded-app` ＋ 没有 `bg-surface` ＋ 多一条
+ * `hover:text-accent`，和旁边三个下载按钮**不是一副长相**。分享那一排删掉之后
+ * 它俩并排站在同一行里，这点差别就藏不住了。
+ */
+const shell = [
+  "border-border bg-surface text-foreground inline-flex items-center",
+  "rounded-md border font-medium no-underline",
+  "hover:border-border-strong transition-colors",
+];
+const buttonClass = compact
+  ? [...shell, "gap-1 p-1.5 text-xs"]
+  : [...shell, "gap-1.5 px-3 py-1.5 text-sm"];
+
+/**
+ * ★ `icon` 档里标签平时是 `sr-only`，但**一离开「还没点」那一档就得露出来**。
+ *
+ * 三档里有一档是失败（`navigator.clipboard` 在 http 局域网预览下根本不存在），
+ * 而"点了没反应"正是这个按钮最不能有的样子。文字永远藏着的话，成功和失败
+ * 在一个小图标上长得一模一样 —— 等于把三档压成一档。
+ * 判据挂在 `data-compact` 上，下面那段脚本两档共用一份（同 DownloadLinks）。
+ */
+const labelClass = compact ? "sr-only" : undefined;
+---
+
+{
+  /* 【2026-09-20】不再自己占一行：四个详情页把它和 ShareLinks 包在同一个横排里
+     （原来是「分享这篇：」「一排图标」「复制按钮」竖着三段）。所以这里
+     **不带 `mt-*`**，上下间距由那个包裹给。
+     ⚠ `flex-wrap` + 失败档那块 `w-full` 是一对：地址栏露出来时要独占一行，
+     挤在按钮右边的话那一行会被撑成一条细缝。 */
+}
+{
+  /* ⚠ `icon` 档的根是 `display: contents`（Tailwind 的 `contents`），理由和
+     `DownloadLinks.astro` 那一段逐字相同：它挂在标题底下那行 `flex flex-wrap` 里，
+     根要是个普通盒子，按钮**和失败档那整块地址说明**会被一起塞进同一个 flex 项 ——
+     说明块一露出来就把那一行撑成一条细缝。`contents` 让按钮跟着字数走、
+     说明块 `basis-full` 自己占一行。
+     ⚠ 两个 data- 钩子照旧有效：`data-pagefind-ignore` 是 Pagefind 解析 HTML 时看的，
+       和 CSS 无关；`data-print-hide` 那条 `display:none!important` 压得过 `contents`。 */
+}
+<div
+  data-pagefind-ignore
+  data-print-hide
+  class:list={compact ? "contents" : "flex flex-wrap items-center gap-2"}
+>
+  <button
+    type="button"
+    data-copy-link
+    data-url={canonicalUrl}
+    data-label-idle={t.share.copyLink}
+    data-label-copied={t.share.copied}
+    data-label-failed={t.share.failed}
+    data-compact={compact ? "1" : undefined}
+    title={compact ? t.share.copyLink : undefined}
+    hidden
+    class:list={buttonClass}
+  >
+    <IconShare class="size-4 shrink-0" aria-hidden="true" />
+    <span data-copy-link-label class:list={labelClass}>{t.share.copyLink}</span>
+  </button>
+
+  {
+    /* 屏幕阅读器那一路。按钮上的字换了**不保证**会被念出来，所以结果单独播报一次。
+       这个元素必须在构建期就存在于 DOM 里 —— 事后插进来的 live region 不播报。 */
+  }
+  <span data-copy-link-status role="status" aria-live="polite" class="sr-only"
+  ></span>
+
+  {
+    /* 失败档。默认藏着，只有 writeText() 真的没成才露出来，而且**不自动消失** ——
+       这一块是读者此刻唯一能拿到地址的地方。 */
+  }
+  {
+    /* ⚠ `icon` 档里**不许加 `max-w-prose`**。
+       这一块靠 `basis-full` 占满一行，而 `flex-basis: 100%` 会被 `max-width`
+       先夹小 —— 用出来的宽度变成 65ch，于是它**挤在那四个图标右边**，
+       把标题底下那行撑成一条塞了段说明和一个输入框的怪东西（实测过）。
+       `bar` 档没有这个问题：那里的根是自己的 flex 容器，只有它和按钮两个孩子。 */
+  }
+  <div
+    data-copy-link-fallback
+    hidden
+    class:list={[
+      "app-note mt-1 w-full basis-full text-left",
+      !compact && "max-w-prose",
+    ]}
+  >
+    <p class="mb-2">{t.share.failedHint}</p>
+    <input
+      type="text"
+      readonly
+      value={canonicalUrl}
+      aria-label={t.share.fieldLabel}
+      data-copy-link-field
+      class="border-border bg-muted text-foreground rounded-app w-full border px-2 py-1 font-mono text-xs"
+    />
+  </div>
+</div>
+
+<script>
+  /**
+   * ★ 必须挂 `astro:page-load`，不能只在模块顶层跑一次。
+   *   ClientRouter 按 src/textContent 给 script 去重，站内跳到第二篇文章时
+   *   这段**不会再执行**，而 DOM 已经换了一批 —— 按钮就会一直保持 `hidden`，
+   *   整个功能在站内导航之后凭空消失，且只有人肉点进第二篇才看得见。
+   *   （`DownloadLinks.astro` 的打印按钮、`Main.astro` 的 backUrl 同一条理由。）
+   */
+
+  /** 「已复制」退回「复制链接」的定时器，一个按钮一个。
+   *  连点两下时要把上一个取消掉，否则第一个到点了会把刚刚那次的提示抹掉。 */
+  const timers = new WeakMap<HTMLElement, number>();
+
+  function setStatus(
+    btn: HTMLButtonElement,
+    state: "idle" | "copied" | "failed"
+  ) {
+    const root = btn.parentElement;
+    const label = btn.querySelector<HTMLElement>("[data-copy-link-label]");
+    const live = root?.querySelector<HTMLElement>("[data-copy-link-status]");
+    const fallback = root?.querySelector<HTMLElement>(
+      "[data-copy-link-fallback]"
+    );
+    const text = {
+      idle: btn.dataset.labelIdle,
+      copied: btn.dataset.labelCopied,
+      failed: btn.dataset.labelFailed,
+    }[state];
+
+    if (label && text) label.textContent = text;
+    // ★ icon 档：平时只有图标（标签 sr-only），但**一离开 idle 就把字露出来**。
+    //   三档里有一档是失败，而"点了没反应"正是这个按钮最不能有的样子 ——
+    //   文字永远藏着的话，成功和失败在一个小图标上长得一模一样。
+    //   （bar 档的标签从来不是 sr-only，这一句对它是空操作。同 DownloadLinks。）
+    if (label && btn.dataset.compact === "1") {
+      label.classList.toggle("sr-only", state === "idle");
+    }
+    // 成功才加强调色；失败不靠颜色说话（这个站是中性黑白，没有危险色），
+    // 靠下面那块地址栏整个出现 —— 比换个颜色显眼得多。
+    btn.classList.toggle("text-accent", state === "copied");
+    btn.classList.toggle("border-accent", state === "copied");
+    // idle 时清空 live region：不清的话下次失败仍是同一句文本，
+    // 内容没变，屏幕阅读器就**不播报**了。
+    if (live) live.textContent = state === "idle" ? "" : (text ?? "");
+    if (fallback) fallback.hidden = state !== "failed";
+  }
+
+  function bindCopyLink() {
+    document
+      .querySelectorAll<HTMLButtonElement>("[data-copy-link]")
+      .forEach(btn => {
+        // 放出按钮。这一句在去重判断**外面**：ClientRouter 换过来的是新元素，
+        // 而 transition:persist 的场景下又可能是旧元素 —— 两种都得显示出来。
+        btn.hidden = false;
+        if (btn.dataset.copyBound === "1") return;
+        btn.dataset.copyBound = "1";
+
+        btn.addEventListener("click", async () => {
+          const url = btn.dataset.url ?? "";
+          const prev = timers.get(btn);
+          if (prev) window.clearTimeout(prev);
+
+          try {
+            // ★ 非安全上下文（http 的局域网预览）里 `navigator.clipboard`
+            //   整个是 undefined，不判就是一句 TypeError 撞进 catch ——
+            //   结果一样，但显式写出来是为了让下一个人知道这条路是真的存在的。
+            if (!navigator.clipboard?.writeText) {
+              throw new Error("clipboard API unavailable");
+            }
+            await navigator.clipboard.writeText(url);
+            setStatus(btn, "copied");
+            timers.set(
+              btn,
+              window.setTimeout(() => setStatus(btn, "idle"), 2000)
+            );
+          } catch {
+            // 失败档是**粘住的**：不设定时器。读者要靠下面那个输入框把地址拿走。
+            setStatus(btn, "failed");
+            const field = btn.parentElement?.querySelector<HTMLInputElement>(
+              "[data-copy-link-field]"
+            );
+            field?.focus();
+            field?.select();
+          }
+        });
+      });
+  }
+
+  bindCopyLink();
+  document.addEventListener("astro:page-load", bindCopyLink);
+</script>

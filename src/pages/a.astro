@@ -1,0 +1,42 @@
+---
+import { getEntry, render } from "astro:content";
+import Layout from "@/layouts/Layout.astro";
+import Header from "@/components/Header.astro";
+import Breadcrumb from "@/components/Breadcrumb.astro";
+import Main from "@/components/Main.astro";
+import Footer from "@/components/Footer.astro";
+import config from "@/config";
+
+const about = await getEntry("pages", "about");
+
+if (!about) {
+  throw new Error(
+    "Missing content entry: `about.md` or `about.mdx` in `src/content/pages/`"
+  );
+}
+
+const { Content } = await render(about);
+---
+
+<Layout
+  title={`${about.data.title} | ${config.site.title}`}
+  description={about.data.description}
+  ogImage={about.data.ogImage}
+  canonicalURL={about.data.canonicalURL}
+>
+  <Header />
+
+  <Breadcrumb />
+
+  {
+    /* searchable：给这一页挂 data-pagefind-body。它同时干两件事 ——
+       ① 「关于」页终于能被站内搜索搜到（以前搜不到）；
+       ② 全站**永远至少有一页**带这个标记，Pagefind 不会翻转成
+          「索引每一页的整个 body」。理由见 Main.astro 里 searchable 那段。 */
+  }
+  <Main pageTitle={about.data.title} class="app-prose" searchable>
+    <Content />
+  </Main>
+
+  <Footer />
+</Layout>

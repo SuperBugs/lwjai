@@ -1,0 +1,319 @@
+---
+import { getRelativeLocaleUrl } from "astro:i18n";
+import IconLogo from "@/assets/icons/IconLogo.svg";
+import IconUnderline from "@/assets/icons/IconUnderline.svg";
+import IconMenuDeep from "@/assets/icons/IconMenuDeep.svg";
+import IconArchive from "@/assets/icons/IconArchive.svg";
+import IconSunHigh from "@/assets/icons/IconSunHigh.svg";
+import IconMoon from "@/assets/icons/IconMoon.svg";
+import IconX from "@/assets/icons/IconX.svg";
+import LinkButton from "./LinkButton.astro";
+import { stripBase, stripLocale } from "@/utils/withBase";
+import { collectionPath, collectionUrl } from "@/utils/getPostPaths";
+import { ROUTES, routePath } from "@/config/routes";
+import { useTranslations } from "@/i18n";
+import config from "@/config";
+
+const { site, features } = config;
+
+const locale = Astro.currentLocale ?? config.site.lang;
+const t = useTranslations(locale);
+
+// Strip the base prefix so isActive comparisons work regardless of deploy subdirectory.
+// e.g. with base "/blog": "/blog/r/1002" → "/r/1002"
+const relativePath = stripBase(Astro.url.pathname);
+const pathWithoutTrailingSlash =
+  relativePath.endsWith("/") && relativePath !== "/"
+    ? relativePath.slice(0, -1)
+    : relativePath;
+
+const currentPath = stripLocale(pathWithoutTrailingSlash, locale);
+
+// isActive 比的是路径**首段**，所以 /qa/2 和 /qa/some-slug 都会正确高亮 qa。
+const isActive = (path: string) => {
+  const currentPathArray = currentPath.split("/").filter(p => p.trim());
+  const pathArray = path.split("/").filter(p => p.trim());
+  return currentPath === path || currentPathArray[0] === pathArray[0];
+};
+
+// 导航顺序是「首页 → 内容 → 组织方式」：首页 · 研究 · 问答 · 教程 · 提示词 · 标的 · 关于。
+// 前四条是站上真正写出来的东西，标的只是它们的一种索引方式 ——
+// 新集合插在内容那一段的末尾，不要插到索引那一段后面去，否则这条线就断了。
+// （【2026-09-20】这里曾有一格「智能体」索引，连同 /ai 三条路由一起拆掉了：
+//   谁答的、用的什么模型现在只是每条内容上的两张芯片，不再是一种组织方式。）
+---
+
+<a
+  id="skip-to-content"
+  href="#main-content"
+  class="bg-background text-accent absolute inset-s-16 -top-full z-50 px-3 py-2 backdrop-blur-lg transition-all focus:top-4"
+>
+  {t.a11y.skipToContent}
+</a>
+
+{
+  /* ── 页眉：sticky + 毛玻璃（2026-09-18 改）─────────────────────────────
+   *
+   * 原来页眉跟着页面滚走。一个有四个内容入口（研究 / 问答 / 教程 / 标的）的站，
+   * 读者在一篇长稿的中段想换一块看时，只能先滚回顶部 —— 内容型站点的顶部
+   * 导航常驻是通行做法（Apple、Stripe、Vercel、GitHub、Linear 无一例外）。
+   *
+   * 三件必须一起做的事，少一件就会出问题：
+   *   ① 半透明底 + backdrop-blur —— 不做的话正文从页眉底下滚过去是硬切一刀。
+   *      `supports-[backdrop-filter]` 兜底：不支持毛玻璃的浏览器拿到**不透明**
+   *      底色，而不是一层能看见正文的半透明纱。
+   *   ② `--header-h` / scroll-padding（global.css）—— 不做的话锚点跳转以后
+   *      标题正好被页眉盖住。
+   *   ③ 分隔线**通栏**，不再是内容宽。页眉是"框架"不是"内容"，通栏的那条线
+   *      正是把两者分开的东西；内容区的分节线仍然是内容宽的。
+   *
+   * ⚠ z-40 要低于「跳到正文」那个 skip link 的 z-50 —— 反过来的话
+   *   键盘用户 Tab 第一下聚焦到的东西被页眉盖住，而鼠标用户永远看不见。
+   */
+}
+<header
+  class:list={[
+    "sticky top-0 z-40 w-full",
+    "border-border bg-background/85 border-b",
+    "supports-[backdrop-filter]:bg-background/70 backdrop-blur-xl",
+  ]}
+>
+  <div
+    class="app-layout relative flex items-baseline justify-between py-4 sm:items-center sm:py-5"
+  >
+    {
+      /* 标记是一对中文直角引号「」，一大一小 —— 引号是汉语里「这个词别按字面读」
+         的专用符号，正是站名那个「牢」需要的那句注。
+         ⚠ 几何和 public/favicon.svg **逐个数字一致**（viewBox 128、四个矩形、
+           坐标全是 8 的倍数）。改了一处必须改另一处：页眉在 28px 上，favicon 在
+           16px 上，两边不一致在页面上是零症状的 —— 谁都不会同时盯着这两个地方看。
+         ⚠ 别把两个引号「调整齐」成等大等高，那是取景框 / 裁剪工具图标的铁律，
+           一调这个标记就换了个意思。 */
+    }
+    <a
+      href={getRelativeLocaleUrl(locale, "")}
+      class="absolute flex items-center gap-2.5 py-1 text-xl leading-8 font-semibold tracking-tight whitespace-nowrap sm:static sm:my-auto sm:gap-3 sm:text-2xl sm:leading-none"
+    >
+      {
+        /* -ms-1 是**光学对齐**，不是随手加的负边距：标记自带 12.5% 的内边距
+          （viewBox 128 里图形从 16 开始，32px 尺寸下正好 4px）。不拉回来的话
+          页眉的墨迹比正文和导航整整右移 4px，站在这种"全靠排版撑层级"的版面上看得出来。 */
+      }
+      <IconLogo aria-hidden="true" class="-ms-1 size-7 shrink-0 sm:size-8" />
+      {site.title}
+    </a>
+    <nav
+      id="nav-menu"
+      class="flex w-full flex-col items-center sm:ms-2 sm:flex-row sm:justify-end sm:space-x-4 sm:py-0"
+    >
+      <button
+        id="menu-btn"
+        class="focus-outline self-end p-2 sm:hidden"
+        aria-label={t.a11y.openMenu}
+        aria-expanded="false"
+        aria-controls="menu-items"
+        data-label-open={t.a11y.openMenu}
+        data-label-close={t.a11y.closeMenu}
+      >
+        <IconX id="close-icon" class="hidden" />
+        <IconMenuDeep id="menu-icon" />
+      </button>
+      {
+        /* ★ 手机上的菜单从"屏幕中间一列 176px 宽的居中文字"改成**通栏左对齐列表**
+           （2026-09-18）。上游那版在窄屏上是一小撮悬空的居中文字，既不像菜单，
+           点击区也只有那一小块；通栏 + 左对齐 + 每项一条分隔线是移动端下拉菜单的
+           通行形态，点击区顺带铺满整行。
+           ⚠ 只改 base（手机）那一档，`sm:` 开头的每一条都原样留着 ——
+             桌面上它仍然是一行横排的导航。
+           ⚠ `hidden` / `grid` 这两个类名是下面脚本切换的，别动。 */
+      }
+      <ul
+        id="menu-items"
+        class="[&>li>a]:hover:text-accent [&>li]:border-border mt-4 hidden w-full grid-cols-2 gap-0 sm:mt-0 sm:flex sm:w-auto sm:gap-x-5 sm:gap-y-0 [&>li]:border-b sm:[&>li]:h-8 sm:[&>li]:border-0 [&>li>a]:block [&>li>a]:px-1 [&>li>a]:py-3.5 [&>li>a]:text-start [&>li>a]:font-medium sm:[&>li>a]:px-2 sm:[&>li>a]:py-1 sm:[&>li>a]:text-center"
+      >
+        {
+          /* ★ 「首页」排在最前面（【2026-09-20】用户要的）。左上角那个站名
+             也链去首页，两者并存是通行做法：站名是标识，导航里这一格是**入口** ——
+             手机上菜单展开时站名那一行还在页眉里，但读者的手在这张列表上。
+             `isActive("/")` 只在真的在首页时为真：下面那个比较拿的是路径**首段**，
+             而首页没有首段（`"/".split("/")` 过滤完是空数组）。 */
+        }
+        <li class="col-span-2">
+          <a
+            href={getRelativeLocaleUrl(locale, "")}
+            class:list={{ "active-nav": isActive("/") }}
+          >
+            {t.nav.home}
+          </a>
+        </li>
+        <li class="col-span-2">
+          <a
+            href={collectionUrl("posts", locale)}
+            class:list={{ "active-nav": isActive(collectionPath("posts")) }}
+          >
+            {t.nav.posts}
+          </a>
+        </li>
+        <li class="col-span-2">
+          <a
+            href={collectionUrl("qa", locale)}
+            class:list={{ "active-nav": isActive(collectionPath("qa")) }}
+          >
+            {t.nav.qa}
+          </a>
+        </li>
+        <li class="col-span-2">
+          <a
+            href={collectionUrl("guides", locale)}
+            class:list={{ "active-nav": isActive(collectionPath("guides")) }}
+          >
+            {t.nav.guides}
+          </a>
+        </li>
+        <li class="col-span-2">
+          <a
+            href={collectionUrl("prompts", locale)}
+            class:list={{ "active-nav": isActive(collectionPath("prompts")) }}
+          >
+            {t.nav.prompts}
+          </a>
+        </li>
+        <li class="col-span-2">
+          <a
+            href={getRelativeLocaleUrl(locale, ROUTES.symbols)}
+            class:list={{ "active-nav": isActive(routePath("symbols")) }}
+          >
+            {t.nav.symbols}
+          </a>
+        </li>
+        {
+          /* ★ 「标签」不在导航里（2026-09-18）。
+            标签**机制本身留着**，而且是教程的分类方式（券商开户 / 出金入金 /
+            美国银行，见 src/content.config.ts）；`/t` 和 `/t/<标签>`
+            两条路由也都还在，文章上的标签片点得进去。
+            只是它不值得在顶部导航占一格 —— 读者是按"研究 / 问答 / 教程 / 标的"
+            找东西的，标签是到了文章里才用的横向入口。
+            另：中文标签会生成中文路径（docs/engineering-notes.md 坑 4），分享出去是一串 %E7%AB%99%E5%8A%A1，
+            少一个把人往那儿送的入口也好。 */
+        }
+        <li class="col-span-2">
+          <a
+            href={getRelativeLocaleUrl(locale, ROUTES.about)}
+            class:list={{ "active-nav": isActive(routePath("about")) }}
+          >
+            {t.nav.about}
+          </a>
+        </li>
+        {
+          features.showArchives && (
+            <li class="col-span-2">
+              <LinkButton
+                href={getRelativeLocaleUrl(locale, ROUTES.archives)}
+                class:list={[
+                  "focus-outline flex size-full justify-center p-3 sm:relative sm:size-8 sm:p-0",
+                  { "active-nav": isActive(routePath("archives")) },
+                ]}
+                title={t.nav.archives}
+                aria-label={t.nav.archives}
+              >
+                <IconArchive class="hidden sm:absolute sm:top-1/2 sm:left-1/2 sm:block sm:size-6 sm:-translate-x-1/2 sm:-translate-y-1/2" />
+                <span class="sm:sr-only">{t.nav.archives}</span>
+                {isActive(routePath("archives")) && (
+                  <IconUnderline
+                    aria-hidden="true"
+                    class="scale-125 max-sm:hidden sm:absolute sm:bottom-0 sm:w-6"
+                  />
+                )}
+              </LinkButton>
+            </li>
+          )
+        }
+        {
+          /* ★ 搜索图标不在导航里（2026-09-18）。
+            检索入口改成**每个集合列表页顶部一个只搜本集合的框**
+            （src/components/CollectionSearch.astro），那才是人真正会搜的位置：
+            在「问答」里翻的时候想搜的是问答，不是全站。
+            `/search` 那个跨集合的全站搜索**页面还在**，由每个框右边的
+            「搜全站」链接过去 —— 只是不再占导航一格。 */
+        }
+        {
+          features.lightAndDarkMode && (
+            <li class="col-span-2 flex items-center justify-start border-b-0! sm:col-span-1 sm:justify-center">
+              <button
+                id="theme-btn"
+                class="focus-outline hover:[&>svg]:stroke-accent relative size-12 p-4 sm:size-8"
+                title={t.a11y.toggleTheme}
+                aria-label="auto"
+                aria-live="polite"
+              >
+                <IconMoon class="absolute top-[50%] left-[50%] translate-[-50%] scale-100 rotate-0 transition-all dark:scale-0 dark:-rotate-90" />
+                <IconSunHigh class="absolute top-[50%] left-[50%] translate-[-50%] scale-0 rotate-90 transition-all dark:scale-100 dark:rotate-0" />
+              </button>
+            </li>
+          )
+        }
+      </ul>
+    </nav>
+  </div>
+</header>
+
+<script>
+  function toggleNav() {
+    const menuBtn = document.querySelector<HTMLButtonElement>("#menu-btn");
+    const menuItems = document.querySelector("#menu-items");
+    const menuIcon = document.querySelector("#menu-icon");
+    const closeIcon = document.querySelector("#close-icon");
+
+    if (!menuBtn || !menuItems || !menuIcon || !closeIcon) return;
+
+    const openLabel = menuBtn.dataset.labelOpen ?? "Open menu";
+    const closeLabel = menuBtn.dataset.labelClose ?? "Close menu";
+
+    menuBtn.addEventListener("click", () => {
+      const openMenu = menuBtn.getAttribute("aria-expanded") === "true";
+
+      menuBtn.setAttribute("aria-expanded", openMenu ? "false" : "true");
+      menuBtn.setAttribute("aria-label", openMenu ? openLabel : closeLabel);
+
+      menuItems.classList.toggle("hidden");
+      menuItems.classList.toggle("grid");
+      menuIcon.classList.toggle("hidden");
+      closeIcon.classList.toggle("hidden");
+    });
+  }
+
+  function handleSkipToContent() {
+    const skipLink = document.getElementById("skip-to-content");
+    if (!skipLink) return;
+    skipLink.addEventListener("click", e => {
+      if (
+        e.defaultPrevented ||
+        e.metaKey ||
+        e.ctrlKey ||
+        e.shiftKey ||
+        e.button !== 0
+      )
+        return;
+      e.preventDefault();
+      const target = document.getElementById("main-content");
+      if (target) {
+        target.setAttribute("tabindex", "-1");
+        target.addEventListener(
+          "blur",
+          () => target.removeAttribute("tabindex"),
+          {
+            once: true,
+          }
+        );
+        target.focus();
+        target.scrollIntoView({ behavior: "smooth" });
+      }
+    });
+  }
+
+  toggleNav();
+  document.addEventListener("astro:after-swap", toggleNav);
+
+  handleSkipToContent();
+  document.addEventListener("astro:after-swap", handleSkipToContent);
+</script>

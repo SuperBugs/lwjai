@@ -1,0 +1,156 @@
+---
+import { findAgent } from "@/config/agents";
+import {
+  agentIconSlot,
+  AGENT_ICON_VIEWBOX,
+  HUMAN_ICON_PATHS,
+  logoMaskStyle,
+} from "@/config/agentIcons";
+import { agentLogoUrl } from "@/utils/agentLogoUrls";
+
+/**
+ * 智能体那个 16px 的 logo —— 「这一条是谁答的」的**图形那一半**。
+ *
+ * 【2026-09-22 用户要的】在这之前，列表里一屏五六条内容，每一条的出处都是一串
+ * 长度相近的拉丁字（`OpenAI ChatGPT` / `OpenAI Codex` / `Anthropic Claude`），
+ * 要分出哪条是谁答的只能逐字读。有了记号之后那一维是**扫**出来的，不是读出来的。
+ * 【2026-09-23 用户要的】记号从自己画的单色几何符号换成了**各家的品牌标**
+ * （文件和来源见 `src/config/agentIcons.ts` 文件头）。
+ *
+ * ## 判据一个字都不在这里
+ *
+ * 四档全在 `agentIconSlot()`：挑了 logo（完成态）/ 「我自己」画人形（完成态）/
+ * 还没挑（待补，虚线圆 + 名字首字）/ 没标或查不到（待补，虚线圆 + `?`）。
+ * 这个文件只做两件事：把那四档翻译成画法，和决定多大。
+ * ★ 别在这儿写 `agent === "human" ? …` 那种字面量比对（docs/engineering-notes.md 第二节点名的就是它）。
+ *
+ * ## 品牌标的两种画法（由表里那一行的 `tone` 决定，理由全在 agentIcons.ts 文件头）
+ *
+ *   - `color` → `<img>`：logo 自带颜色。
+ *   - `mono`  → 一个 `bg-current` 的方块，logo 当 **CSS mask** 用：只取形状，
+ *     颜色跟着周围的字走 —— 芯片里是正文色，详情页切换排当前那一格（反色）里自然是白的。
+ *     ⚠ 单色 logo **不许**也走 `<img>`：那几个文件写的是 `fill="currentColor"`，
+ *     `<img>` 里没有"周围的字"，落回黑色 —— **深色模式下隐身，浅色下一切正常**。
+ * ★ 两种都**不内联 SVG 源码**：渐变 id 会在同一页里重复（第一份落进隐藏元素时
+ *   后面全部掉色），而且那是从网上拿来的文件。`<img>` 和 mask 里的 SVG 不执行脚本。
+ *
+ * ## 为什么没有底色、没有边框
+ *
+ * 它多数时候画在 `app-chip` 里面，而芯片本身就是一格 `bg-muted/60` ——
+ * 再套一层小方块只会让一行里多一圈框。彩色品牌标本身就够显眼了。
+ *
+ * ## 无障碍
+ *
+ * `alt=""` / `aria-hidden` —— 三个调用点（芯片、折叠卡每一行、详情页切换排）
+ * **旁边永远印着智能体的名字**，读屏念一遍名字就够了；再给 logo 配一句
+ * 「Google Spark 的图标」是同一件事念两遍。
+ * ⚠ 哪天真把它用在一个**没有相邻文字**的地方，这一条就不成立了 ——
+ *   那时要给它真的 alt 文字，而不是让读屏用户少一条信息。
+ *
+ * ⚠ 调用方传 `class` 时用 `inline-block`，不要用 `inline`：单色那一档是个 `<span>`，
+ *   `display: inline` 的 span **宽高不生效** —— 那一格会缩成零宽，logo 凭空消失，
+ *   而彩色那几个（`<img>`）照常显示。只在挑了单色 logo 的那几条上坏，零报错。
+ */
+type Props = {
+  /** 智能体 id（条目 frontmatter 里那一格）。空 / 查不到都落「不知道这是谁」那一档。 */
+  agent?: string;
+  /** 16px（默认，行内跟着文字走）/ 20px（详情页标题底下那一排）。 */
+  size?: "sm" | "lg";
+  class?: string;
+};
+
+const { agent, size = "sm", class: className = "" } = Astro.props;
+
+// ★ 收的是登记表里那一条（连 kind / name / icon 一起），不是 id —— 见 agentIconSlot。
+const slot = agentIconSlot(findAgent(agent));
+const px = size === "lg" ? 20 : 16;
+const box = size === "lg" ? "size-5" : "size-4";
+
+/** 品牌标那一档才有地址。找不到文件时 agentLogoUrl 直接抛（构建期红，不画一个空图）。 */
+const logo =
+  slot.tier === "picked"
+    ? { url: agentLogoUrl(slot.icon), tone: slot.icon.tone }
+    : undefined;
+/** 待补那两档圈里的字（首字 / `?`）。另外两档没有这一样。 */
+const letter =
+  slot.tier === "pending" || slot.tier === "unknown" ? slot.letter : undefined;
+
+/**
+ * 单色那一档的 mask。★ **不许在这儿手拼 `url('…')`** —— 走 `logoMaskStyle()`：
+ * 地址里带一个单引号（Vite 内联出来的 data URI 就带）整条 mask 就作废，
+ * 那一格画成一块纯色方块。2026-09-23 实测踩到过，理由写在那个函数上。
+ */
+const maskStyle = logo ? logoMaskStyle(logo.url) : undefined;
+---
+
+{
+  logo?.tone === "color" ? (
+    <img
+      src={logo.url}
+      alt=""
+      aria-hidden="true"
+      width={px}
+      height={px}
+      decoding="async"
+      draggable="false"
+      class:list={[box, "shrink-0", className]}
+    />
+  ) : logo ? (
+    <span
+      aria-hidden="true"
+      class:list={[box, "inline-block shrink-0 bg-current", className]}
+      style={maskStyle}
+    />
+  ) : (
+    <svg
+      aria-hidden="true"
+      focusable="false"
+      viewBox={AGENT_ICON_VIEWBOX}
+      class:list={[box, "shrink-0", className]}
+      fill="none"
+      stroke="currentColor"
+      stroke-width="2"
+      stroke-linecap="round"
+      stroke-linejoin="round"
+    >
+      {
+        /* 「我自己」：人形，自己画的描边，跟 currentColor 走。
+           ★ 它刻意不是彩色的 —— 彩色是品牌标的语言，"人写的"不属于任何一个品牌。 */
+        slot.tier === "human" ? (
+          HUMAN_ICON_PATHS.map(d => <path d={d} />)
+        ) : (
+          /* 待补那两档：一圈虚线 + 圈里一个字。
+             ★ 虚线是全站统一的「这一格还空着」（同 `app-chip-empty` 的 border-dashed），
+               圈里那个字负责说**空的是哪一格**：名字首字 = 知道是谁、还没挑 logo；
+               `?` = 根本不知道这是谁。两档在这里只差那一个字符，而那正是它们的全部区别 ——
+               别把其中一档改成实线或者换个形状去"更明显一点"，那会让它看起来像第三种东西。
+             ⚠ `stroke-width` 这里压到 1.5：虚线在 2px 下会糊成一圈点，而圈里还要放一个字。
+             ⚠ 字用 `<text>` 而不是描边路径：首字是**数据**（登记表里的显示名），
+               不是一个画得出来的固定形状。`dominant-baseline="central"` 让它在圈里居中 ——
+               靠 `y` 微调的话，拉丁字母和汉字的基线不一样，两种名字会一高一低。 */
+          <>
+            <circle
+              cx="12"
+              cy="12"
+              r="9"
+              stroke-width="1.5"
+              stroke-dasharray="3 3"
+            />
+            <text
+              x="12"
+              y="12"
+              text-anchor="middle"
+              dominant-baseline="central"
+              stroke="none"
+              fill="currentColor"
+              font-size="11"
+              font-family="inherit"
+            >
+              {letter}
+            </text>
+          </>
+        )
+      }
+    </svg>
+  )
+}

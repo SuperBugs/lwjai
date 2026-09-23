@@ -1,0 +1,447 @@
+---
+import IconMenuDeep from "@/assets/icons/IconMenuDeep.svg";
+import IconChevronLeft from "@/assets/icons/IconChevronLeft.svg";
+import TocRailState from "@/components/TocRailState.astro";
+import { TOC_MIN_COUNT, tocItems, type TocHeading } from "@/utils/tocItems";
+import { tplStr, useTranslations } from "@/i18n";
+
+/**
+ * 目录 —— 从 `render()` 返回的 `headings` 生成，只取 h2 / h3。
+ *
+ * ## 为什么需要它
+ *
+ * 研究提示词的产出是 6 到 11 节的长文（实测 ORCL 那篇 17 节）。`remark-toc`
+ * 虽然配着，但它只在正文里有一个叫「Table of contents」的标题时才生效 ——
+ * 中文稿不会有，所以那条路等于没有。这里不装新插件：Astro 的 `render()`
+ * 自带 headings（slug 和页面上的 id 同源，都是 rehypeHeadingIds 生成的），直接画。
+ *
+ * ## 两种画法，**同一份数据、同一个判据**
+ *
+ *   - `"inline"`（默认）：正文上面一个 `<details open>`，可以收起。
+ *     窄屏、教程页、提示词页用这个。
+ *   - `"rail"`：【2026-09-20 用户要的】xl（≥1280px）以上钉在正文左边的一条侧栏，
+ *     跟着滚、当前这一节高亮。研究稿和问答两页用它。
+ *
+ * ★ 做成一个 prop 而不是复制一个组件出来 —— 和 `DownloadLinks.astro` 同一条理由：
+ *   复制出去的那天起，"少于三节不画"这条判据就有了两份副本。
+ *   （判据本身还要再往外走一层，见 `src/utils/tocItems.ts` 顶部那段。）
+ *
+ * ## ⚠ 两个档一起挂的时候，窄屏那份必须自己带 `xl:hidden`
+ *
+ * 研究稿 / 问答页上**两份都在 DOM 里**（一份折叠块、一份侧栏），靠断点各显各的。
+ * 折叠块那份漏了 `xl:hidden` 的症状是：大屏上目录出现两遍，一个在正文上面、
+ * 一个在左边 —— 页面不报错、构建全绿。`scripts/gate/toc.test.ts` 钉着这一条。
+ *
+ * ## 【2026-09-21 用户要的】两个档都能收起来
+ *
+ * 窄屏那份本来就是 `<details open>`，点标题就收。侧栏那份在这之前**收不起来** ——
+ * 而它恰恰是占地方的那一份：xl 以上它替正文吃掉左边 13rem。
+ *
+ * 侧栏这一档的三件事，少一件就是半个功能：
+ *
+ *   ① **收起之后那一列要跟着收**。只把目录藏了、网格还是 `13rem`，读者点完
+ *      看到的是正文原地不动、左边空着一条白带 —— 和"这个按钮没反应"没区别。
+ *      判据是下面那段 `<style is:global>` 里的 `:has(> [data-toc-rail])`，
+ *      **页面一个字都不用改**（四个详情页的网格类原样留着）。
+ *   ② **收起之后必须还看得见入口**。收起态是一个带边框的图标钮（≡），不是什么
+ *      都不剩 —— 一个消失了的入口没有任何人会发现，和 docs/engineering-notes.md 第二节
+ *      「投稿入口不许一个字都不提」是同一条。
+ *   ③ **记住读者的选择**，而且**首屏那一帧就得是对的**。状态贴在 `<html>` 上，
+ *      由 `<nav>` **前面**那句 `<TocRailState />` 同步贴（那时目录还没进 DOM），
+ *      和 Layout.astro 里主题那段 FOUC 脚本同一个形态。晚一步的症状不是闪一下
+ *      颜色，是**整篇正文横着跳一下**。存在哪儿、叫什么、默认是哪一档，
+ *      **只有 `TocRailState.astro` 一处知道**，下面那段模块脚本只调
+ *      `window.__tocRail`。
+ *
+ * ⚠ 存的是**三档不是两档**（没存过 / `expanded` / `collapsed`），
+ *   为什么写在 `TocRailState.astro` 里 —— 动那一份之前读它。
+ *
+ * ## 三个硬性属性
+ *   data-pagefind-ignore —— 目录文字是标题的复制，进索引会把每个标题数两遍。
+ *   data-print-hide      —— 纸上点不动，而且 <details> 收起时内容在打印里整个消失。
+ *   data-toc-rail        —— 下面那段脚本认的钩子。**不是样式类**：class 会因为
+ *                           改版式被顺手换掉，而那会让高亮无声失效。
+ */
+type Props = {
+  headings: TocHeading[];
+  /** 少于这个数不渲染。默认值在 `tocItems.ts` 里，这里只是转交。 */
+  minCount?: number;
+  /** 见上面那段。 */
+  variant?: "inline" | "rail";
+  class?: string;
+};
+
+const {
+  headings,
+  minCount = TOC_MIN_COUNT,
+  variant = "inline",
+  class: className = "",
+} = Astro.props;
+const t = useTranslations(Astro.currentLocale);
+
+const items = tocItems(headings, minCount);
+const isRail = variant === "rail";
+
+/** 一条目录项。两个档共用，免得缩进规则（h3 往里收一格）写两遍。 */
+const itemClass = (depth: number) => (depth === 3 ? "ms-4" : "");
+---
+
+{
+  items.length > 0 &&
+    (isRail ? (
+      /**
+       * 侧栏档。
+       *
+       * ★ `sticky` 能不能动，取决于它**不被拉满整行高**：网格默认
+       *   `align-items: stretch`，拉满之后这个元素自己就没有可移动的余量，
+       *   于是它一动不动地跟着正文一起滚走 —— 看起来就是"sticky 没生效"。
+       *   `self-start` 是这一档的功能性属性，不是排版微调。
+       *
+       * ★ 高度封顶 + 自己能滚：17 节的目录比一屏还高，不封顶的话底下几节
+       *   永远够不着（sticky 元素超出视口的那一截是滚不到的）。
+       *
+       * ★ `top` 跟着 `--header-h` 走，和 global.css 里那条 scroll-padding 同源 ——
+       *   页眉是 sticky 的，不让出这个高度的话第一条会被压在页眉底下。
+       */
+      <Fragment>
+        {/**
+         * 折叠状态在**首屏那一帧**就得是对的，所以贴属性那段是同步执行的
+         * `is:inline`，而且摆在 `<nav>` **前面** —— 那一刻目录还没进 DOM，
+         * 贴完属性再解析它，屏幕上不会先画一份展开的再收回去。
+         *
+         * ⚠ 它单独是一个文件（`TocRailState.astro`）**不是为了整洁**：
+         *   prettier 的 Astro 解析器把**表达式里**的 `<script>` 内容当 JSX 子节点，
+         *   脚本里第一个 `{` 就让 `prettier --check .` 报语法错（实测）——
+         *   而 Astro 自己编译得出来、页面也是好的。理由和三档状态写在那一份里。
+         */}
+        <TocRailState />
+        <nav
+          data-toc-rail
+          data-pagefind-ignore
+          data-print-hide
+          aria-label={t.toc.title}
+          class:list={[
+            "hidden xl:block",
+            "xl:sticky xl:self-start",
+            // ⚠ 方括号里的 calc **不许出现裸空格**，而 CSS 的 `+` / `-` 两侧
+            //   **必须有空格**，两条同时成立的写法只有下划线（Tailwind 会还原成空格）。
+            //   写成 `calc(var(--header-h)+1.5rem)` 的后果：整条 utility 生成不出来，
+            //   侧栏退回 `top: auto` —— 它照样钉住，只是钉在页眉底下半截，
+            //   而构建、类型、测试四处全绿。
+            "xl:top-[calc(var(--header-h)_+_1.5rem)]",
+            "xl:max-h-[calc(100vh_-_var(--header-h)_-_4rem)] xl:overflow-y-auto",
+            "text-sm",
+            className,
+          ]}
+        >
+          {/* 折叠开关。**它同时是这一档的标题行** —— 另起一个小图标摆在标题旁边的话，
+               屏幕上会有两个看起来都能点的东西，而只有一个是。
+
+               ★ 下面这三处初始值（`aria-expanded` / `aria-label` / `title`）
+                 写的是**展开**那一档，和「没存过 = 展开」对齐：没有 JS 的读者
+                 看到的就是这一档，而且它是真的（目录确实展开着）。
+                 脚本接管之后 `reflect()` 是**无条件**重贴一遍的，不是"和上次不同才改" ——
+                 BackToTopButton 顶上那段记着后者的下场：初值和脚本的起始值一致时
+                 函数直接 return，DOM 一次都没被改过，按钮上写的和它干的事对不上。
+
+               ★ `data-label-*` 两条：这段文案要给下面那个**打包脚本**用，而它
+                 拿不到 i18n（客户端脚本里没有 `Astro.currentLocale`）——
+                 和 BackToTopButton / ArticleEnhancements 同一条路，不在脚本里写死中文。 */}
+          <button
+            type="button"
+            data-toc-toggle
+            aria-controls="toc-rail-list"
+            aria-expanded="true"
+            aria-label={t.toc.collapse}
+            title={t.toc.collapse}
+            data-label-collapse={t.toc.collapse}
+            data-label-expand={t.toc.expand}
+            class:list={[
+              "text-foreground -ms-1.5 mb-3 flex items-center gap-2 font-semibold",
+              // 边框平时是透明的，收起来才显形（见下面那段 style）——
+              // 换成"收起时才加 border"会让按钮在那一刻多出 2px，图标跳一下。
+              "rounded-app border border-transparent px-1.5 py-1",
+              "hover:bg-muted/60 transition-colors",
+            ]}
+          >
+            <IconMenuDeep class="size-4 shrink-0" aria-hidden="true" />
+            <span data-toc-head class="me-auto text-start">
+              {t.toc.title}
+              <span class="text-muted-foreground ms-2 font-normal">
+                {tplStr(t.toc.count, { count: items.length })}
+              </span>
+            </span>
+            <IconChevronLeft
+              data-toc-chevron
+              class="text-muted-foreground size-4 shrink-0"
+              aria-hidden="true"
+            />
+          </button>
+          {/* ★ 高亮**不靠颜色**：加粗 + 左边那条实线。
+               docs/engineering-notes.md 第二节定的「色相不承担信息」在这里的落点 ——
+               这个站是中性黑白，拿一个主色去标"当前这一节"，深色模式下还得再调一次。
+               每一条平时都挂着一条 `border-transparent`，选中时换成实色：
+               不这么写的话选中的那一条会**多出 2px 宽度**，整列字左右抖一下。 */}
+          <ol
+            id="toc-rail-list"
+            data-toc-list
+            class="border-border space-y-2 border-s leading-relaxed"
+          >
+            {items.map(h => (
+              <li class={itemClass(h.depth)}>
+                <a
+                  href={`#${h.slug}`}
+                  data-toc-link
+                  class="text-muted-foreground hover:text-foreground aria-[current]:text-foreground -ms-px block border-s-2 border-transparent py-0.5 ps-3 no-underline transition-colors aria-[current]:border-current aria-[current]:font-semibold"
+                >
+                  {h.text}
+                </a>
+              </li>
+            ))}
+          </ol>
+        </nav>
+      </Fragment>
+    ) : (
+      <details
+        open
+        data-pagefind-ignore
+        data-print-hide
+        class:list={["app-note", className]}
+      >
+        <summary class="text-foreground cursor-pointer font-semibold select-none">
+          {t.toc.title}
+          <span class="text-muted-foreground ms-2 font-normal">
+            {tplStr(t.toc.count, { count: items.length })}
+          </span>
+        </summary>
+        {/* 【2026-09-20 用户要的】章节之间的行距原来是 `space-y-1.5`（6px），
+            十来节堆在一个虚线框里挤成一坨。放到 10px + `leading-relaxed` ——
+            目录是"扫一眼挑一节"用的，行与行之间要能一眼分开。 */}
+        <ol class="mt-4 space-y-2.5 leading-relaxed">
+          {items.map(h => (
+            <li class={itemClass(h.depth)}>
+              <a
+                href={`#${h.slug}`}
+                class="hover:text-foreground underline decoration-1 underline-offset-4 transition-colors"
+              >
+                {h.text}
+              </a>
+            </li>
+          ))}
+        </ol>
+      </details>
+    ))
+}
+
+<style is:global>
+  /* ── 侧栏目录的折叠态 ────────────────────────────────────────────────────
+   *
+   * 判据是 `<html data-toc-collapsed>`（上面那段 `is:inline` 贴的），不是组件里
+   * 的某个 class：首屏那一帧要正确，就只能由一个**在目录进 DOM 之前**就能定下来
+   * 的东西决定。
+   *
+   * ⚠ 整段**不包 `@media`**：侧栏在 xl 以下本来就是 `display:none`，而
+   *   `grid-template-columns` 落在一个不是网格的元素上什么都不做。写一条
+   *   `@media (min-width: 80rem)` 等于把 Tailwind 的 xl 断点在这儿抄第二份，
+   *   改断点的那天这里不会跟着走，而症状只在某个宽度区间出现。
+   */
+  [data-toc-collapsed] [data-toc-rail] [data-toc-list],
+  [data-toc-collapsed] [data-toc-rail] [data-toc-head],
+  [data-toc-collapsed] [data-toc-rail] [data-toc-chevron] {
+    display: none;
+  }
+
+  /* 收起来之后这个按钮是整条侧栏**唯一**看得见的东西，所以给它一圈边：
+     一个孤零零的灰图标看起来像装饰，读者不会去点它 —— 而那正是回到目录的唯一入口。
+     用 `var(--border)` 而不是 `--color-border`：前者是 theme.css 在 `:root`
+     和 `[data-theme=dark]` 上都写了的那一个，深色模式跟着走。 */
+  /* 收起态没有任何可滚的东西，但 `xl:overflow-y-auto` 还在：滚动容器的
+     max-content 宽度是**按"万一要出滚动条"算的**，Windows 上实测那一列因此
+     从按钮的 30px 变成 45px —— 15px 的空白，而没有任何一处是错的。 */
+  [data-toc-collapsed] [data-toc-rail] {
+    overflow: visible;
+  }
+
+  [data-toc-collapsed] [data-toc-rail] [data-toc-toggle] {
+    border-color: var(--border);
+    /* 展开态那 6px 的负外边距是为了让标题和下面的列表对齐；收起态那一列是
+       按内容宽度算的，留着它会让按钮探出侧栏 6px。 */
+    margin-inline-start: 0;
+  }
+
+  /* ★ 左边那一列跟着收。
+   *
+   * 不收的话：读者按下按钮，目录没了、正文原地不动、左边空出 13rem 的白带 ——
+   * 和"这个按钮坏了"在屏幕上长得一模一样。这正是 tocItems.ts 顶上那段
+   * 「没有目录时网格必须塌回一列」的同一个失败形态，只是这次由读者触发。
+   *
+   * 写在组件里而不是四个详情页里：页面上那句 `xl:grid-cols-[13rem_…]` 说的是
+   * "有目录时的版式"，而"读者把它收起来了"是这个组件自己的状态。四处各写一份
+   * 的那天，漏掉的那一页会安静地留着白带。
+   *
+   * ⚠ 这一条要压过 Tailwind 那句 `xl:grid-cols-[13rem_minmax(0,1fr)]`，
+   *   靠的是**两件事同时成立**：特异性 (0,2,0) > (0,1,0)，而且 Tailwind 的
+   *   工具类在 `@layer utilities` 里、这一段没有 layer —— 无 layer 的规则永远赢
+   *   （print.css 顶上记着同一条 CSS 规矩）。少了任何一件它仍然赢，
+   *   但别把这段搬进 `@layer`，那时只剩特异性撑着。 */
+  [data-toc-collapsed] :has(> [data-toc-rail]) {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+</style>
+
+<script>
+  /**
+   * 侧栏目录的「当前这一节」。
+   *
+   * ## 判法：最后一个已经翻过页眉的标题
+   *
+   * 不用 IntersectionObserver。它回答的是"哪些标题现在在视口里"，
+   * 而读者问的是"我在哪一节" —— 一节的正文有两屏长时，那一节的标题
+   * **根本不在视口里**，observer 给不出答案，得再补一堆兜底规则。
+   * 直接量 `getBoundingClientRect().top` 反而是这个问题的原本形状：
+   * 从上往下找最后一个 top 已经越过页眉线的标题，那就是当前这一节。
+   *
+   * ★ 一个都没越过（还在第一节标题上面，比如正文开头那段导语）时**高亮第一条**，
+   *   不是一条都不高亮。"在最前面"和"这功能坏了"在屏幕上必须长得不一样 ——
+   *   一条都不亮的那一瞬间，读者看到的和脚本挂了一模一样。
+   *
+   * ★ 侧栏在 xl 以下是 `display:none`。`offsetParent === null` 一句就挡掉了
+   *   窄屏上每次滚动的无用计算 —— 手机上这段等于不存在。
+   *
+   * ★ 必须挂 `astro:page-load`：ClientRouter 按脚本内容去重，站内跳到第二篇
+   *   文章时这段**不会再执行**，而 DOM 已经换了一批（docs/engineering-notes.md 里
+   *   DownloadLinks / CopyLinkButton 两处记着同一条）。问答页那个「换一条回答」
+   *   更是同一个页面里换正文，不重算的话高亮停在上一条的章节上。
+   */
+  function bindTocRail() {
+    const rail = document.querySelector<HTMLElement>("[data-toc-rail]");
+    if (!rail) return;
+
+    const links = Array.from(
+      rail.querySelectorAll<HTMLAnchorElement>("[data-toc-link]")
+    );
+    if (links.length === 0) return;
+
+    // 目录项 → 正文里对应的那个标题。取不到的（正文改了、锚点没了）整条丢掉，
+    // 不留一个永远不会亮的空项 —— 后面 `current` 的下标才和 links 对得上。
+    // ★ 读 `getAttribute("href")` 而不是 `link.hash`：中文标题的 id 就是中文
+    //   （rehypeHeadingIds 不转拼音，docs/engineering-notes.md 坑 4 记着这件事），而 `.hash`
+    //   给回来的是百分号编码的那一版，拿去 getElementById 一个都找不到 ——
+    //   症状是高亮永远停在第一条，不报错。
+    const pairs = links
+      .map(link => {
+        const id = (link.getAttribute("href") ?? "").slice(1);
+        const heading = id ? document.getElementById(id) : null;
+        return heading ? { link, heading } : null;
+      })
+      .filter(
+        (p): p is { link: HTMLAnchorElement; heading: HTMLElement } => !!p
+      );
+    if (pairs.length === 0) return;
+
+    let current: HTMLAnchorElement | null = null;
+    let ticking = false;
+
+    /**
+     * 「翻过去了」的那条线：页眉底边再往下一点。
+     *
+     * ⚠ **不许读 `--header-h`**。它的值是 `5rem`（theme.css），
+     *   `parseFloat("5rem")` 得到的是 **5**，当像素用就是把线画在离顶 5px 处 ——
+     *   于是高亮总是超前一整节，而且看起来像"判据写错了一点点"，不像坏了。
+     *   量真正那个 `<header>` 的高度没有单位这回事，页眉改 padding 也跟着走。
+     */
+    const headerLine = () =>
+      (document.querySelector("header")?.getBoundingClientRect().height ?? 80) +
+      24;
+
+    function update() {
+      ticking = false;
+      // 侧栏没显示（窄屏）就什么都不算。
+      if (!rail || rail.offsetParent === null) return;
+
+      const line = headerLine();
+      let active = pairs[0]!.link;
+      for (const { link, heading } of pairs) {
+        if (heading.getBoundingClientRect().top <= line) active = link;
+        else break;
+      }
+      if (active === current) return;
+
+      current?.removeAttribute("aria-current");
+      active.setAttribute("aria-current", "true");
+      current = active;
+
+      // 目录本身有高度上限、自己会滚：当前项落在可视区外时把它带回来。
+      // `nearest` 而不是 `center` —— 后者会在每次滚动时把整条侧栏也搅动一下。
+      if (rail.scrollHeight > rail.clientHeight) {
+        active.scrollIntoView({ block: "nearest" });
+      }
+    }
+
+    function onScroll() {
+      if (ticking) return;
+      ticking = true;
+      requestAnimationFrame(update);
+    }
+
+    window.addEventListener("scroll", onScroll, { passive: true });
+    window.addEventListener("resize", onScroll, { passive: true });
+    update();
+  }
+
+  /**
+   * 折叠开关。
+   *
+   * ## 这里**没有**判据
+   *
+   * 收起来了没有、存在哪儿、叫什么，全在 `<nav>` 前面那段 `is:inline` 里
+   * （`window.__tocRail`）。这段只干两件 DOM 的事：按一下告诉它，以及把按钮上
+   * 那三处（`aria-expanded` / `aria-label` / `title`）贴成当前状态。
+   * 在这儿顺手 `localStorage.getItem` 一次就是第二份判据 —— theme.ts 顶上
+   * 那段记着同一件事在主题上的下场（三处，改一处就是页面先闪一个颜色）。
+   *
+   * ## 两个"看起来无所谓"的写法，其实都会坏
+   *
+   * ★ `reflect()` 是**无条件**重贴，不比对当前值。读者的选择是存着的，
+   *   所以打开一篇文章时按钮的初值（markup 里写的是展开那一档）可能本来就是错的。
+   * ★ 点击回调用的是**模块作用域的那个函数**，不是每次 bind 新造一个闭包：
+   *   `astro:page-load` 在**首屏也会触发一次**，而下面 `bindTocToggle()` 又直接调了
+   *   一次 —— 闭包的话同一个按钮会挂上两个监听，一次点击切两下 = 什么都没发生，
+   *   零报错。同一个函数引用时 `addEventListener` 自己会去重。
+   */
+  type TocRailStore = { collapsed(): boolean; set(next: boolean): void };
+
+  const tocStore = () =>
+    (window as unknown as { __tocRail?: TocRailStore }).__tocRail;
+
+  function reflectToggle(btn: HTMLElement) {
+    const store = tocStore();
+    if (!store) return;
+    const collapsed = store.collapsed();
+    btn.setAttribute("aria-expanded", String(!collapsed));
+    const label =
+      (collapsed ? btn.dataset.labelExpand : btn.dataset.labelCollapse) ?? "";
+    btn.setAttribute("aria-label", label);
+    btn.setAttribute("title", label);
+  }
+
+  function onTocToggle(event: Event) {
+    const btn = event.currentTarget as HTMLElement;
+    const store = tocStore();
+    if (!store) return;
+    store.set(!store.collapsed());
+    reflectToggle(btn);
+  }
+
+  function bindTocToggle() {
+    const btn = document.querySelector<HTMLButtonElement>("[data-toc-toggle]");
+    if (!btn) return;
+    btn.addEventListener("click", onTocToggle);
+    reflectToggle(btn);
+  }
+
+  bindTocRail();
+  bindTocToggle();
+  document.addEventListener("astro:page-load", bindTocRail);
+  document.addEventListener("astro:page-load", bindTocToggle);
+</script>

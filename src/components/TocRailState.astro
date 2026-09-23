@@ -1,0 +1,77 @@
+---
+/**
+ * 侧栏目录「收起来了没有」—— 这一份是**全站唯一**知道它存在哪儿、叫什么的地方。
+ *
+ * 由 `TableOfContents.astro` 在**侧栏那一档**渲染一次，位置就在 `<nav>` 前面。
+ *
+ * ## 为什么是 `is:inline`，为什么单独一个文件
+ *
+ * 折叠状态要在**首屏那一帧**就是对的：晚一步的症状不是闪一下颜色，是整篇正文
+ * 横着跳一下（左边那一列从 13rem 收成 2rem）。所以它必须同步执行、而且排在目录
+ * 进 DOM 之前 —— 和 Layout.astro 里主题那段 FOUC 脚本同一个形态。
+ *
+ * ⚠ 那它为什么不直接写在 TableOfContents.astro 里？因为侧栏那一档整个在一个
+ *   `{ cond ? … : … }` 表达式里，而 **prettier 的 Astro 解析器把表达式里的
+ *   `<script>` 内容当 JSX 子节点解析** —— 脚本里第一个 `{` 就报
+ *   `SyntaxError: Unexpected token, expected "}"`（实测）。
+ *   Astro 自己编译得出来、页面也是好的，`prettier --check .` 直接红。
+ *   顶层的 `<script is:inline>` 没有这个问题，所以拆成这一份只有脚本的组件。
+ *   ★ 别把它塞回那个表达式里，也别改成打包的 `<script>`（那是 defer 的）。
+ *
+ * ## 存三档，不是两档
+ *
+ *   没存过   —— 读者还没表过态 → 默认展开
+ *   expanded —— 他明确要展开
+ *   collapsed—— 他明确要收起
+ *
+ * 把"展开"存成"删掉这一条"看起来一样省事，但哪天默认值换成收起，所有**明确选过
+ * 展开**的读者会被静默改成收起，而且没有任何办法区分他们和从没点过的人。
+ *
+ * ## 对外只有 `window.__tocRail`
+ *
+ * TableOfContents 那段模块脚本只调它，**不许自己再读一次 localStorage** ——
+ * 两份判据漂开的症状是按钮说收起了、页面说没有。theme.ts 顶上记着同一件事
+ * 在主题上的下场（默认值写在三处，改一处就是页面先闪一个颜色再跳成另一个）。
+ */
+---
+
+<script is:inline>
+  (function () {
+    const KEY = "toc-rail";
+    const ATTR = "data-toc-collapsed";
+
+    function collapsed() {
+      try {
+        return localStorage.getItem(KEY) === "collapsed";
+      } catch {
+        // 隐私模式 / 存储被禁：当成"还没表过态"，不是报错。
+        return false;
+      }
+    }
+
+    function apply() {
+      document.documentElement.toggleAttribute(ATTR, collapsed());
+    }
+
+    if (!window.__tocRail) {
+      window.__tocRail = {
+        collapsed,
+        set(next) {
+          try {
+            localStorage.setItem(KEY, next ? "collapsed" : "expanded");
+          } catch {
+            // 存不下就只改这一页的样子，别把功能整个关掉。
+          }
+          apply();
+        },
+      };
+
+      // ⚠ ClientRouter 换页时**根元素的属性是从新文档抄过来的**（theme.ts 为同一件事
+      //   也挂着这个监听）。不重贴的话，读者收起来的目录会在跳到下一篇时自己展开。
+      //   监听只在第一次执行时挂 —— 从没有目录的页面跳进来时这段会再跑一次。
+      document.addEventListener("astro:after-swap", apply);
+    }
+
+    apply();
+  })();
+</script>

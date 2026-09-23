@@ -1,0 +1,71 @@
+---
+import type { GetStaticPaths } from "astro";
+import { getCollection } from "astro:content";
+import Layout from "@/layouts/Layout.astro";
+import Header from "@/components/Header.astro";
+import Breadcrumb from "@/components/Breadcrumb.astro";
+import Main from "@/components/Main.astro";
+import Card from "@/components/Card.astro";
+import EmptyState from "@/components/EmptyState.astro";
+import CollectionSearch from "@/components/CollectionSearch.astro";
+import { SEARCH_KINDS } from "@/config/searchKinds";
+import Footer from "@/components/Footer.astro";
+import Pagination from "@/components/Pagination.astro";
+import { getSortedPosts } from "@/utils/getSortedPosts";
+// 【2026-09-20】同一个选题的几份研究**折成一张卡**（判据和详情页那排切换
+// 是同一把钥匙：src/utils/related.ts 的 qaGroupKey）。不折的话，一个选题让
+// 两个智能体各写一份，列表上就是两张标题一模一样的卡叠着。
+import { foldQaGroups } from "@/utils/qaGroups";
+import { useTranslations } from "@/i18n";
+import config from "@/config";
+
+export const getStaticPaths = (async ({ paginate }) => {
+  const posts = await getCollection("posts", ({ data }) => !data.draft);
+  // ★ 分页按**卡数**分（先折再分页）—— 反过来的话同一组会被切到两页上。
+  return paginate(foldQaGroups(getSortedPosts(posts)), {
+    pageSize: config.posts.perPage,
+  });
+}) satisfies GetStaticPaths;
+
+const { page } = Astro.props;
+
+const locale = Astro.currentLocale ?? config.site.lang;
+const t = useTranslations(locale);
+---
+
+<Layout
+  title={`${t.pages.postsTitle} | ${config.site.title}`}
+  description={t.pages.postsDesc}
+>
+  <Header />
+
+  <Breadcrumb />
+
+  <Main pageTitle={t.pages.postsTitle} pageDesc={t.pages.postsDesc}>
+    {
+      /* 集合一条都没有时不摆检索框 —— 一个搜什么都搜不到的框，
+        在界面上和"搜索坏了"长得一样。 */
+    }
+    {page.total > 0 && <CollectionSearch kind={SEARCH_KINDS.posts} />}
+    {
+      /* ★ 空状态是一个画出来的框，不是一个空 <ul>（和 /qa、/guides 同一个口径）。
+         Astro 的 paginate 在数据为空时**照样生成第 1 页**，所以 /posts 一定存在；
+         那一页什么都没有的时候，读者看到的必须是「真的还没写」，
+         而不是一片疑似坏掉的空白（docs/engineering-notes.md 第二节）。
+         为什么是框不是一行灰字，见 EmptyState.astro 的头注释。 */
+      page.data.length === 0 ? (
+        <EmptyState message={t.pages.postsEmpty} />
+      ) : (
+        <ul>
+          {page.data.map(({ entry, answers }) => (
+            <Card {...entry} {answers} />
+          ))}
+        </ul>
+      )
+    }
+  </Main>
+
+  <Pagination {page} />
+
+  <Footer noMarginTop={page.lastPage > 1} />
+</Layout>

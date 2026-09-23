@@ -1,0 +1,104 @@
+---
+import { UNSPECIFIED_ORIGIN } from "@/config/promptOrigins";
+import { promptOriginLabel } from "@/utils/promptOriginLabel";
+import { useTranslations } from "@/i18n";
+import config from "@/config";
+
+/**
+ * 来源芯片：这份提示词**是谁写的**。
+ *
+ * 形状对齐 `AgentModelChip.astro` / `SymbolChip.astro`（全站三张芯片一副形状），
+ * 分档的道理也和 AgentModelChip 逐字相同 —— 因为它们回答的是同一类问题：
+ * **读者凭什么判断该不该信这段字。**
+ *
+ * ★ 三档，一档都不许压（docs/engineering-notes.md 第二节）：
+ *   - `site`        → 「站长自己在用的」，实线边。**完成态。**
+ *   - `contributed` → 「投稿 · 某某」，实线边。**完成态**，署名由 schema 保证非空
+ *     （投稿人要求匿名时写的是「匿名」，那也是一个显式的完成态）。
+ *   - 空 / `unspecified` / 认不出来的值 → 「来源未标注」，虚线边 + 灰字。**待补。**
+ *     非草稿走不到这一档（content.config.ts 的 superRefine 会让构建失败），
+ *     所以它只会在 `pnpm dev` 里看草稿时出现 —— 但它必须长得不一样，
+ *     否则草稿预览时一份没标来源的投稿看起来就像站长自己写的。
+ *
+ * ★ **不认识的值不许原样印出来。** 和 AgentModelChip 同一条：页面上冒出一个
+ *   来路不明的英文枚举值，比承认"我不知道这是谁写的"更糟。
+ */
+type Props = {
+  origin?: string;
+  /** 投稿人署名。只有 `origin === "contributed"` 时有意义。 */
+  contributor?: string;
+  size?: "sm" | "lg";
+  /**
+   * 【2026-09-20】`inline`：不画边框，一段灰字「作者：牢玩家」，和时间、阅读时长排在同一行
+   * （用户要的：作者信息不放标题上面，和时间等信息一行）。待补那一档仍然要长得不一样 ——
+   * 虚线下划线 + 「作者未标注」。`chip` 是原来那副带边框的样子，留给还想要芯片的地方。
+   */
+  variant?: "chip" | "inline";
+  class?: string;
+};
+
+const {
+  origin,
+  contributor,
+  size = "sm",
+  variant = "chip",
+  class: className = "",
+} = Astro.props;
+const t = useTranslations(Astro.currentLocale);
+
+/**
+ * 三档判据集中在这一处。
+ *
+ * ★ 走枚举值本身而不是"有没有 contributor"：后者会把「投稿但署名被清空了」
+ *   显示成「站长自己在用的」—— 那是替自己认领别人的东西，而且零症状。
+ *   （schema 那边不让这种组合存在，这里是第二道。）
+ */
+/**
+ * 判据在 `src/utils/promptOriginLabel.ts` —— 分享卡（prompts 的 index.png.ts）读的是
+ * 同一份，两处不会各说各话。`pending` = 待补那一档（虚线）：
+ * `contributed` 少了署名也落在这里 —— 它确实还没填完。
+ */
+const { label, pending: isPending } = promptOriginLabel(origin, contributor, {
+  site: t.prompts.originSite,
+  contributedBy: t.prompts.contributedBy,
+  unspecified: t.prompts.originUnspecified,
+  author: config.site.author,
+});
+
+/** 认不出来的枚举值只进悬停提示，作排查线索，不进可见文本。 */
+const orphanTitle =
+  isPending && origin && origin !== UNSPECIFIED_ORIGIN
+    ? `没有「${origin}」这一档来源 —— 对一眼 src/config/promptOrigins.ts。`
+    : undefined;
+---
+
+{
+  variant === "inline" ? (
+    <span
+      class:list={[
+        "text-muted-foreground",
+        size === "lg" ? "text-sm sm:text-base" : "text-sm",
+        // ★ 待补那一档：虚线下划线。没有边框可画了，但两档仍然不许长得一样。
+        isPending && "underline decoration-dashed underline-offset-4",
+        className,
+      ]}
+      title={orphanTitle}
+    >
+      {label}
+    </span>
+  ) : (
+    <span
+      class:list={[
+        // 形状同另外三张（`app-chip`，src/styles/global.css）。
+        // ★ 「待补」那一档走 `app-chip-empty`：虚线、无填充、灰字 ——
+        //   有面的是"这里有个确定的答案"，没面的是"这一格还空着"。
+        isPending ? "app-chip-empty" : "app-chip",
+        size === "lg" ? "text-base" : "text-sm",
+        className,
+      ]}
+      title={orphanTitle}
+    >
+      {label}
+    </span>
+  )
+}

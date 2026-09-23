@@ -1,0 +1,86 @@
+---
+import IconArrowRight from "@/assets/icons/IconArrowRight.svg";
+import Card from "./Card.astro";
+
+/**
+ * 详情页上的「相关条目」块：一个标题、一列卡片，可选一行"看全部"和一句空状态。
+ *
+ * 三处在用，判据各不相同、都在 `src/utils/related.ts`：
+ *   研究稿 / 问答详情页 —— 同一只票的其他研究和问答
+ *   问答详情页           —— 同一个问题、其他智能体的回答
+ *   提示词详情页         —— 用这份提示词跑出来的研究
+ *
+ * ## 两个硬性属性
+ *
+ *   data-pagefind-ignore —— 列出来的是**别的条目**的标题和摘要。不挡掉的话，
+ *     搜「毛利率」会命中每一篇页脚里列着那条问答的研究稿，而它不是那几篇的内容。
+ *   data-print-hide      —— 打印件里不该有一列点不动的卡片。
+ *
+ * ## 空状态由调用方决定说不说
+ *
+ * `emptyMessage` 不传 = 一条都没有时只剩标题 —— 那是错的，所以调用方要么传它，
+ * 要么在外面用 `length > 0` 决定整块渲不渲染。哪种对取决于"没有"的含义：
+ *   「这只票目前只有这一篇」是信息（读者知道站上没别的）→ 传 emptyMessage；
+ *   「这份提示词还没有研究稿用过」对读者没有信息量（交易规则手册本来就不出研究）
+ *   → 整块不渲染。
+ */
+type Entry = {
+  id: string;
+  collection: string;
+  filePath?: string;
+  data: {
+    title: string;
+    description?: string;
+    symbols?: string[];
+    agent?: string;
+    origin?: string;
+    contributor?: string;
+    pubDatetime: Date;
+    modDatetime?: Date | null;
+    timezone?: string;
+  };
+};
+
+type Props = {
+  heading: string;
+  entries: Entry[];
+  /** 一条都没有时说的那句话。见上面。 */
+  emptyMessage?: string;
+  /** 标题行右端的「全部 …」入口。两个一起传，只传一个不渲染。 */
+  moreHref?: string;
+  moreLabel?: string;
+};
+
+const { heading, entries, emptyMessage, moreHref, moreLabel } = Astro.props;
+---
+
+<section data-pagefind-ignore data-print-hide class="my-8">
+  <div class="mb-3 flex items-baseline justify-between gap-4">
+    <h2 class="text-lg font-semibold tracking-tight sm:text-xl">{heading}</h2>
+    {
+      moreHref && moreLabel && (
+        <a
+          href={moreHref}
+          class="text-muted-foreground hover:text-foreground inline-flex shrink-0 items-center gap-1 text-sm transition-colors"
+        >
+          {moreLabel}
+          <IconArrowRight class="inline-block size-4 rtl:-rotate-180" />
+        </a>
+      )
+    }
+  </div>
+  <slot name="intro" />
+  {
+    entries.length > 0 ? (
+      <ul>
+        {entries.map(entry => (
+          <Card variant="h3" {...entry} />
+        ))}
+      </ul>
+    ) : (
+      emptyMessage && (
+        <p class="text-muted-foreground text-sm">{emptyMessage}</p>
+      )
+    )
+  }
+</section>

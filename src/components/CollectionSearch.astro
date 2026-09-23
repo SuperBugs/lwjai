@@ -1,0 +1,325 @@
+---
+/**
+ * 集合内检索框 —— 挂在 `/posts`、`/qa`、`/guides` 三个列表页顶部。
+ *
+ * ## 为什么不用 PagefindUI
+ *
+ * `@pagefind/default-ui` 的 `PagefindUI` **没有「预设一个 filter」的参数**
+ * （实测它只认这 17 个：autofocus / bundlePath / debounceTimeoutMs / element /
+ * excerptLength / focusOnSlash / mergeIndex / openFilters / pageSize /
+ * processResult / processTerm / resetStyles / showEmptyFilters / showImages /
+ * showSubResults / sort / translations）。`openFilters` 只是「把分面面板展开」，
+ * 不是「只搜这一档」。
+ *
+ * 而 Pagefind 的 **JS API** 那一层支持：`search(term, { filters })`。
+ * 所以这里直接用 API 自己渲染结果。代价是没有 PagefindUI 的子结果和成套样式，
+ * 换来的是「在问答页搜出来的只有问答」。
+ *
+ * 全站跨集合检索仍然在 `/search`（那一页继续用 PagefindUI + 分面），
+ * 由这个框右边的「搜全站」链接过去。
+ *
+ * ## 三档状态不许合并
+ *
+ *   还没输入       → 什么都不显示
+ *   搜了没命中     → 「{集合}里没有匹配「xx」的内容」
+ *   **索引不存在** → 「搜索索引还没生成 —— 它是构建产物」
+ *
+ * 最后一档是**故障**，不是结果。`pnpm dev` 里永远走这一档（Pagefind 的索引由
+ * `pnpm build` 生成，dev server 里 `/pagefind/pagefind.js` 根本不存在）。
+ * 把它显示成「没搜到」，一个坏掉的搜索框就会被读成「这个站没有这类内容」。
+ *
+ * ## 加载时机
+ *
+ * **聚焦才加载**，不是 onIdle。Pagefind 那套是 `pagefind.js` 加一个 wasm，
+ * 而这三个是站里最常访问的页面 —— 绝大多数人打开列表页是来翻的，不是来搜的。
+ */
+import IconSearch from "@/assets/icons/IconSearch.svg";
+import { SEARCH_FILTER_KEY } from "@/config/searchKinds";
+import { getAssetPath } from "@/utils/withBase";
+import { useTranslations } from "@/i18n";
+import { tplStr } from "@/i18n/format";
+import config from "@/config";
+
+type Props = {
+  /** Pagefind 分面值，必须和详情页上 `data-pagefind-filter` 冒号后面那半截**逐字相同**。
+   *  两边都从 `SEARCH_KINDS` 取，就是为了不让它们各写一份。
+   *  对不上的表现是：搜什么都 0 条，而且不报错。
+   *  （冒号前面那半截是键名，走 `SEARCH_FILTER_KEY`，同一条纪律。） */
+  kind: string;
+};
+
+const { kind } = Astro.props;
+
+const locale = Astro.currentLocale ?? config.site.lang;
+const t = useTranslations(locale);
+
+const enabled = config.features.search === "pagefind";
+
+// 文案在服务端拼好，脚本里只管塞进 DOM，省得把 i18n 整个搬进客户端。
+const strings = {
+  unavailable: t.collectionSearch.unavailable,
+  // 这里**不能**用 tplStr：它会把没给值的 `{{term}}` 替换成空字符串，
+  // 而 term 只有运行时才知道。只填 kind，`{{term}}` 原样留给客户端。
+  empty: t.collectionSearch.empty.replaceAll("{{kind}}", kind),
+  count: t.collectionSearch.count,
+};
+---
+
+{
+  enabled && (
+    <search
+      class="collection-search mb-6"
+      data-kind={kind}
+      data-filter-key={SEARCH_FILTER_KEY}
+      data-pagefind-ignore
+      data-bundle={getAssetPath("pagefind/pagefind.js")}
+      data-strings={JSON.stringify(strings)}
+    >
+      <div class="flex items-center gap-3">
+        <label class="sr-only" for={`cs-input-${kind}`}>
+          {tplStr(t.collectionSearch.label, { kind })}
+        </label>
+        {/* 放大镜画在框里。原来框里只有 placeholder —— 一个圆角矩形加一行灰字
+            在移动端很容易被当成"输入你的邮箱"那类订阅框。图标是这一类控件的
+            通用记号，不依赖读者读懂那行字。
+            `pointer-events-none`：图标压在输入框上面，不加这条的话点到图标
+            那一小块不会聚焦输入框。 */}
+        <div class="relative w-full">
+          <span
+            class="text-muted-foreground pointer-events-none absolute inset-y-0 start-0 flex items-center ps-3"
+            aria-hidden="true"
+          >
+            <IconSearch class="size-4" />
+          </span>
+          <input
+            id={`cs-input-${kind}`}
+            type="search"
+            autocomplete="off"
+            class="border-border bg-surface text-foreground focus-visible:border-border-strong focus-visible:outline-accent rounded-app w-full border py-2 ps-9 pe-3 transition-colors focus-visible:outline focus-visible:outline-1"
+            placeholder={tplStr(t.collectionSearch.placeholder, { kind })}
+          />
+        </div>
+        <a
+          href={getAssetPath("search")}
+          class="text-muted-foreground hover:text-foreground shrink-0 text-sm underline decoration-1 underline-offset-4 transition-colors"
+        >
+          {t.collectionSearch.searchAll}
+        </a>
+      </div>
+
+      {/*
+        状态行和结果列表分成两个容器：状态行要能在「没命中」和「索引不存在」
+        之间切换，而结果列表在这两种情况下都是空的 —— 合成一个容器
+        就会逼着用一句话说两件事。
+
+        ★【2026-09-18 改】这两档以前只有**措辞**不同，样式一模一样
+        （都是 `text-muted-foreground text-sm`）。而 docs/engineering-notes.md 第二节要的是
+        「空状态和失败状态在**界面上**长得不一样」—— 一行灰字读者是扫过去的，
+        措辞差异根本到不了眼睛里，于是一个坏掉的搜索框被读成"这个站没这内容"。
+        现在「搜不了」走 `app-callout`（实线 + 填充 + 正文色，全站最重的那一档），
+        「没搜到 / N 条」走一行灰字。类名在下面脚本里切，见 setStatus()。
+      */}
+      <p class="mt-2 empty:hidden" data-cs-status />
+      <ul class="mt-3 space-y-3 empty:hidden" data-cs-results />
+    </search>
+  )
+}
+
+<script>
+  type Strings = {
+    unavailable: string;
+    empty: string;
+    count: string;
+  };
+
+  /** Pagefind 的返回结构，只声明这里真正读到的字段。 */
+  type PagefindData = {
+    url: string;
+    excerpt: string;
+    /** title / image / image_alt 是 Pagefind 的保留键；其余是详情页 data-pagefind-meta
+     *  写进去的（智能体 / 模型，见 src/utils/searchMeta.ts）。 */
+    meta?: { title?: string } & Record<string, string | undefined>;
+  };
+  type PagefindResult = { data: () => Promise<PagefindData> };
+  type PagefindModule = {
+    debouncedSearch: (
+      term: string,
+      opts: { filters: Record<string, string[]> }
+    ) => Promise<{ results: PagefindResult[] } | null>;
+  };
+
+  const MAX_RESULTS = 8;
+
+  /**
+   * 状态行的两档样式。
+   *
+   * ★ `"note"` = 结果（没搜到 / N 条）—— 一行灰字，读者扫过去就行。
+   *   `"broken"` = **故障**（索引不存在）—— `app-callout`：实线 + 填充 + 正文色，
+   *   全站视觉最重的那一档（见 global.css 里那两条 utility）。
+   *
+   * 两档必须在**样式**上分开，不是只有措辞分开 —— 那正是 docs/engineering-notes.md 第二节
+   * 点名的形态："一个坏掉的搜索框长得和'这个站没这内容'一模一样"。
+   *
+   * ⚠ 类名写成**字面量**，别拼字符串：Tailwind v4 是把源文件当文本扫的，
+   *   `"app-" + tone` 这种写法扫不出来，产物里那几个类根本不存在，
+   *   而且构建全绿、只有线上那一档样式失效。
+   */
+  const STATUS_CLASS = {
+    note: "mt-2 empty:hidden text-muted-foreground text-sm",
+    broken: "mt-2 empty:hidden app-callout",
+  } as const;
+
+  function setStatus(
+    el: HTMLElement,
+    tone: keyof typeof STATUS_CLASS,
+    text: string
+  ) {
+    el.className = STATUS_CLASS[tone];
+    el.textContent = text;
+  }
+
+  function initOne(root: HTMLElement) {
+    if (root.dataset.csReady) return;
+    root.dataset.csReady = "1";
+
+    const input = root.querySelector<HTMLInputElement>("input[type=search]");
+    const statusEl = root.querySelector<HTMLElement>("[data-cs-status]");
+    const listEl = root.querySelector<HTMLElement>("[data-cs-results]");
+    const bundle = root.dataset.bundle;
+    const kind = root.dataset.kind;
+    // 分面键名同样从 data-* 读（服务端来自 SEARCH_FILTER_KEY）——
+    // 这里是客户端 script，import 不到那个常量，而写死第二份字面量正是
+    // searchKinds.ts 顶上那段要防的东西：对不上就"搜什么都 0 条且不报错"。
+    const filterKey = root.dataset.filterKey;
+    if (!input || !statusEl || !listEl || !bundle || !kind || !filterKey)
+      return;
+
+    const strings: Strings = JSON.parse(root.dataset.strings ?? "{}");
+
+    // null = 还没试过加载；false = 试过且加载不出来（索引不存在）。
+    let pagefind: PagefindModule | null | false = null;
+
+    async function ensureLoaded() {
+      if (pagefind !== null) return;
+      try {
+        // @vite-ignore：`/pagefind/pagefind.js` 是**构建产物**，构建时还不存在。
+        // 让 Vite 去解析它会直接让 `astro build` 失败。
+        pagefind = (await import(/* @vite-ignore */ bundle!)) as PagefindModule;
+      } catch {
+        pagefind = false;
+      }
+    }
+
+    async function run() {
+      const term = input!.value.trim();
+      if (!term) {
+        setStatus(statusEl!, "note", "");
+        listEl!.replaceChildren();
+        return;
+      }
+
+      await ensureLoaded();
+
+      // 索引不存在 —— 这是**故障**，不是「没搜到」。dev 里永远走这一支。
+      if (pagefind === false) {
+        listEl!.replaceChildren();
+        setStatus(statusEl!, "broken", strings.unavailable);
+        return;
+      }
+
+      const search = await pagefind!.debouncedSearch(term, {
+        filters: { [filterKey!]: [kind!] },
+      });
+
+      // Pagefind 在这次搜索被后一次顶掉时返回 null，直接丢弃 ——
+      // 否则慢的那次会把快的那次的结果盖掉。
+      if (search === null) return;
+      // 等待期间输入框被改过了，这次结果已经过时。
+      if (input!.value.trim() !== term) return;
+
+      const results = search.results ?? [];
+
+      if (results.length === 0) {
+        listEl!.replaceChildren();
+        // 服务端只填了 `{{kind}}`，`{{term}}` 原样留到这里。
+        setStatus(
+          statusEl!,
+          "note",
+          strings.empty.replaceAll("{{term}}", term)
+        );
+        return;
+      }
+
+      const shown = await Promise.all(
+        results.slice(0, MAX_RESULTS).map(r => r.data())
+      );
+
+      setStatus(
+        statusEl!,
+        "note",
+        strings.count.replaceAll("{{count}}", String(results.length))
+      );
+
+      listEl!.replaceChildren(
+        ...shown.map(d => {
+          const li = document.createElement("li");
+
+          // 结果项和站里其他"可点的整块"用同一张卡（见 global.css 的 app-card）。
+          const a = document.createElement("a");
+          a.href = d.url;
+          a.className = "app-card app-card-interactive block p-4";
+
+          const title = document.createElement("span");
+          title.className = "text-accent block font-semibold";
+          // textContent：标题是纯文本，没有理由让它走 innerHTML。
+          title.textContent = d.meta?.title ?? d.url;
+
+          const p = document.createElement("p");
+          p.className = "text-muted-foreground mt-1 text-sm";
+          // excerpt 是 Pagefind 生成的：正文已转义，只额外插 <mark> 做高亮。
+          // 来源是本站自己的构建产物，不是用户输入。
+          p.innerHTML = d.excerpt;
+
+          a.append(title, p);
+
+          // 索引里带的那两个小标签（智能体 / 模型）：/search 那页由 PagefindUI 自己画成 tags，
+          // 这里是自渲染的，得自己画一行。title / image 是 Pagefind 的保留键，不算。
+          const extra = Object.entries(d.meta ?? {}).filter(
+            ([key, value]) =>
+              value && !["title", "image", "image_alt"].includes(key)
+          );
+          if (extra.length > 0) {
+            const tags = document.createElement("p");
+            tags.className = "text-muted-foreground mt-1 text-xs";
+            tags.textContent = extra
+              .map(([key, value]) => `${key}: ${value}`)
+              .join(" · ");
+            a.append(tags);
+          }
+
+          li.append(a);
+          return li;
+        })
+      );
+    }
+
+    // 聚焦就开始拉 wasm，这样等人敲完第一个词时它多半已经就位。
+    // 这只是预热，真正触发搜索的是 input 事件。
+    input.addEventListener("focus", () => void ensureLoaded(), { once: true });
+    input.addEventListener("input", () => void run());
+    // 回车不要提交（外层是 <search> 不是 <form>，这里只是保险）。
+    input.addEventListener("keydown", e => {
+      if (e.key === "Enter") e.preventDefault();
+    });
+  }
+
+  function initAll() {
+    document
+      .querySelectorAll<HTMLElement>(".collection-search")
+      .forEach(initOne);
+  }
+
+  initAll();
+  // View Transitions 换页之后 DOM 是新的，要重新挂。
+  document.addEventListener("astro:after-swap", initAll);
+</script>

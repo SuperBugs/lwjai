@@ -1,0 +1,57 @@
+---
+import config from "@/config";
+import LinkButton from "./LinkButton.astro";
+
+type Props = {
+  /**
+   * 这一处**不画**哪几个渠道的图标（按 `name` 比）。
+   *
+   * 【2026-09-21 用户要的】页脚那一行里 Telegram 已经有一条**带文字**的链接
+   * （「Telegram 频道 →」），旁边再画一个小飞机就是同一个入口在同一行里出现两次
+   * （用户原话：「都重复了」）。
+   *
+   * ★ 做成「这一处不画」，**不是**把那一条从 `astro-paper.config.ts` 的 `socials`
+   *   里删掉。那条数据还有两个读者：页脚那条文字链接的 URL（Footer.astro 的
+   *   `telegramChannel`）和首页 Organization JSON-LD 的 `sameAs`（index.astro）。
+   *   删掉配置的后果是**两处一起静默消失** —— 文字链接整条不渲染
+   *   （它外面就是 `telegramChannel && …`）、结构化数据少一个账号，
+   *   而页面、构建、测试三处全绿。
+   */
+  exclude?: readonly string[];
+};
+
+const { exclude = [] } = Astro.props;
+const { site, socials } = config;
+
+const icons = import.meta.glob<{
+  default: (_props: Record<string, unknown>) => unknown;
+}>("/src/assets/icons/socials/*.svg");
+
+const items = await Promise.all(
+  socials
+    .filter(({ name }) => !exclude.includes(name))
+    .map(async ({ name, url, linkTitle }) => {
+      const mod = await icons[`/src/assets/icons/socials/${name}.svg`]?.();
+      const Icon = mod?.default;
+      const title =
+        linkTitle ??
+        (url.startsWith("mailto:") || name === "mail"
+          ? `Send an email to ${site.title}`
+          : `${site.title} on ${name.charAt(0).toUpperCase() + name.slice(1)}`);
+      return { url, title, Icon };
+    })
+);
+---
+
+<div class="flex flex-wrap items-center gap-1">
+  {
+    items.map(({ url, title, Icon }) =>
+      Icon ? (
+        <LinkButton href={url} class="p-2 hover:rotate-6 sm:p-1" title={title}>
+          <Icon class="inline-block size-6 scale-125 fill-transparent stroke-current stroke-2 opacity-90 group-hover:fill-transparent sm:scale-110" />
+          <span class="sr-only">{title}</span>
+        </LinkButton>
+      ) : null
+    )
+  }
+</div>

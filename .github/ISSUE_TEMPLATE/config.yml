@@ -1,0 +1,5 @@
+blank_issues_enabled: true
+contact_links:
+  - name: 安全问题 / 仓库里疑似真实的个人信息
+    url: https://docs.github.com/code-security/security-advisories/guidance-on-reporting-and-writing-information-about-vulnerabilities/privately-reporting-a-security-vulnerability
+    about: 请走私密的安全报告（仓库页面 Security → Report a vulnerability），不要开公开 issue。

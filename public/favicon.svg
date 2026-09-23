@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" shape-rendering="crispEdges">
+    <!-- 一对中文直角引号「」，一大一小，中间留空。
+         ★ 四个矩形的坐标全是 8 的倍数，所以浏览器把 viewBox 128 光栅到 16px
+           （标签页那一档）时正好整除，每条边都落在整数像素上、零灰边。
+           **改坐标前先确认新值仍是 8 的倍数**，否则 16px 下会糊出半透明边。
+         ★ 闭引号横臂 48 只有开引号 72 的三分之二、竖臂 40 比 56 短 —— 这个
+           「一大一小」就是这个标记的全部含义。调成等大等高 = 变成一个通用取景框图标。
+         ★ 这里跟的是 prefers-color-scheme（操作系统），不是站内的 data-theme。
+           站内默认亮色且不跟随系统（Layout.astro 那段 FOUC 脚本），但 favicon 挂在
+           浏览器标签栏上，那块底色跟的是系统主题 —— 两者本来就该分开判断。 -->
+    <rect x="16" y="16" width="72" height="16" />
+    <rect x="16" y="16" width="16" height="56" />
+    <rect x="64" y="96" width="48" height="16" />
+    <rect x="96" y="72" width="16" height="40" />
+    <style>
+        rect { fill: #1d1d1f; }
+        @media (prefers-color-scheme: dark) {
+            rect { fill: #f0f0f3; }
+        }
+    </style>
+</svg>

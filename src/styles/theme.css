@@ -1,0 +1,133 @@
+/* Register design tokens for Tailwind v4 */
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-surface: var(--surface);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-border: var(--border);
+  --color-border-strong: var(--border-strong);
+  --font-app: var(--font-reading);
+  --font-mono: var(--font-google-sans-code);
+
+  /* ── 圆角：一档，不是一套 ───────────────────────────────────────────────
+   * 主流设计系统（Apple HIG、Stripe、Vercel Geist）在内容型页面上都只用
+   * 两三档半径，而这个站的容器只有一种形状：卡片 / 提示框 / 输入框。
+   * 所以只注册 `rounded-app` 一个值 —— 多注册几档的下场是每个人随手挑一个，
+   * 半年后同一页上有 4、6、8、12 四种圆角，而没有任何一处是"错"的。
+   * 芯片（SymbolChip / AgentChip）仍用 Tailwind 自带的 `rounded-md`：
+   * 它们是行内小件，跟着文字走，和卡片不是一个尺度。 */
+  --radius-app: 0.75rem;
+
+  /* ── 卡片阴影：只在浅色下存在 ─────────────────────────────────────────
+   * 深色背景上的投影几乎看不见，硬加只会让边缘发脏 —— 深色那档靠
+   * `--surface` 比页底**亮**一点来做层次（Material 3 的做法），
+   * 所以下面两个变量在 [data-theme=dark] 里被改成 none。 */
+  --shadow-card: var(--card-shadow);
+  --shadow-card-hover: var(--card-shadow-hover);
+}
+
+/* ★ 页眉高度。**故意写在 `@theme` 外面**：`@theme inline` 里的值会被内联进
+ * 工具类，能不能同时在 `:root` 上留下同名变量取决于 Tailwind 的实现细节，
+ * 而这一条是要在 global.css 里用 `var()` 手写引用的（sticky 页眉的
+ * scroll-padding）。普通自定义属性没有这层不确定性。
+ *
+ * 值 = 实测的页眉高度取上界：桌面 81px（py-5 + 标记 32 + a 的 py-1 + 1px 边），
+ * 手机 73px（py-4 + 菜单按钮 40 + 1px 边）。取 80px 这一档，宁可**多留**一点 ——
+ * 多出来的只是标题上方多一点空白，少了就是标题被页眉盖住半行。
+ * 改 Header.astro 的 py-* 时回来对一下这个数：对不上的症状是锚点跳转后
+ * 那半行被盖住，页面不报错、构建全绿、也没有任何测试会红。 */
+:root {
+  --header-h: 5rem;
+}
+
+/* ── 字体：这个站的正文是中文长文 ──────────────────────────────────────
+ *
+ * AstroPaper 原本把 Google Sans Code（等宽拉丁）用作**全站字体**，那是它
+ * "开发者博客"气质的来源。但等宽字体里没有中文字形，一整篇中文会掉进
+ * 浏览器的兜底字体，行高和字距都是按拉丁算的 —— 读三段就累。
+ *
+ * 所以拆成两支：
+ *   --font-reading  正文与界面。拉丁在前、中文在后。
+ *   --font-mono     代码块、日期、标的代码、标签这些**纯拉丁**的地方，
+ *                   保留 Google Sans Code —— 那正是这套主题好看的地方，
+ *                   而且代码和数字本来就该等宽。
+ * 这个分工顺带有个额外的好处：数据用等宽、叙述用比例字，是金融终端的惯例。
+ *
+ * ⚠ **拉丁在前、中文在后**（和作者另一个项目的前端同一条）：反过来的话中文字体里的
+ *   西文字形会赢，`TSLA`、`22.5%`、`2026-09-18` 全变宽，表格跟着变宽。
+ * ⚠ **不加 Noto Sans SC 这类网络字体。** 中文字库一套 3~10MB，为了字形好看
+ *   让每个读者先下 5MB 是这个站最不该做的取舍 —— 只用系统自带的。
+ */
+:root {
+  --font-reading:
+    -apple-system, BlinkMacSystemFont, "Segoe UI Variable Text", "Segoe UI",
+    "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei UI", "Microsoft YaHei",
+    "Source Han Sans SC", "Noto Sans CJK SC", sans-serif;
+}
+
+/* ── 配色：中性黑白灰，没有主色 ────────────────────────────────────────
+ *
+ * ★ 这一段是**按作者在另一个项目里已经定过的调子改的**，不是 AstroPaper 原配色。
+ *   原配色是浅色 #006cac（蓝）+ 深色 #ff6b01（橙），深色边框 #ab4b08（棕）——
+ *   而作者在那边先后否掉了蓝紫（"蓝紫色和黑白搭配不好看"）、
+ *   橙棕 #b84200、朱红 #cc3300，最后落在"没有主色，选中靠加粗 + 灰色淡染 + 线"。
+ *
+ * ★ **不喜欢就改这一段，只有这一段。** 把下面两块换回原值即可：
+ *     浅色 --accent: #006cac;  深色 --accent: #ff6b01; --border: #ab4b08;
+ *
+ * 没有主色之后，"这里能点"靠的是**下划线**（主题里链接本来就带 decoration-dashed）、
+ * "这一项选中了"靠加粗 + 波浪下划线。色相不再承担信息。
+ *
+ * 浅色那组的对比度是在那边算过的（对白底）：--foreground 16.83:1、
+ * --muted-foreground 5.07:1。深色这组是照同样的道理配的中性灰阶。
+ */
+
+/* ── 两层底色：页底 / 卡片面 ──────────────────────────────────────────
+ *
+ * 原来全站只有一个 `--background`，列表项直接坐在页底上，靠上下间距分隔。
+ * 没有主色的界面里，这样做的代价是**每一块都一样重** —— 三个集合叠在首页上
+ * 时读者找不到"一条内容"的边界在哪。
+ *
+ * 加一层 `--surface` 之后层次由**明度**承担，色相仍然是零：
+ *   浅色：页底灰 #f5f5f7，卡片纯白 —— 卡片比页底**亮**（Apple 的做法）
+ *   深色：页底近黑 #16161a，卡片 #1e1e23 —— 卡片同样比页底**亮**
+ *         （深色下"越靠前越亮"是 Material 3 的高度模型；反过来做会显得凹陷）
+ *
+ * `--border-strong` 是边框的第二档，只用在**悬停 / 聚焦**上。
+ * 直接跳到 `--accent`（正文黑）在浅色下太硬，像整张卡被选中了。
+ */
+
+/* 浅色 */
+:root,
+[data-theme="light"] {
+  --background: #f5f5f7; /* 页底：中性浅灰（不带色相） */
+  --surface: #ffffff; /* 卡片 / 提示框 / 输入框的面 */
+  --foreground: #1d1d1f; /* 正文：近黑。纯黑在白底上发硬 */
+  --accent: #1d1d1f; /* 没有主色 —— 就是正文黑 */
+  --accent-foreground: #ffffff;
+  --muted: #e8e8ed;
+  --muted-foreground: #6e6e73;
+  --border: #d2d2d7;
+  --border-strong: #a1a1aa; /* 悬停 / 聚焦时的边框，比 --border 深一档 */
+  --card-shadow: 0 1px 2px rgb(0 0 0 / 0.04);
+  --card-shadow-hover: 0 6px 20px -8px rgb(0 0 0 / 0.16);
+}
+
+/* 深色 */
+[data-theme="dark"] {
+  --background: #16161a; /* 近黑，不带色相（原来那档 #212737 是偏蓝的） */
+  --surface: #1e1e23; /* 比页底亮一档 —— 深色下"靠前 = 更亮" */
+  --foreground: #f0f0f3;
+  --accent: #f0f0f3; /* 同样没有主色 */
+  --accent-foreground: #16161a;
+  --muted: #2a2a30;
+  --muted-foreground: #a3a3a9;
+  --border: #33333a; /* 原来是 #ab4b08，一圈棕边 */
+  --border-strong: #52525b;
+  /* ★ 深色下不投影，见上面 --shadow-card 那段。层次由 --surface 的明度给。 */
+  --card-shadow: none;
+  --card-shadow-hover: none;
+}

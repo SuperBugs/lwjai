@@ -1,0 +1,290 @@
+---
+import { execFileSync } from "node:child_process";
+import { existsSync, readFileSync } from "node:fs";
+import { join } from "node:path";
+import Layout from "@/layouts/Layout.astro";
+import Header from "@/components/Header.astro";
+import Main from "@/components/Main.astro";
+import Footer from "@/components/Footer.astro";
+import { classifyChanges, defaultMessage } from "./publishPlan";
+
+/**
+ * 「提交推送」—— `/_publish`，**只在 `pnpm dev` 里存在**（和 /_gate、/_share 同一条路）。
+ *
+ * 这一页只做两件事：把**这次会带上什么**摊出来给人看，然后一个按钮。
+ * 真跑 git 的是 `POST /_publish/run`（./publish-run.ts，那里写着三条不许破的）。
+ * 后台左侧菜单底部的「提交推送」链到这里（src/dev/keystaticToolbar.ts）。
+ *
+ * ★ 按钮不替人省掉"看一眼"这一步：列表就在按钮上方，提交信息可以改。
+ *   发出去就收不回来的是公网，不是这个按钮。
+ */
+
+const git = (args: string[]) =>
+  execFileSync("git", args, {
+    cwd: process.cwd(),
+    encoding: "utf8",
+    windowsHide: true,
+  });
+
+const branch = git(["branch", "--show-current"]).trim();
+const head = git(["log", "-1", "--format=%h %s"]).trim();
+// `-sb` 第一行带 ahead / behind（按上次 fetch 的远端算，不联网）。
+const aheadBehind =
+  git(["status", "-sb"]).split("\n")[0]?.replace(/^## /, "") ?? "";
+const plan = classifyChanges(git(["status", "--porcelain"]));
+
+/** 内容文件的标题：frontmatter 里的 `title:`。读不到（删了 / 不是 .md）就用路径。 */
+function titleOf(path: string): string {
+  const abs = join(process.cwd(), ...path.split("/"));
+  if (!/\.mdx?$/.test(path) || !existsSync(abs)) return path;
+  const raw = readFileSync(abs, "utf8");
+  const front = /^---\r?\n([\s\S]*?)\r?\n---/.exec(raw)?.[1] ?? "";
+  const line = /^title:\s*(.+?)\s*$/m.exec(front)?.[1];
+  if (!line) return path;
+  const s = line.trim();
+  if (s.startsWith('"') && s.endsWith('"')) {
+    try {
+      return JSON.parse(s) as string;
+    } catch {
+      return s.slice(1, -1);
+    }
+  }
+  return s.replace(/^'(.*)'$/, "$1");
+}
+
+const CODE_LABEL: Record<string, string> = {
+  "??": "新文件",
+  " M": "改动",
+  M: "改动",
+  MM: "改动",
+  " D": "删除",
+  D: "删除",
+  A: "新文件",
+  R: "改名",
+  RM: "改名并改动",
+};
+const label = (code: string) =>
+  CODE_LABEL[code] ?? CODE_LABEL[code.trim()] ?? code.trim();
+
+const rows = plan.content.map(c => ({
+  ...c,
+  title:
+    c.path === "src/data/registry.json"
+      ? "智能体与模型登记表"
+      : titleOf(c.path),
+  kind: label(c.code),
+}));
+const message = defaultMessage(
+  rows.filter(r => /\.mdx?$/.test(r.path)).map(r => r.title),
+  rows.length
+);
+---
+
+<Layout title="提交推送（仅 dev）">
+  <Header />
+  <Main
+    pageTitle="提交推送"
+    pageDesc="把内容改动提交到仓库并推到 GitHub，Cloudflare 接着构建。只在 pnpm dev 里存在。走的是和终端里手敲 git commit 完全同一条路 —— 发布闸照拦。"
+  >
+    <p class="text-muted-foreground font-mono text-sm">
+      分支 {branch} · {aheadBehind} · 最近一次提交：{head}
+    </p>
+
+    {
+      rows.length === 0 ? (
+        <div class="app-callout mt-6">
+          <p class="font-semibold">没有要发布的内容改动。</p>
+          <p class="mt-1">
+            后台存了盘的稿子会出现在这里。这不是出错 —— 是真的没有新东西。
+          </p>
+        </div>
+      ) : (
+        <section class="mt-6">
+          <h2 class="mb-2 text-lg font-semibold">
+            这次会提交的内容（{rows.length}）
+          </h2>
+          <ul class="space-y-1 font-mono text-sm">
+            {rows.map(r => (
+              <li>
+                <span class="text-muted-foreground">{r.kind}</span>
+                <span class="ms-2">{r.title}</span>
+                {r.title !== r.path && (
+                  <span class="text-muted-foreground ms-2">{r.path}</span>
+                )}
+              </li>
+            ))}
+          </ul>
+        </section>
+      )
+    }
+
+    {
+      plan.other.length > 0 && (
+        <section class="mt-6">
+          <h2 class="mb-2 text-lg font-semibold">
+            不会随这次发布提交（{plan.other.length}）
+          </h2>
+          <p class="text-muted-foreground mb-2 text-sm">
+            代码、配置、文档一类的改动，这个按钮不碰 —— 去终端处理。
+          </p>
+          <ul class="text-muted-foreground space-y-1 font-mono text-sm">
+            {plan.other.map(c => (
+              <li>
+                {label(c.code)}
+                <span class="ms-2">{c.path}</span>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )
+    }
+
+    <form class="app-card mt-8 p-5 sm:p-6" data-publish-form>
+      <label class="block text-sm font-semibold" for="publish-message">
+        提交信息
+      </label>
+      <input
+        id="publish-message"
+        name="message"
+        type="text"
+        value={message}
+        class="border-border bg-muted text-foreground rounded-app mt-2 w-full border px-3 py-2 font-mono text-sm"
+      />
+      <p class="mt-4 flex flex-wrap items-center gap-3">
+        <button
+          type="submit"
+          disabled={rows.length === 0}
+          class="border-border bg-surface hover:border-border-strong inline-flex items-center rounded-md border px-4 py-2 text-sm font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          提交并推送
+        </button>
+        <span class="text-muted-foreground text-sm">
+          先过发布闸（拦下就不提交），再推到 GitHub，然后 Cloudflare
+          构建，两三分钟后站上才有。
+        </span>
+      </p>
+    </form>
+
+    {/* 结果区：四档各自长得不一样（见 publish-run.ts 文件头），由脚本填。 */}
+    <section data-publish-result hidden class="mt-6"></section>
+  </Main>
+  <Footer />
+</Layout>
+
+<script>
+  type Result = {
+    stage: string;
+    detail?: string;
+    hint?: string;
+    commit?: string;
+  };
+
+  const TIER: Record<string, { title: string; box: string }> = {
+    pushed: { title: "✓ 推上去了", box: "app-card" },
+    "commit-failed": {
+      title: "✗ 没提交成 —— 多半是发布闸拦了",
+      box: "app-callout",
+    },
+    "push-failed": { title: "⚠ 提交成了，但没推上去", box: "app-callout" },
+    noop: { title: "没有要发布的内容改动", box: "app-note" },
+    busy: { title: "上一次还没跑完", box: "app-note" },
+  };
+
+  function render(root: HTMLElement, r: Result, httpOk: boolean) {
+    root.replaceChildren();
+    const tier = TIER[r.stage] ?? {
+      title: httpOk ? r.stage : `✗ 接口出错（${r.stage}）`,
+      box: "app-callout",
+    };
+    const box = document.createElement("div");
+    box.className = `${tier.box} p-5 sm:p-6`;
+    const h = document.createElement("p");
+    h.className = "font-semibold";
+    h.textContent = tier.title;
+    box.append(h);
+    if (r.commit) {
+      const c = document.createElement("p");
+      c.className = "mt-2 font-mono text-sm";
+      c.textContent = r.commit;
+      box.append(c);
+    }
+    if (r.hint) {
+      const p = document.createElement("p");
+      p.className = "mt-2 text-sm";
+      p.textContent = r.hint;
+      box.append(p);
+    }
+    if (r.detail) {
+      const pre = document.createElement("pre");
+      pre.className =
+        "text-muted-foreground mt-3 max-h-96 overflow-auto font-mono text-xs whitespace-pre-wrap";
+      pre.textContent = r.detail;
+      box.append(pre);
+    }
+    if (r.stage === "pushed") {
+      const p = document.createElement("p");
+      p.className = "mt-3 text-sm";
+      const a = document.createElement("a");
+      a.href = "/_share";
+      a.className = "underline decoration-1 underline-offset-4";
+      a.textContent = "去生成发到 X 的那段话 →";
+      p.append(a);
+      box.append(p);
+    }
+    root.append(box);
+    root.hidden = false;
+    root.scrollIntoView({ block: "nearest" });
+  }
+
+  const form = document.querySelector<HTMLFormElement>("[data-publish-form]");
+  const result = document.querySelector<HTMLElement>("[data-publish-result]");
+  form?.addEventListener("submit", async e => {
+    e.preventDefault();
+    if (!form || !result) return;
+    const button = form.querySelector<HTMLButtonElement>("button[type=submit]");
+    const message =
+      form.querySelector<HTMLInputElement>("#publish-message")?.value ?? "";
+    if (button) {
+      button.disabled = true;
+      button.textContent = "正在过闸、提交、推送…";
+    }
+    try {
+      const res = await fetch("/_publish/run", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-Requested-With": "lwj-publish",
+        },
+        body: JSON.stringify({ message }),
+      });
+      let payload: Result;
+      try {
+        payload = (await res.json()) as Result;
+      } catch {
+        payload = {
+          stage: `HTTP ${res.status}`,
+          detail: await res.text().catch(() => ""),
+        };
+      }
+      render(result, payload, res.ok);
+      // 推成功之后列表已经过时：两秒后重新加载，让上面那两张清单反映真实状态。
+      if (payload.stage === "pushed") {
+        window.setTimeout(() => location.reload(), 2500);
+      }
+    } catch (err) {
+      render(
+        result,
+        {
+          stage: "网络错误",
+          detail: err instanceof Error ? err.message : String(err),
+        },
+        false
+      );
+    } finally {
+      if (button) {
+        button.disabled = false;
+        button.textContent = "提交并推送";
+      }
+    }
+  });
+</script>

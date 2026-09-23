@@ -1,0 +1,54 @@
+{
+  // 牢玩家是**纯静态站**，所以这里没有 Worker 脚本、没有 @astrojs/cloudflare adapter ——
+  // 只有一条"把 dist/ 当静态资源发出去"。
+  //
+  // 为什么是 Workers 而不是 Pages：Cloudflare 对新项目推荐 Workers Static Assets，
+  // Astro 官方部署文档也是这么写的。Pages 仍然能用、也没有停用时间表，但新功能一律
+  // 先上 Workers。选 Workers 的实际好处是**以后不用重新平台化** —— 哪天要挂
+  // 动态数据，加一个 fetch handler 就行，
+  // 运行时和部署方式都不变。
+  //
+  // ⚠ 别和老的 "Workers Sites" 搞混，那个在 Wrangler v4 里已经废弃。这里用的是
+  //    Static Assets（就是下面这个 `assets` 块）。
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "lwjai",
+  "compatibility_date": "2026-09-18",
+
+  // ★【2026-09-18 首次部署实测】这两个开关**不写就是开**，而且 wrangler 每次部署都会
+  //   为此各印一条 WARNING：
+  //     ▲ Because 'workers_dev' is not in your Wrangler file, it will be enabled by default.
+  //     ▲ ...your 'preview_urls' setting is not in your Wrangler file, Preview URLs will be enabled.
+  //
+  //   ⚠ 注意 `preview_urls` 和控制台里「非生产分支构建」那个勾**不是一回事**：
+  //     那个勾管"别的分支要不要触发构建"，这个开关管"每个版本要不要额外给一个公开地址"。
+  //     取消了勾，预览地址照样开着。
+  //
+  //   关掉的理由不是安全 —— 预览和 workers.dev 跑的是同一份构建产物，发布闸照样是
+  //   `pnpm build` 的第一步，内容一样过闸。理由是**公开面**：同一份内容多挂两个主机名，
+  //   而 canonical 写死的是 lwj.ai，这两个地址在 docs 里一个字都没有。
+  "preview_urls": false,
+
+  // ⚠ `workers_dev` 现在**必须留着开**：自定义域名 lwj.ai 还没绑上，
+  //   laowanjia.<账号>.workers.dev 是这个站唯一的入口，关掉 = 没有任何路由。
+  //   **绑好 lwj.ai 并确认能访问之后**，在这里加一行 `"workers_dev": false,`
+  //   再提交推送（Git 接入会自动重新部署）。顺序反了站就下线了。
+
+  "assets": {
+    "directory": "./dist",
+
+    // 资源没命中时返回我们自己那张 404 页（dist/404.html），而不是 Cloudflare 的白页。
+    "not_found_handling": "404-page",
+
+    // 【2026-09-21】地址**不带末尾斜杠**：`/r/1002`，不是 `/r/1002/`。
+    //
+    // 默认值是 `auto-trailing-slash` —— 产物是 `dist/r/1002/index.html` 这种目录形态，
+    // 它会把 `/r/1002` **307 到 `/r/1002/`**（实测过，换编号那天 curl 看到的就是这个）。
+    // 改成 drop 之后方向反过来：`/r/1002` 直接出内容，`/r/1002/` 301 到不带斜杠那个。
+    //
+    // ⚠ 这一行和 astro.config.ts 的 `trailingSlash: "never"` 是**一对**，必须一起改：
+    //   只改 Astro = 站内链接、canonical、sitemap 全是不带斜杠的，而边缘把每一次访问
+    //   都 307 到带斜杠那个 —— 每个链接多一跳，canonical 和真实地址还对不上；
+    //   只改这里 = 边缘对了，而站自己印出来的链接全带斜杠。两种都不报错。
+    "html_handling": "drop-trailing-slash"
+  }
+}

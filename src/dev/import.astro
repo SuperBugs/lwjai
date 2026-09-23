@@ -1,0 +1,354 @@
+---
+import { existsSync, readdirSync, readFileSync } from "node:fs";
+import { join } from "node:path";
+import Layout from "@/layouts/Layout.astro";
+import Header from "@/components/Header.astro";
+import Main from "@/components/Main.astro";
+import Footer from "@/components/Footer.astro";
+import { AGENTS } from "@/config/agents";
+import { MODELS, UNSPECIFIED_MODEL } from "@/config/models";
+import { TAGS } from "@/config/tags";
+import { fillPromptPlaceholders } from "./importJson";
+
+/**
+ * 「粘贴导入」—— `/_import`，**只在 `pnpm dev` 里存在**（和 /_gate、/_share、/_publish 同一条路）。
+ *
+ * 上半截：**常用提示词**（后台「常用提示词」集合，src/data/system-prompts/*.json）。
+ *   第一条是「整理成发布用 JSON」：和智能体聊完，把它贴过去，智能体吐一份 JSON。
+ *   里面的 {{agents}} / {{models}} / {{tags}} 在这里换成当前登记表 / 标签表，
+ *   所以后台加了模型、加了标签都不用回来改提示词。
+ * 下半截：把那份 JSON 粘进来 → `POST /_import/run`（./import-run.ts）走和 CLI 同一份
+ *   planImport() 生成一条草稿 → 链到后台那一条去核对。字段不用再手填。
+ *
+ * ★ 这些提示词是给站长自己用的，不上公网，所以不过闸；产出的草稿过闸（接口里当场扫一遍，
+ *   取消草稿前 pre-commit 还会再扫）。
+ */
+
+const DIR = join(process.cwd(), "src", "data", "system-prompts");
+type SystemPrompt = {
+  slug: string;
+  title: string;
+  note: string;
+  prompt: string;
+};
+const prompts: SystemPrompt[] = existsSync(DIR)
+  ? readdirSync(DIR)
+      .filter(f => f.endsWith(".json") && !f.startsWith("_"))
+      .map(f => {
+        const slug = f.replace(/\.json$/, "");
+        const raw = JSON.parse(readFileSync(join(DIR, f), "utf8")) as Record<
+          string,
+          unknown
+        >;
+        return {
+          slug,
+          title: typeof raw.title === "string" && raw.title ? raw.title : slug,
+          note: typeof raw.note === "string" ? raw.note : "",
+          prompt: typeof raw.prompt === "string" ? raw.prompt : "",
+        };
+      })
+  : [];
+
+// 占位符只列 AI 产品和真实模型：提示词是给智能体填的，「我自己」「未标注」不是它能选的答案。
+const agentIds = AGENTS.filter(a => a.kind === "ai").map(a => ({
+  id: a.id,
+  name: a.name,
+}));
+const modelIds = MODELS.filter(m => m.id !== UNSPECIFIED_MODEL).map(m => ({
+  id: m.id,
+  name: m.name,
+}));
+const filled = prompts.map(p => ({
+  ...p,
+  text: fillPromptPlaceholders(p.prompt, agentIds, modelIds, TAGS),
+}));
+---
+
+<Layout title="粘贴导入（仅 dev）">
+  <Header />
+  <Main
+    pageTitle="粘贴导入"
+    pageDesc="先把「常用提示词」贴给智能体，让它把研究或回答整理成一份 JSON；再把那份 JSON 粘到下面，生成一条字段填好的草稿。只在 pnpm dev 里存在。"
+  >
+    <section class="mt-2">
+      <h2 class="mb-2 text-lg font-semibold">
+        常用提示词
+        <a
+          href="/keystatic/collection/systemPrompts"
+          class="text-muted-foreground ms-2 text-sm font-normal underline decoration-1 underline-offset-4"
+          >在后台增改 →</a
+        >
+      </h2>
+      {
+        filled.length === 0 ? (
+          <div class="app-note">
+            <p>一条常用提示词都没有 —— 去后台「常用提示词」加一条。</p>
+          </div>
+        ) : (
+          <ul class="space-y-4">
+            {filled.map(p => (
+              <li>
+                <article class="app-card p-5 sm:p-6" data-copy-item>
+                  <p class="font-semibold">{p.title}</p>
+                  {p.note && (
+                    <p class="text-muted-foreground mt-1 text-sm">{p.note}</p>
+                  )}
+                  <textarea
+                    readonly
+                    rows="8"
+                    data-copy-text
+                    class="border-border bg-muted text-foreground rounded-app mt-3 w-full border px-3 py-2 font-mono text-xs"
+                    set:text={p.text}
+                  />
+                  <p class="mt-3 flex flex-wrap items-center gap-2">
+                    <button
+                      type="button"
+                      data-copy-button
+                      class="border-border bg-surface hover:border-border-strong inline-flex items-center rounded-md border px-3 py-1.5 text-sm font-medium transition-colors"
+                    >
+                      复制提示词
+                    </button>
+                    <a
+                      href={`/keystatic/collection/systemPrompts/item/${p.slug}`}
+                      class="text-muted-foreground text-sm underline decoration-1 underline-offset-4"
+                    >
+                      改这一条
+                    </a>
+                    <span
+                      data-copy-status
+                      role="status"
+                      aria-live="polite"
+                      class="text-sm"
+                    />
+                  </p>
+                </article>
+              </li>
+            ))}
+          </ul>
+        )
+      }
+    </section>
+
+    <section class="mt-10">
+      <h2 class="mb-2 text-lg font-semibold">把智能体给的 JSON 粘在这里</h2>
+      <form class="app-card p-5 sm:p-6" data-import-form>
+        <textarea
+          name="json"
+          rows="14"
+          required
+          placeholder='{ "collection": "posts", "title": "…", "body": "…" }  —— 带 ```json 围栏也行'
+          class="border-border bg-muted text-foreground rounded-app w-full border px-3 py-2 font-mono text-xs"
+        ></textarea>
+        <p class="mt-4 flex flex-wrap items-center gap-3">
+          <button
+            type="submit"
+            class="border-border bg-surface hover:border-border-strong inline-flex items-center rounded-md border px-4 py-2 text-sm font-semibold transition-colors disabled:opacity-50"
+          >
+            解析并生成草稿
+          </button>
+          <span class="text-muted-foreground text-sm">
+            生成的是草稿（不上公网）；字段错了会一次全报出来。写完当场过一遍发布闸。
+          </span>
+        </p>
+      </form>
+      {/* 结果区：invalid / exists / created 三档各自长得不一样，由脚本填。 */}
+      <section data-import-result hidden class="mt-6"></section>
+    </section>
+  </Main>
+  <Footer />
+</Layout>
+
+<script>
+  // ── 复制提示词：成功 / 失败（已选中文字）两档，同 /_share ──
+  document.querySelectorAll<HTMLElement>("[data-copy-item]").forEach(item => {
+    const btn = item.querySelector<HTMLButtonElement>("[data-copy-button]");
+    const field = item.querySelector<HTMLTextAreaElement>("[data-copy-text]");
+    const status = item.querySelector<HTMLElement>("[data-copy-status]");
+    if (!btn || !field) return;
+    btn.addEventListener("click", async () => {
+      try {
+        if (!navigator.clipboard?.writeText) throw new Error("no clipboard");
+        await navigator.clipboard.writeText(field.value);
+        if (status) status.textContent = "已复制，去贴给智能体";
+        window.setTimeout(() => {
+          if (status) status.textContent = "";
+        }, 2500);
+      } catch {
+        field.focus();
+        field.select();
+        if (status)
+          status.textContent = "没复制成功 —— 已选中文字，按 Ctrl/⌘+C";
+      }
+    });
+  });
+
+  // ── 粘贴导入 ──
+  type Hit = { code: string; matched: string; context: string; why: string };
+  type Result = {
+    stage: string;
+    errors?: string[];
+    file?: string;
+    title?: string;
+    editUrl?: string;
+    notes?: string[];
+    gate?: { blocked: Hit[]; warnings: Hit[] };
+  };
+
+  const el = (tag: string, cls: string, text?: string) => {
+    const n = document.createElement(tag);
+    n.className = cls;
+    if (text !== undefined) n.textContent = text;
+    return n;
+  };
+
+  function renderHits(box: HTMLElement, title: string, hits: Hit[]) {
+    box.append(el("p", "mt-3 font-semibold", title));
+    const ul = el("ul", "mt-1 space-y-2 text-sm");
+    for (const h of hits) {
+      const li = el("li", "");
+      li.append(el("span", "font-mono font-semibold", h.code));
+      li.append(el("span", "ms-2", `命中「${h.matched}」`));
+      li.append(
+        el(
+          "pre",
+          "text-muted-foreground mt-1 font-mono text-xs whitespace-pre-wrap",
+          h.context
+        )
+      );
+      li.append(el("p", "text-muted-foreground mt-1", h.why));
+      ul.append(li);
+    }
+    box.append(ul);
+  }
+
+  function render(root: HTMLElement, r: Result, httpOk: boolean) {
+    root.replaceChildren();
+    let box: HTMLElement;
+    if (r.stage === "created") {
+      const blocked = r.gate?.blocked.length ?? 0;
+      box = el("div", `${blocked > 0 ? "app-callout" : "app-card"} p-5 sm:p-6`);
+      box.append(el("p", "font-semibold", `✓ 草稿已生成：${r.title ?? ""}`));
+      box.append(
+        el("p", "text-muted-foreground mt-1 font-mono text-sm", r.file ?? "")
+      );
+      const p = el("p", "mt-3 text-sm");
+      const a = document.createElement("a");
+      a.href = r.editUrl ?? "#";
+      a.className = "underline decoration-1 underline-offset-4 font-semibold";
+      a.textContent = "去后台核对这一条 →";
+      p.append(a);
+      p.append(
+        el(
+          "span",
+          "text-muted-foreground ms-2",
+          "核完取消「草稿」，再用左侧菜单最底下的「提交推送」。"
+        )
+      );
+      box.append(p);
+      if (r.notes && r.notes.length > 0) {
+        box.append(el("p", "mt-3 font-semibold", "要回来补的："));
+        const ul = el("ul", "mt-1 list-disc ps-5 text-sm");
+        for (const n of r.notes) ul.append(el("li", "", n));
+        box.append(ul);
+      }
+      if (blocked > 0) {
+        renderHits(
+          box,
+          "✗ 发布闸拦下了这几句 —— 取消草稿之前必须改掉（草稿本身已经写了，不上公网）",
+          r.gate!.blocked
+        );
+      }
+      if (r.gate && r.gate.warnings.length > 0) {
+        renderHits(box, "⚠ 能发，但你要知道自己写了这几句", r.gate.warnings);
+      }
+      if (r.gate && blocked === 0 && r.gate.warnings.length === 0) {
+        box.append(
+          el(
+            "p",
+            "text-muted-foreground mt-3 text-sm",
+            "发布闸：没命中已知的危险说法（不等于安全，词表必然有漏网）。"
+          )
+        );
+      }
+    } else if (r.stage === "invalid" || r.stage === "exists") {
+      box = el("div", "app-callout p-5 sm:p-6");
+      box.append(
+        el(
+          "p",
+          "font-semibold",
+          r.stage === "exists"
+            ? "✗ 没写：文件已经存在"
+            : "✗ 这份 JSON 有问题，一条都没写"
+        )
+      );
+      const ul = el("ul", "mt-2 list-disc ps-5 text-sm");
+      for (const e of r.errors ?? []) ul.append(el("li", "", e));
+      box.append(ul);
+    } else {
+      box = el("div", "app-callout p-5 sm:p-6");
+      box.append(
+        el("p", "font-semibold", httpOk ? r.stage : `✗ 接口出错（${r.stage}）`)
+      );
+      if (r.errors)
+        box.append(
+          el(
+            "pre",
+            "mt-2 font-mono text-xs whitespace-pre-wrap",
+            r.errors.join("\n")
+          )
+        );
+    }
+    root.append(box);
+    root.hidden = false;
+    root.scrollIntoView({ block: "nearest" });
+  }
+
+  const form = document.querySelector<HTMLFormElement>("[data-import-form]");
+  const result = document.querySelector<HTMLElement>("[data-import-result]");
+  form?.addEventListener("submit", async e => {
+    e.preventDefault();
+    if (!form || !result) return;
+    const button = form.querySelector<HTMLButtonElement>("button[type=submit]");
+    const json =
+      form.querySelector<HTMLTextAreaElement>("textarea[name=json]")?.value ??
+      "";
+    if (button) {
+      button.disabled = true;
+      button.textContent = "正在解析…";
+    }
+    try {
+      const res = await fetch("/_import/run", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-Requested-With": "lwj-import",
+        },
+        body: JSON.stringify({ json }),
+      });
+      let payload: Result;
+      try {
+        payload = (await res.json()) as Result;
+      } catch {
+        payload = {
+          stage: `HTTP ${res.status}`,
+          errors: [await res.text().catch(() => "")],
+        };
+      }
+      render(result, payload, res.ok);
+    } catch (err) {
+      render(
+        result,
+        {
+          stage: "网络错误",
+          errors: [err instanceof Error ? err.message : String(err)],
+        },
+        false
+      );
+    } finally {
+      if (button) {
+        button.disabled = false;
+        button.textContent = "解析并生成草稿";
+      }
+    }
+  });
+</script>

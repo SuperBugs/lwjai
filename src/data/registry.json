@@ -1,0 +1,129 @@
+{
+  "agents": [
+    {
+      "id": "spark",
+      "name": "Google Spark",
+      "vendor": "Google",
+      "note": "Google 的智能体，底下跑 Gemini 系列",
+      "icon": "gemini"
+    },
+    {
+      "id": "chatgpt",
+      "name": "OpenAI ChatGPT",
+      "vendor": "OpenAI",
+      "note": "OpenAI 的对话产品，底下跑 GPT 系列",
+      "icon": "openai"
+    },
+    {
+      "id": "claude",
+      "name": "Anthropic Claude",
+      "vendor": "Anthropic",
+      "note": "Anthropic 的智能体（Claude / Claude Code），底下跑 Opus / Sonnet",
+      "icon": "claude"
+    },
+    {
+      "id": "codex",
+      "name": "OpenAI Codex",
+      "vendor": "OpenAI",
+      "note": "OpenAI 的编码 / 研究智能体，底下跑 GPT 系列",
+      "icon": "codex"
+    }
+  ],
+  "models": [
+    {
+      "id": "gemini-3-1-pro",
+      "name": "Gemini-3.1-Pro",
+      "vendor": "Google",
+      "note": "带联网检索，长上下文",
+      "agents": [
+        "spark"
+      ]
+    },
+    {
+      "id": "gpt-6-pro",
+      "name": "GPT-6-Pro",
+      "vendor": "OpenAI",
+      "agents": [
+        "chatgpt",
+        "codex"
+      ]
+    },
+    {
+      "id": "fable-5-1",
+      "name": "Fable-5.1",
+      "vendor": "Anthropic",
+      "agents": [
+        "claude"
+      ]
+    },
+    {
+      "id": "gemini-3-pro",
+      "name": "Gemini-3-Pro",
+      "vendor": "Google",
+      "note": "带联网检索，长上下文",
+      "agents": [
+        "spark"
+      ]
+    },
+    {
+      "id": "gpt-5",
+      "name": "GPT-5",
+      "vendor": "OpenAI",
+      "agents": [
+        "chatgpt",
+        "codex"
+      ]
+    },
+    {
+      "id": "gpt-6",
+      "name": "GPT-6",
+      "vendor": "OpenAI",
+      "agents": [
+        "chatgpt",
+        "codex"
+      ]
+    },
+    {
+      "id": "claude-opus-5",
+      "name": "Opus-5",
+      "vendor": "Anthropic",
+      "agents": [
+        "claude"
+      ]
+    },
+    {
+      "id": "claude-sonnet-5",
+      "name": "Sonnet-5",
+      "vendor": "Anthropic",
+      "agents": [
+        "claude"
+      ]
+    },
+    {
+      "id": "gemini-3-flash",
+      "name": "Gemini-3-Flash",
+      "vendor": "Google",
+      "note": "快档，适合事实性问题",
+      "agents": [
+        "spark"
+      ]
+    },
+    {
+      "id": "grok-4",
+      "name": "Grok-4",
+      "vendor": "xAI",
+      "note": "接 X 的实时讨论",
+      "agents": [
+        "*"
+      ]
+    },
+    {
+      "id": "deepseek-v4",
+      "name": "DeepSeek-V4",
+      "vendor": "DeepSeek",
+      "agents": [
+        "*"
+      ]
+    }
+  ]
+}

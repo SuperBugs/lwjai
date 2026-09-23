@@ -1,0 +1,92 @@
+---
+import { getRelativeLocaleUrl } from "astro:i18n";
+import config from "@/config";
+
+type Props = {
+  pageTitle: string | [string, string];
+  pageDesc?: string;
+  class?: string;
+  /**
+   * 这一页的正文要不要进站内搜索索引。
+   *
+   * ★【2026-09-18 加，为了堵一个会自己翻转的悬崖】Pagefind 的规则是：
+   *   **全站只要有任何一页带 `data-pagefind-body`，就只索引带标记的页面；
+   *   一页都没有时，它翻过来索引每一页的整个 `<body>`** —— 页头的「跳到正文」、
+   *   侧边导航、页脚版权全进索引，而且两个方向都不报错、构建全绿。
+   *
+   *   之前全站唯一的标记在文章详情页上。把内容清空（或者哪天重构改了详情页）
+   *   就会触发翻转 —— 实测过：空站构建时 Pagefind 印
+   *   「Did not find a data-pagefind-body element」然后索引了 10 页导航文字，
+   *   筛选器也归零。
+   *
+   *   `/about` 挂上之后这件事结构上不会再发生：`about.astro` 找不到 about.md 会
+   *   直接抛错，所以这一页**永远存在**，标记也就永远存在。
+   *   顺带修掉一个既有缺陷 —— 「关于」页本来就该能被搜到，之前一直搜不到。
+   */
+  searchable?: boolean;
+};
+
+const {
+  pageTitle,
+  pageDesc,
+  class: className,
+  searchable = false,
+} = Astro.props;
+
+const locale = Astro.currentLocale ?? config.site.lang;
+const backUrl = config.features.showBackButton
+  ? Astro.url.pathname
+  : getRelativeLocaleUrl(locale, "");
+---
+
+<main
+  data-backUrl={backUrl}
+  id="main-content"
+  class:list={["app-layout pb-4", className]}
+  data-pagefind-body={searchable ? true : undefined}
+>
+  {
+    /* ── 页头：标题 + 说明 + 一条分隔线 ──────────────────────────────────
+     *
+     * ① 说明**不再是斜体**（2026-09-18 改）。
+     *    **中文没有斜体** —— 浏览器只能把方块字整体倾斜，出来的是变形的字形，
+     *    不是另一种字体。typography.css 里 h3 那条早就因为这个改掉了，
+     *    而这一处一直漏着，于是每个列表页的说明行都是一整句倾斜的中文。
+     *    要"这行比标题次一级"，用**颜色**（muted）和字号，不用倾斜。
+     *
+     * ② 说明**为空时整段不渲染**（2026-09-18 修）。
+     *    原来是无条件 `<p class="mt-2 mb-6 italic">{pageDesc}</p>` ——
+     *    `/about` 不传 pageDesc，于是那一页的标题下面挂着一个带 24px 下边距的
+     *    **空 <p>**：看起来像"这里本该有句话但没加载出来"。
+     *    和 Card.astro 里那条是同一个形态（docs/engineering-notes.md 第二节）。
+     *
+     * ③ 标题和内容之间有一条线。列表页的"页头"和"第一条内容"原来只差一个
+     *    外边距，读者要自己判断哪里是分界 —— 加一条线是内容型站点页头的
+     *    通行做法（Stripe 文档、GitHub、Apple 开发者站都是这一套）。
+     */
+  }
+  <div class="border-border mb-8 border-b pb-6">
+    <h1 class="text-3xl font-semibold tracking-tight sm:text-4xl">
+      {pageTitle}
+    </h1>
+    {
+      pageDesc && (
+        <p class="text-muted-foreground mt-3 max-w-2xl leading-relaxed">
+          {pageDesc}
+        </p>
+      )
+    }
+  </div>
+  <slot />
+</main>
+
+<script>
+  document.addEventListener("astro:page-load", () => {
+    const mainContent: HTMLElement | null =
+      document.querySelector("#main-content");
+    const backUrl = mainContent?.dataset?.backurl;
+    if (backUrl) {
+      sessionStorage.setItem("backUrl", backUrl);
+    }
+  });
+</script>

@@ -1,0 +1,491 @@
+---
+import { entryUrl } from "@/utils/getPostPaths";
+import { toTransitionName } from "@/utils/toTransitionName";
+import { readingStats } from "@/utils/readingTime";
+import { useTranslations } from "@/i18n";
+import Datetime from "./Datetime.astro";
+import ReadingTime from "./ReadingTime.astro";
+import SymbolChip from "./SymbolChip.astro";
+import AgentModelChip from "./AgentModelChip.astro";
+import AgentLogo from "./AgentLogo.astro";
+import EntryIcon from "./EntryIcon.astro";
+import type { ImageMetadata } from "astro";
+import PromptOriginChip from "./PromptOriginChip.astro";
+import Tag from "./Tag.astro";
+import { slugifyStr } from "@/utils/slugify";
+import IconArrowRight from "@/assets/icons/IconArrowRight.svg";
+import { isGroupedCollection, qaGroupKey } from "@/utils/related";
+// 折叠卡每一行的「智能体 / 模型」两个标签 —— 和 AgentModelChip 读同一份判据，
+// 只是那边画成芯片、这边画成两行文字（【2026-09-22 用户定的版式】）。
+import { agentDisplayName, findAgent } from "@/config/agents";
+import { modelSlot, modelSlotLabel } from "@/config/models";
+
+/** 拉丁字母的名字用等宽（和 AgentModelChip / SymbolChip 同一处理）：
+ *  中文名（「我自己」「来源未标注」）不套 —— 那个字体里没有汉字字形，基线会对不上。 */
+const latin = (s: string) => /^[\x20-\x7E]+$/.test(s);
+
+/**
+ * 列表项卡片。**两个集合共用一张卡**（研究稿 / 问答），所以 Props 是结构类型
+ * 而不是 `CollectionEntry<"posts">` —— 5 个调用点仍然保持 `<Card {...entry} />` 不变。
+ *
+ * ★ 只声明这张卡真的会读的字段。写成 `CollectionEntry<"posts">` 的话，
+ *   qa 条目喂进来是类型错误，而"复制一个 QaCard"意味着两张卡从此各自漂移。
+ */
+/** 折进同一张卡的一条回答（问答组，见下面 answers）。 */
+type Answer = {
+  id: string;
+  filePath?: string;
+  body?: string;
+  data: {
+    description?: string;
+    agent?: string;
+    model?: string;
+    pubDatetime: Date;
+    modDatetime?: Date | null;
+    timezone?: string;
+  };
+};
+
+type Props = {
+  variant?: "h2" | "h3";
+  id: string;
+  collection: string;
+  filePath?: string;
+  /** 原始 markdown（`entry.body`）。只用来估阅读时长；没给就不显示那一格。
+   *  ⚠ 这张卡**不渲染**它 —— 正文出站只走详情页 / RSS / .md 端点那几条路。 */
+  body?: string;
+  data: {
+    title: string;
+    description?: string;
+    /** 这一条讲哪几只票（【2026-09-22】从单个 `symbol` 换成多选）。
+     *  公司名不在这里 —— 芯片自己去标的表查（src/config/symbols.ts）。
+     *  ⚠ 可选是给**结构类型**留的口子（教程 / 提示词那两个集合没有这一格），
+     *  不是"posts / qa 可以不给"。 */
+    symbols?: string[];
+    /** 分类标签（封闭词表，后台「标签」那一页）。【2026-09-21 用户要的】
+     *  ⚠ 可选是给**结构类型**留的口子（五个调用点全都 `<Card {...entry} />`，
+     *  四个集合的 schema 里它都是 `string[]`），不是"这里可以不给"。 */
+    tags?: string[];
+    agent?: string;
+    /** 那个智能体底下跑的是哪个模型。见 src/config/models.ts。 */
+    model?: string;
+    /** 提示词：谁写的（站长 / 投稿）。见 src/config/promptOrigins.ts。 */
+    origin?: string;
+    /** 提示词：投稿人署名。 */
+    contributor?: string;
+    /** 问答：问题组的键（src/config/questionKey.ts），只用来算 transition 名。 */
+    questionKey?: string;
+    /** 标题前面那个小方块（【2026-09-23】现在只有教程有这一格，后台上传）。
+     *  没传就不画 —— 完成态，不是待补。见 src/config/entryIcon.ts。 */
+    icon?: ImageMetadata;
+    pubDatetime: Date;
+    modDatetime?: Date | null;
+    timezone?: string;
+  };
+  /**
+   * 【2026-09-20】**折叠后的问题组**：同一个问题的全部回答，新在前，第一条就是本卡的条目
+   * （`src/utils/qaGroups.ts` 的 `foldQaGroups()` 吐出来的 `answers`）。
+   *
+   * 长度 ≥ 2 → 这张卡换一个样子：问题只印一遍，底下每条回答各占一行（谁答的 · 什么模型 ·
+   * 什么时候），行尾带箭头、整行是链接。在这之前，一个问题问了两个智能体，列表上就是两张
+   * 标题一模一样的卡叠着（用户原话「看起来很冗余」）。
+   * 长度 1 或不传 → 和原来一样。
+   *
+   * ★ 传了它（哪怕长度 1），问答卡的 transition 名就按**问题组**起（`qa-group-<键>`），
+   *   和详情页 <h1> 对得上：从卡片点进去标题原地接上，在几条回答之间切换时标题也不动。
+   *   不传（详情页页脚「相关条目」里那些卡）仍按单条起名 —— 那一页的 <h1> 已经占了组名，
+   *   页脚再来一张同名卡就是重复的 view-transition-name，浏览器整个跳过动画且不报错。
+   */
+  answers?: Answer[];
+};
+
+const {
+  variant: Heading = "h2",
+  id,
+  collection,
+  data,
+  filePath,
+  body,
+  answers,
+} = Astro.props;
+const t = useTranslations(Astro.currentLocale);
+
+/** 「阅读预计 N 分钟」—— 估的（readingTime.ts）。`<Card {...entry} />` 会把 entry.body 带进来。 */
+const minutes = body !== undefined ? readingStats(body).minutes : undefined;
+
+/**
+ * 折叠卡：同一组里的几条（问答的几条回答 / 研究稿的几份研究）。
+ * 【2026-09-20】支持哪些集合由 `isGroupedCollection` 一处决定 ——
+ * 别在这里写 `collection === "qa" || collection === "posts"`，
+ * 加第三个集合时漏掉这里的症状是"那一页不折叠"，而四处全绿。
+ */
+const groupable = isGroupedCollection(collection) && answers !== undefined;
+const grouped = groupable && answers!.length > 1;
+const transitionName = toTransitionName(
+  groupable
+    ? `${collection}-group-${qaGroupKey({ id, collection, data })}`
+    : `${collection}-${id}`
+);
+
+const {
+  title,
+  description,
+  symbols = [],
+  tags = [],
+  agent,
+  model,
+  origin,
+  contributor,
+  pubDatetime,
+  modDatetime,
+  timezone,
+  icon,
+} = data;
+
+/** 标签行里有没有东西。三种芯片各自的"该不该渲染"规则不同：
+ *  标的一只都没勾就什么都不画（"这篇不讲单只票"是完成态），
+ *  标签没打就没有，AgentModelChip 在 posts / qa 上一定渲染（没标就显示「来源未标注」）。
+ *  这一行把三条规则合起来 —— 都没有时整行不要，别留一条空的 flex 行。
+ *  （提示词的作者那一格在 prompts 上一定渲染，但它在时间那一行，不在这里。） */
+const showsAgent = (collection === "posts" || collection === "qa") && !grouped;
+/** 折叠卡的那一行**长得不一样**：标的、标签和「N 个回答」在一起，
+ *  谁写的 / 什么模型在每条自己那一行上。 */
+/** 提示词的「分享者：牢玩家 / 分享者：某某（网友投稿）」【2026-09-20】不在这一行 ——
+ *  用户要的：这一格和时间排一行。它印在底下时间那一行的最前面。 */
+const hasMeta =
+  !grouped && (symbols.length > 0 || tags.length > 0 || showsAgent);
+---
+
+{
+  /**
+   * ── 版式（2026-09-18 重做）─────────────────────────────────────────────
+   *
+   * 原来是"标题 → 芯片 → 摘要"三行裸文字坐在页底上，靠 my-6 的外边距分隔。
+   * 在**没有主色**的界面里这样做的代价是每一条都一样重：首页三个集合叠起来
+   * 之后，读者得靠数行数来判断"一条内容"从哪开始到哪结束。
+   *
+   * 改成卡片，顺序是「标题 → 标签行 → 摘要 → 时间」：
+   *
+   *   ① **标签行在标题下面**（【2026-09-21 用户改的】）。在这之前标的芯片是**眉题**、
+   *      坐在标题上面（Apple Newsroom / 彭博那类资讯列表的做法：一列卡片的同一个
+   *      位置上是一列代码，扫起来是一竖列）。用户要的是先读标题 ——
+   *      而且折叠卡从一开始就是这个样子（标的印在问题下面），两种卡一页里并排着，
+   *      一个的标的在标题上、另一个在标题下，看起来像两种卡片。
+   *      行内顺序也是用户定的：**名称（标的）→ 标签 → 智能体（模型）**。
+   *   ② 时间沉到最后一行。它是**查证**用的（这篇写在盘前还是盘后），
+   *      不是扫描用的；原来夹在标题和摘要中间，把一条内容切成了两半。
+   *
+   * ★ 【2026-09-20】卡片**整块可点**（用户要的：不用瞄准标题）。做法是标题那个 `<a>`
+   *   的 `::after` 铺满整张卡（`after:absolute after:inset-0`，卡片 `relative`），
+   *   不是把整张卡包进 `<a>` —— 标签行里的 SymbolChip 和每个标签本身是链接，
+   *   链接套链接是错 HTML。代价和补法：
+   *   - 标签行整行 `relative z-10` 浮在覆盖层之上，但行本身 `pointer-events-none`、
+   *     直接子元素 `pointer-events-auto`：芯片自己的链接和悬停提示（AgentModelChip 那条
+   *     「登记表里没有这个 id」的排查线索挂在 title 上）照常，芯片之间的空当仍然是"打开这篇"。
+   *     ⚠ 标签那一段包在 `<ul class="contents">` 里（`<Tag>` 渲染的是 `<li>`，
+   *       `<div>` 里裸放 `<li>` 是错 HTML）。`display: contents` 自己不生成盒子，
+   *       但 `pointer-events` 是**继承**属性 —— `[&>*]` 给到那个 `<ul>`，
+   *       底下的 `<li>`/`<a>` 跟着继承 auto，所以标签照样点得动。
+   *   - 摘要那段文字没法选中复制了 —— 要复制去详情页，那里有「复制全文」。
+   *   悬停时边框提一档 + 标题出下划线（`group-hover`），整卡都在说"这里能点"。
+   */
+}
+<li class="my-4">
+  <article
+    class:list={[
+      "app-card group relative p-5 sm:p-6",
+      // 折叠卡整块不是一个链接（每一行回答各是一个），边框不跟着整卡悬停变。
+      !grouped && "hover:border-border-strong",
+    ]}
+  >
+    {
+      /* ★ 地址带集合，不再写死 posts —— 写死的那版对 qa 条目会算出
+        `/posts/src/content/qa/foo` 这种 404，而且构建全绿（见 getPostPaths.ts 头注释）。
+        折叠卡：标题链到最新那条回答（answers[0] 就是本条），但**不铺覆盖层** ——
+        底下每一行回答各自是链接，整卡再盖一层的话，点在两行之间的空当会开到另一条，
+        而悬停哪里都让标题出下划线，读者分不清点下去开的是哪条。 */
+    }
+    <a
+      href={entryUrl(collection, id, filePath, Astro.currentLocale)}
+      class:list={[
+        "text-accent text-lg font-semibold tracking-tight sm:text-xl",
+        // 有图标时图标和标题排成一行（图标在前），没有时和原来一样是一个块。
+        icon ? "flex items-center gap-3" : "block",
+        "underline decoration-transparent underline-offset-4",
+        "transition-[text-decoration-color] duration-150",
+        "hover:decoration-current",
+        "focus-visible:no-underline focus-visible:underline-offset-0",
+        // 整卡可点：这一层透明覆盖铺满 article（见上面那段版式说明）。
+        !grouped &&
+          "group-hover:decoration-current after:absolute after:inset-0",
+      ]}
+    >
+      {
+        /* ★ transition 名**带集合命名空间**。后台写的是扁平文件，所以
+           `qa/foo.md` 和 `posts/foo.md` 的 id 都是 "foo"：只吃 id 的那版会让
+           同一页出现重复的 view-transition-name（浏览器直接跳过整个动画），
+           跨页时还会让一条问答和一篇不相关的研究稿配对 morph。两种都不报错。
+           列表里的问答卡按问题组起名（见 Props.answers 那段）。 */
+      }
+      {
+        /* 【2026-09-23 用户要的】教程标题前面那个图标（嘉信开户挂嘉信的）。
+           没传就不画 —— 完成态，卡片和原来一字不差；三档见 src/config/entryIcon.ts。
+           ★ 放在链接**里面**：点图标和点标题是同一个动作，下划线只落在标题的字上
+             （图标是替换元素，text-decoration 画不到它身上）。
+           ★ 判据是"有没有这一格"，不是 `collection === "guides"`：
+             哪天别的集合也加了这一格，这里不用改。 */
+        icon && <EntryIcon src={icon} {collection} {id} size="card" />
+      }
+      <Heading class="text-pretty" transition:name={transitionName}>
+        {title}
+      </Heading>
+    </a>
+
+    {
+      /* 标签行，在标题**下面**（【2026-09-21 用户定的位置和顺序】）。
+         **为空时整行不渲染** —— 一个空的 flex 行会留下 gap 的高度，
+         看起来像"这里本该有个标签没加载出来"。
+         判据显式算在上面（hasMeta），不靠 CSS 的 `:empty`：
+         Astro 的模板缩进会在这个 div 里留下空白文本节点，
+         而 `:empty` 碰上空白文本节点在各浏览器上的行为并不一致。 */
+      hasMeta && (
+        <div class="pointer-events-none relative z-10 mt-2 flex flex-wrap items-center gap-x-2 gap-y-1.5 [&>*]:pointer-events-auto">
+          {symbols.map(code => (
+            <SymbolChip {code} />
+          ))}
+          {/* 标签。`<Tag>` 渲染的是 `<li>`，所以裹一层 `<ul class="contents">`：
+              盒子不生成，标签仍然是这一行的 flex 成员（见上面版式那段的 ⚠）。 */}
+          {tags.length > 0 && (
+            <ul class="contents">
+              {tags.map(tag => (
+                <Tag tag={slugifyStr(tag)} tagName={tag} size="sm" />
+              ))}
+            </ul>
+          )}
+          {/* 哪个智能体写的 / 答的、底下跑的是哪个模型 —— 一张芯片，写成「智能体（模型）」
+              （【2026-09-21】原来是并排两张）。研究稿和问答的卡片上都挂
+              （【2026-09-20】原来研究稿不挂、只在详情页上说；用户要在列表里就看到）。
+              没标就显示「来源未标注」（待补，不是空白），三档见 AgentModelChip.astro。
+              折叠卡上它不在这一行 —— 每条自己那一行上各挂一张。 */}
+          {showsAgent && <AgentModelChip {agent} {model} />}
+        </div>
+      )
+    }
+
+    {
+      /* 折叠卡：标的和标签放在标题**下面**、列表上面 ——
+         问题是这张卡的主语，先看问题，再看它讲哪只票。
+         顺序和上面单条那一行对齐（名称 → 标签 → …）。
+         一只票都没勾时这一行只剩标签；两样都没有时整行不渲染
+         （空的 flex 行会留下 gap 的高度）。
+
+         ★【2026-09-22 用户要的】这一行原来末尾还有一句「3 份报告」/「2 个回答」
+           （`t.post.takesInList` / `t.qa.answersInList`，两个词条跟着删了）。
+           删它不是嫌挤：**底下就是那几行，一行一条**，数字在那儿数得出来，
+           而这句话是同一件事的第二种说法 —— 还是要读者先读一遍、再自己对上。 */
+      grouped && (symbols.length > 0 || tags.length > 0) && (
+        <div class="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1.5">
+          {symbols.map(code => (
+            <SymbolChip {code} />
+          ))}
+          {tags.length > 0 && (
+            <ul class="contents">
+              {tags.map(tag => (
+                <Tag tag={slugifyStr(tag)} tagName={tag} size="sm" />
+              ))}
+            </ul>
+          )}
+        </div>
+      )
+    }
+
+    {
+      /* ★ 条件渲染。原来是无条件 `<p class="mt-1">{description}</p>`，
+         没有摘要时会留一个空 <p> —— 空状态被渲染成一段空白，
+         正是 docs/engineering-notes.md 第二节禁止的形态。
+         折叠卡不在这里印摘要：摘要是**每条回答**各一句，印在各自那一行里。 */
+      !grouped && description && (
+        /* 【2026-09-21 用户要的】摘要从灰字提成正文色，【2026-09-22】再加粗：
+           它是这张卡上**要人读的那一段**，而底下那一行（时长 / 时间）是附注。
+           两段一样重的话，一张卡上就没有重点。 */
+        <p class="mt-2 leading-relaxed font-semibold text-pretty">
+          {description}
+        </p>
+      )
+    }
+
+    {
+      /* ★ 显式传三个 prop，不 spread data 的剩余字段：
+         结构类型上做 rest 解构 TS 会报，而且 spread 位置**不做多余属性检查** ——
+         原来那版 symbolSource / gateWaived 全都无声地传进了 Datetime，
+         等于把这一半类型检查藏掉了。 */
+      !grouped && (
+        <div class="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1">
+          {/* 提示词必标是谁发的（分享者：牢玩家 / 分享者：某某（网友投稿）/ 分享者未标注）。
+              和 AgentModelChip 同一条理由：来源就是读者判断该不该照着用的依据。
+              排在时间前面：收投稿的模块里"谁写的"比"什么时候写的"更要紧。 */}
+          {collection === "prompts" && (
+            <PromptOriginChip {origin} {contributor} variant="inline" />
+          )}
+          {/* 【2026-09-21 用户定的顺序】阅读时长在时间**前面** —— 和折叠卡里
+              每一行的顺序对齐（出处 · 时长 · 时间）。同一个列表里两种卡片把
+              同一组信息排成两个顺序，读者得认两遍。 */}
+          {minutes !== undefined && <ReadingTime {minutes} />}
+          <Datetime {pubDatetime} {modDatetime} {timezone} precision="date" />
+        </div>
+      )
+    }
+
+    {
+      /* 折叠卡：每条回答一行 —— 左边「谁答的（什么模型） · 阅读预计几分钟」，
+         **时间靠右**；下面一行是那条回答自己的一句话摘要，行尾一个箭头，
+         **整行是链接**。行与行之间一条细线；不用卡片套卡片，那样一屏里全是框。
+         ★【2026-09-21 用户要的】时间从芯片后面挪到了这一行的右端。理由是**对齐**：
+           芯片的宽度按智能体和模型的名字变（`OpenAI ChatGPT (GPT-6-Pro)` 比
+           `Anthropic Claude (Opus-5)` 长一截），跟在它后面的时间每行起点都不一样，
+           一组三份读起来像没对齐的三段。靠右之后三个时间在同一条竖线上。
+         ★ 推到右边用的是 `ms-auto`（**不是** `justify-between`）：这一行是
+           `flex-wrap` 的，窄屏上时间会换到下一行 —— `justify-between` 在只剩一个
+           元素的那一行等于靠左，而 `ms-auto` 换行之后仍然靠右。`ms-*` 是逻辑属性，
+           RTL 下自己会翻。外层那个 `flex-1` 是**承重的**：没有它，内容盒子只有内容
+           宽度，`ms-auto` 顶到的是那个盒子的右沿而不是整行的。
+         ⚠ 时长和时间**各自是这一行的一个 flex 项，不许收进一个子 div**：
+           收进去之后那个子盒子不换行，375px 上三段挤在一行里各自**从中间断开**
+           （实测长这样：「阅读预计 14 / 分钟」「更新 / 于:」）。`whitespace-nowrap`
+           是同一件事的另一半 —— 换行只许发生在项与项之间，不许发生在词中间。
+         ★ 行里那对芯片和时间是 <div>，不是 <span>：Datetime 本身渲染的就是 <div>，
+           HTML 里 <a> 是透明内容模型，装块级元素合法，<span> 里装 <div> 不合法。 */
+      grouped && (
+        <ul class="divide-border border-border mt-3 divide-y border-t">
+          {answers!.map(answer => {
+            const answerMinutes =
+              answer.body !== undefined
+                ? readingStats(answer.body).minutes
+                : undefined;
+            /**
+             * 这一条的「谁写的」「什么模型」**两个可见标签**。
+             * 判据一个都不在这里：`agentDisplayName()` / `modelSlot()` /
+             * `modelSlotLabel()` 就是 AgentModelChip 读的那三个
+             * （`src/config/agents.ts` · `src/config/models.ts`）。
+             * 【2026-09-22】卡片这边不再画成芯片，但档位必须还是那几档。
+             */
+            const answerAgent = findAgent(answer.data.agent);
+            const answerSlot = modelSlot(answerAgent?.kind, answer.data.model);
+            const answerLabels = {
+              agentLabel: agentDisplayName(
+                answer.data.agent,
+                t.qa.unspecifiedAgent
+              ),
+              /** 登记表里查得到 = 有确定答案；查不到 / 没标都算"这一格还空着"。 */
+              agentKnown: answerAgent !== undefined,
+              modelLabel: modelSlotLabel(answerSlot, t.qa.unspecifiedModel),
+              modelKnown: answerSlot.tier === "known",
+            };
+            return (
+              <li>
+                <a
+                  href={entryUrl(
+                    collection,
+                    answer.id,
+                    answer.filePath,
+                    Astro.currentLocale
+                  )}
+                  class="group/answer hover:bg-muted -mx-2 flex items-center justify-between gap-3 rounded-md px-2 py-2.5 transition-colors"
+                >
+                  <div class="min-w-0 flex-1">
+                    {/**
+                     * 【2026-09-22 用户定的两行】
+                     *   第一行：`智能体：摘要`（摘要加粗，这一行是读者要看的）
+                     *   第二行：`模型` …… 右边是 `阅读时长` + `时间`
+                     *
+                     * ★ 这里**不再用 AgentModelChip**（用户：不需要框选）。但那两维的
+                     *   **三档判据一个字都没改**，仍然是 `agentDisplayName()` /
+                     *   `modelSlot()` + `modelSlotLabel()`（上面 answerLabels 那几行）——
+                     *   芯片和这两行现在是同一份判据的两种画法。
+                     *   自己在这儿写 `agent === "human" ? …` 那种字面量比对，
+                     *   就是 docs/engineering-notes.md 第二节点名的那件事。
+                     * ★ 芯片原来靠**边框实线 / 虚线**说"这一格填没填"。没有框之后那一档
+                     *   由**文字本身**说：填了印名字，没填印「来源未标注」/「模型未标注」，
+                     *   而且是灰的。两档仍然长得不一样 —— 别把灰色那一档也改成正文色。
+                     */}
+                    <p class="line-clamp-2 leading-relaxed text-pretty">
+                      {/* 【2026-09-22 用户要的】那个 logo。判据同芯片那边一处
+                          （agentIconSlot），这里只是另一种排法。
+                          ★ `inline-block align-[-0.15em]`：它坐在一段会换行的文字里，
+                            不是 flex 行 —— `shrink-0` 那些在这儿不起作用，
+                            靠基线偏移和字对齐。差这一下的症状是 logo 比名字高半行，
+                            一列三条看着像没对齐。
+                          ⚠【2026-09-23】是 `inline-block`，**不是 `inline`**：单色 logo
+                            画出来是个 `<span>`（CSS mask），inline 的 span 宽高不生效，
+                            那一格缩成零宽 —— OpenAI 的 logo 凭空消失，而彩色的照常。 */}
+                      <AgentLogo
+                        agent={answer.data.agent}
+                        class="me-1.5 inline-block align-[-0.15em]"
+                      />
+                      <span
+                        class:list={[
+                          "tracking-wide",
+                          answerLabels.agentKnown
+                            ? "font-medium"
+                            : "text-muted-foreground",
+                          { "font-mono": latin(answerLabels.agentLabel) },
+                        ]}
+                      >
+                        {answerLabels.agentLabel}
+                      </span>
+                      {/* 没有摘要就不留那个冒号 —— 一个后面什么都没有的「Google Spark：」
+                          看起来像这一条的摘要没加载出来。 */}
+                      {answer.data.description && (
+                        <>
+                          <span class="text-muted-foreground">：</span>
+                          <strong class="font-semibold">
+                            {answer.data.description}
+                          </strong>
+                        </>
+                      )}
+                    </p>
+                    <div class="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1">
+                      {answerLabels.modelLabel && (
+                        <span
+                          class:list={[
+                            "text-sm",
+                            answerLabels.modelKnown
+                              ? "text-muted-foreground"
+                              : // 「模型未标注」是待补那一档，和真的模型名不许长得一样。
+                                "text-muted-foreground/70 italic",
+                            { "font-mono": latin(answerLabels.modelLabel) },
+                          ]}
+                        >
+                          {answerLabels.modelLabel}
+                        </span>
+                      )}
+                      {/* 时长和时间**是一组**，一起靠右（用户定的）。包一层才不会在
+                          换行时被拆到两行的两头；`ms-auto` 而不是 justify-between，
+                          理由同下面那段（这一行是 flex-wrap 的）。 */}
+                      <span class="ms-auto flex items-center gap-x-2 whitespace-nowrap">
+                        {answerMinutes !== undefined && (
+                          <ReadingTime minutes={answerMinutes} />
+                        )}
+                        {/* 列表上只到日（用户定的）；几点几分在 hover 和详情页里。 */}
+                        <Datetime
+                          pubDatetime={answer.data.pubDatetime}
+                          modDatetime={answer.data.modDatetime}
+                          timezone={answer.data.timezone}
+                          precision="date"
+                        />
+                      </span>
+                    </div>
+                  </div>
+                  <IconArrowRight
+                    aria-hidden="true"
+                    class="text-muted-foreground group-hover/answer:text-foreground size-5 shrink-0 transition-[color,transform] group-hover/answer:translate-x-0.5 rtl:-rotate-180 rtl:group-hover/answer:-translate-x-0.5"
+                  />
+                </a>
+              </li>
+            );
+          })}
+        </ul>
+      )
+    }
+  </article>
+</li>

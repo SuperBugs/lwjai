@@ -1,0 +1,48 @@
+---
+import Layout from "@/layouts/Layout.astro";
+import Header from "@/components/Header.astro";
+import Footer from "@/components/Footer.astro";
+import LinkButton from "@/components/LinkButton.astro";
+import { getRelativeLocaleUrl } from "astro:i18n";
+import { useTranslations } from "@/i18n";
+import config from "@/config";
+
+const locale = Astro.currentLocale ?? config.site.lang;
+const t = useTranslations(locale);
+---
+
+<Layout title={`${t.notFound.title} | ${config.site.title}`}>
+  <Header />
+
+  <main
+    id="main-content"
+    class="app-layout my-1 flex flex-1 items-center justify-center"
+  >
+    {
+      /* 404 那个数字从 `text-9xl`（128px）收到 `text-7xl` 并改成灰字：
+         它是**状态码**，不是这一页要说的话 —— 原来它比站上任何一个标题
+         都大三倍，抢走了"这个地址上没有东西"这句真正有用的信息。
+         回首页那条从裸下划线文字改成按钮 —— 这一页上只有这一个出口，
+         它该长得像个出口。 */
+    }
+    <div class="mb-14 flex flex-col items-center justify-center text-center">
+      <h1 class="text-muted-foreground text-7xl font-bold tracking-tight">
+        {t.notFound.title}
+      </h1>
+      <span class="text-muted-foreground mt-2" aria-hidden="true">
+        ¯\_(ツ)_/¯
+      </span>
+      <p class="mt-6 text-2xl font-semibold tracking-tight sm:text-3xl">
+        {t.notFound.message}
+      </p>
+      <LinkButton
+        href={getRelativeLocaleUrl(locale, "")}
+        class="border-border bg-surface hover:border-border-strong rounded-app mt-8 border px-5 py-2.5 transition-colors"
+      >
+        {t.notFound.goHome}
+      </LinkButton>
+    </div>
+  </main>
+
+  <Footer />
+</Layout>

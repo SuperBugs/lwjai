@@ -1,0 +1,51 @@
+---
+import { symbolLookupLinks } from "@/config/symbolLookups";
+import { tplStr, useTranslations } from "@/i18n";
+
+/**
+ * 「去原始来源核对：SEC EDGAR · Yahoo Finance · Nasdaq」—— 直达外链。
+ *
+ * 站上每一页免责都写着「每个数字都请自己回原始来源核对」；这一行是把那条路
+ * 铺到读者脚下。表在 `src/config/symbolLookups.ts`，这里只管画。
+ *
+ * ★【2026-09-22】收的是**一串**代码（一条问答可以讲好几只票），**一只一行**。
+ *   ⚠ 两只以上时每行前面缀上代码，一只时不缀 —— 一只票的时候上下文已经说完了
+ *     是哪只（标题、芯片、上面那个小标题都在说），缀一遍是重复；
+ *     好几只票的时候不缀就成了三行一模一样的外链，读者没法知道哪行是哪只的。
+ * ★ 一只都没有时**整个组件不渲染**（`symbols` 是空数组就没有 li）——
+ *   这一条本来就不讲单只票，那是完成态。
+ *
+ * 外链一律 `target="_blank"` + `rel="noopener noreferrer"`：读者是从一篇研究中途
+ * 点出去的，回来时那一页应该还在。
+ */
+type Props = { symbols: readonly string[]; class?: string };
+
+const { symbols, class: className = "" } = Astro.props;
+const t = useTranslations(Astro.currentLocale);
+const many = symbols.length > 1;
+---
+
+{
+  symbols.map(symbol => (
+    <p class:list={["text-muted-foreground text-sm", className]}>
+      {many && (
+        <span class="font-mono font-semibold tracking-wide">{symbol} </span>
+      )}
+      <span>{t.related.lookupIntro}</span>
+      {symbolLookupLinks(symbol).map((link, index, links) => (
+        <>
+          <a
+            href={link.url}
+            target="_blank"
+            rel="noopener noreferrer"
+            title={tplStr(t.related.lookupTitle, { source: link.name, symbol })}
+            class="hover:text-foreground underline decoration-1 underline-offset-4 transition-colors"
+          >
+            {link.name}
+          </a>
+          {index < links.length - 1 && <span aria-hidden="true"> · </span>}
+        </>
+      ))}
+    </p>
+  ))
+}

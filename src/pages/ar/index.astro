@@ -1,0 +1,114 @@
+---
+import { getRelativeLocaleUrl } from "astro:i18n";
+import { getCollection } from "astro:content";
+import dayjs from "dayjs";
+import utc from "dayjs/plugin/utc";
+import timezone from "dayjs/plugin/timezone";
+import Layout from "@/layouts/Layout.astro";
+import Header from "@/components/Header.astro";
+import Breadcrumb from "@/components/Breadcrumb.astro";
+import Main from "@/components/Main.astro";
+import Footer from "@/components/Footer.astro";
+import Card from "@/components/Card.astro";
+import { getSortedPosts } from "@/utils/getSortedPosts";
+import { getPostsByGroupCondition } from "./_utils/getPostsByGroupCondition";
+import { useTranslations } from "@/i18n";
+import config from "@/config";
+
+dayjs.extend(utc);
+dayjs.extend(timezone);
+
+const locale = Astro.currentLocale ?? config.site.lang;
+
+// Redirect to 404 page if `showArchives` config is false
+const notFoundUrl = getRelativeLocaleUrl(locale, "404");
+if (!config.features.showArchives && notFoundUrl) {
+  return Astro.rewrite(notFoundUrl);
+}
+
+const t = useTranslations(locale);
+
+const posts = await getCollection("posts");
+const qaEntries = await getCollection("qa");
+const guides = await getCollection("guides");
+const prompts = await getCollection("prompts");
+
+// ★ 直接用 getSortedPosts，它一次做完两件事：postFilter（草稿 / 定时未到）
+//   和「modDatetime ?? pubDatetime 降序」。
+//
+//   【2026-09-18 侦察实测】原来这一页是 `posts.filter(postFilter)` 再在月份组里
+//   补一句按 **pubDatetime** 的就地 `.sort()`，而 RSS 和首页用的是
+//   `modDatetime ?? pubDatetime`。同一批条目在两处顺序不同，看起来就是个 bug
+//   （尤其混排两个集合之后，错位会更明显）。现在三处同一条口径。
+//
+//   顺带去掉了那句就地 `.sort()`：进来就是排好的，push 进分组时顺序自然保留 ——
+//   少一处对分组数组的原地改写，也就没有"上游数组被悄悄重排"这个隐患。
+const entries = getSortedPosts([...posts, ...qaEntries, ...guides, ...prompts]);
+
+/**
+ * 分组用的年月，**按站点时区算**。
+ *
+ * ★【2026-09-18 侦察实测】原来用的是 `pubDatetime.getFullYear()` /
+ *   `.getMonth()` —— 那是**跑构建那台机器的本地时区**，而卡片上的时间走
+ *   `dayjs(...).tz(config.site.timezone)`（`Datetime.astro`）。
+ *   一条 `2025-12-31T20:00Z` 的条目在 CI（UTC）上被分进「2025 年 12 月」，
+ *   而卡片上写的是「2026年1月1日 04:00 北京时间」：分组标题和它下面那行时间
+ *   差一年，而且构建全绿、本机和 CI 还会给出不同的产物。
+ *   现在和 `Datetime.astro` 同一条口径（同一个 dayjs + utc + timezone 插件）。
+ */
+const zoned = (date: Date) => dayjs(date).tz(config.site.timezone);
+
+const monthFormatter = new Intl.DateTimeFormat(locale, { month: "long" });
+---
+
+<Layout title={`${t.pages.archivesTitle} | ${config.site.title}`}>
+  <Header />
+
+  <Breadcrumb />
+
+  <Main pageTitle={t.pages.archivesTitle} pageDesc={t.pages.archivesDesc}>
+    {
+      Object.entries(
+        getPostsByGroupCondition(entries, entry =>
+          zoned(entry.data.pubDatetime).year()
+        )
+      )
+        .sort(([yearA], [yearB]) => Number(yearB) - Number(yearA))
+        .map(([year, yearGroup]) => (
+          <div>
+            <span class="text-2xl font-bold">{year}</span>
+            <sup class="text-muted-foreground text-sm">{yearGroup.length}</sup>
+            {Object.entries(
+              getPostsByGroupCondition(
+                yearGroup,
+                // dayjs 的 month() 是 0 起的，和 Date.getMonth() 一样。
+                entry => zoned(entry.data.pubDatetime).month() + 1
+              )
+            )
+              .sort(([monthA], [monthB]) => Number(monthB) - Number(monthA))
+              .map(([month, monthGroup]) => (
+                <div class="flex flex-col sm:flex-row">
+                  <div class="mt-6 min-w-36 text-lg sm:my-6">
+                    <span class="font-bold">
+                      {monthFormatter.format(
+                        new Date(2000, Number(month) - 1, 1)
+                      )}
+                    </span>
+                    <sup class="text-muted-foreground text-xs">
+                      {monthGroup.length}
+                    </sup>
+                  </div>
+                  <ul>
+                    {monthGroup.map(entry => (
+                      <Card {...entry} />
+                    ))}
+                  </ul>
+                </div>
+              ))}
+          </div>
+        ))
+    }
+  </Main>
+
+  <Footer />
+</Layout>

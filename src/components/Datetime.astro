@@ -1,0 +1,98 @@
+---
+import dayjs from "dayjs";
+import utc from "dayjs/plugin/utc";
+import timezone from "dayjs/plugin/timezone";
+import config from "@/config";
+import { dateFormatWithZone, useTranslations } from "@/i18n";
+
+dayjs.extend(utc);
+dayjs.extend(timezone);
+
+type Props = {
+  class?: string;
+  size?: "sm" | "lg";
+  /** 屏幕上印到哪一位。默认到秒；列表卡片传 `"date"`（只到日）。见下面那段。 */
+  precision?: "full" | "date";
+  pubDatetime: string | Date;
+  timezone?: string;
+  modDatetime?: string | Date | null;
+};
+
+const {
+  pubDatetime,
+  modDatetime,
+  size = "sm",
+  precision = "full",
+  class: className = "",
+  timezone: postTimezone,
+} = Astro.props;
+
+const t = useTranslations(Astro.currentLocale);
+
+const isModified = modDatetime && modDatetime > pubDatetime;
+
+const datetime = dayjs(isModified ? modDatetime : pubDatetime).tz(
+  postTimezone ?? config.site.timezone
+);
+
+/**
+ * ★【2026-09-21 用户定的】屏幕上印**裸时间**，时区名只在 hover 时出现
+ * （`title`）。全站每一条时间都从这里出去，所以这两行就是"印什么"的唯一判据。
+ *
+ * ⚠ `title` 在触屏上不出现 —— 那是这个决定自带的代价，不是坏了。机器那一侧另有
+ *   答案：`<time datetime>` 里是完整的 ISO 时刻（带 Z），抓取方和读屏都读它。
+ *   真要给触屏补一个，别在这儿写第二套格式串，走 `dateFormatWithZone()`。
+ */
+/**
+ * 屏幕上印到哪一位（【2026-09-22 用户定的】）：
+ *
+ *   `full`（默认）—— `2026/09/22 10:00:00`，详情页用
+ *   `date`         —— `2026/09/22`，**列表卡片用**：一屏十几条，时分秒在每行末尾
+ *                     重复而挑内容时用不上，具体到几点是点进去之后的事
+ *
+ * ⚠ 两档只换**屏幕上那一行**。`title` 和 `<time datetime>` 一律是完整的
+ *   （见下面 titleText）—— 短的那一档不是"这条内容只精确到天"，
+ *   而是"这里不必印那么细"，两者不许在机器那一侧也变成一样。
+ */
+const date = datetime.format(
+  precision === "date" ? t.post.dateOnlyFormat : t.post.dateFormat
+);
+const dateWithZone = datetime.format(dateFormatWithZone(t.post));
+/**
+ * hover / 读屏拿到的整句：**「发布于」还是「更新于」＋ 带时区的完整时刻**。
+ *
+ * 【2026-09-21 用户要的】屏幕上那个「更新于:」删掉了。两档因此在视觉上并成了
+ * 一个日期 —— 那正是这个仓库不许发生的事，所以那两个词没有被删，只是换了出口。
+ * ⚠ 这是**唯一**还在区分两档的人类可读出口（机器那侧是 `<time datetime>`，
+ *   但它只有时刻、没有"这是哪一种时间"）。别顺手把它也简化成 `dateWithZone`。
+ */
+const titleText = `${isModified ? t.post.updatedAt : t.post.publishedAt} ${dateWithZone}`;
+---
+
+<div
+  class:list={["text-muted-foreground flex items-center gap-x-2", className]}
+>
+  {
+    /* ★【2026-09-21 用户要的】日历图标整块删了（原来是 `IconCalendar`）。
+       它不带信息：改过的那一档前面有「更新于:」，没改过的就是一个日期，
+       图标两档都一样。上游 AstroPaper 那一版每条卡片就靠它起一行，
+       这个站的卡片上它只是在芯片旁边多一个色块。
+       ⚠ 图标没了之后，这一行**唯一的语义仍在 `<time>` 上**（datetime + title），
+         不是靠那个图标 —— 别为了"看得出这是时间"再塞一个装饰回来。 */
+  }
+  {
+    /* ★【2026-09-21 用户要的】屏幕上那个「更新于:」**整块删了**。
+       ⚠ 但「这是发布时间」和「这是更新时间」**仍然是两档，不许在所有出口上都
+         长得一样** —— 删掉标签之后，屏幕上一个日期不再说明自己是哪一种，
+         所以那两个词挪进了 `title`（hover 和读屏能拿到），和这个站处理时区名
+         同一个做法：屏幕上印裸的，完整那份收进 title。
+         `siteTimezone.test.ts` 钉着 title 里仍然有带时区那一版。 */
+  }
+  <time
+    class:list={["text-sm", { "sm:text-base": size === "lg" }]}
+    datetime={datetime.toISOString()}
+    title={titleText}
+  >
+    {date}
+  </time>
+</div>

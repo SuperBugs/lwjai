@@ -1,0 +1,623 @@
+---
+import { getCollection } from "astro:content";
+import Layout from "@/layouts/Layout.astro";
+import Header from "@/components/Header.astro";
+import Main from "@/components/Main.astro";
+import Footer from "@/components/Footer.astro";
+import { getSortedPosts } from "@/utils/getSortedPosts";
+import { foldQaGroups } from "@/utils/qaGroups";
+import { entrySlug, entryUrl } from "@/utils/getPostPaths";
+import {
+  xIntentUrl,
+  xPostText,
+  xWeightedLength,
+  X_LIMIT,
+} from "@/utils/sharePost";
+import { agentProductName, findAgent } from "@/config/agents";
+import { symbolNames } from "@/config/symbols";
+import {
+  CONTENT_COLLECTIONS,
+  requireCollectionSpec,
+} from "@/config/collections";
+import { communityPost } from "@/utils/communityPost";
+import {
+  ACTIVE_PLATFORMS,
+  RETIRED_PLATFORMS,
+  type SocialPlatform,
+} from "@/config/socialPlatforms";
+import { beijingDate, bylineOf } from "./xhsEntry";
+import { useTranslations } from "@/i18n";
+import type { ShareKind } from "@/utils/sharePost";
+import config from "@/config";
+
+/**
+ * 发帖文案 —— `/_share`，**只在 `pnpm dev` 里存在**（和 /_gate 同一条路：
+ * astro.config.ts 里按 isDev 用 injectRoute 挂上，文件不在 src/pages 下，
+ * 生产构建里没有这条路由）。
+ *
+ * 每一条已发布的内容各生成一段发到 X 的话（src/utils/sharePost.ts），
+ * 一键复制，或者直接点「打开 X 发帖」—— x.com 的 intent 链接会把文字预填进发帖框。
+ * 后台左侧菜单里那条「发帖文案」（src/dev/keystaticToolbar.ts）就是链到这里的：
+ * 在编辑某一条时它带着 `#<集合>/<slug>` 锚点，落到对应那一条上。
+ *
+ * ## 【2026-09-23 用户定的】发三个地方：X ＋ 雪球 ＋ 富途牛牛
+ *
+ * 小红书停用（图上印了完整网址 ＋ 队列批量发，细则里都是明写的违规），
+ * 用户决定不再发。平台表和每一条的理由在 `src/config/socialPlatforms.ts`，
+ * 雪球 / 富途那套文案在 `src/utils/communityPost.ts`。
+ *
+ * ★ **三家都没有官方发帖接口**（富途 OpenAPI 只有交易和行情；雪球那些
+ *   `xq_a_token` 的接口是读数据的）。所以这一页只出字 ——「最后一下人自己按」
+ *   不是偷懒，拿 cookie / 无头浏览器替人按发送正是这次被封的那个形状。
+ * ⚠ 只有 X 有**官方的预填地址**（intent 链接），另外两家点过去只是开站点，
+ *   字还得自己粘 —— 按钮上的措辞两档不一样，别顺手统一成「打开 X 发帖」。
+ *
+ * ## 【2026-09-21 用户要的】四个集合都能发
+ *
+ * 在这之前只有研究稿和问答。教程和提示词一样有公开地址、一样值得发一条 ——
+ * 漏掉它们没有任何理由，只是当初先做了前两个。
+ *
+ * ★ 集合名单**从登记表推**（`CONTENT_COLLECTIONS` 里 `urlPrefix !== null`），
+ *   不在这儿写死四个字符串。下面那个自检把两边对起来：加第五个有详情路由的集合时，
+ *   这一页会**当场抛**并说出漏了哪个 —— 而漏掉的症状本来是零：
+ *   那个集合的内容在这一页上根本不出现，页面照常渲染、一句话都不说。
+ *
+ * ## 三档，不压
+ *
+ *   - 已发布：有公开地址，生成文案。
+ *   - 草稿：**没有**公开地址（postFilter 不放行、页面不生成），发出去就是 404 ——
+ *     所以单独列出来说明，不生成文案，不是"跳过"。
+ *   - 一条都没有：说出来，别留一个空页面。
+ *
+ * 出处那一行的判据和站上芯片同一个：findAgent 的 kind（帖子里只印产品名，见 voiceOf）。
+ */
+
+const locale = config.site.lang;
+
+/**
+ * ⚠ `getCollection()` 要的是**字面量**集合名（它的类型和虚拟模块都按名字来），
+ *   所以这四行没法从登记表推 —— 和 keystatic.config.ts 里那几行 `import.meta.glob`
+ *   同一个限制、同一个补法：写出来，然后**反过来对账**。
+ */
+const posts = await getCollection("posts");
+const qa = await getCollection("qa");
+const guides = await getCollection("guides");
+const prompts = await getCollection("prompts");
+
+const SHARED: Record<ShareKind, { collection: string }[]> = {
+  posts,
+  qa,
+  guides,
+  prompts,
+};
+
+{
+  const routed = CONTENT_COLLECTIONS.filter(c => c.urlPrefix !== null).map(
+    c => c.key
+  );
+  const missing = routed.filter(k => !(k in SHARED));
+  if (missing.length > 0) {
+    throw new Error(
+      `/_share 漏了集合：${missing.join(" / ")}。\n` +
+        `上面补一行 getCollection("<集合>") 并加进 SHARED —— ` +
+        `漏掉的那个集合在这一页上根本不出现，而页面照常渲染、一句话都不说。`
+    );
+  }
+}
+
+// getSortedPosts = postFilter：草稿不进来；dev 里未到时间的进来（docs/engineering-notes.md 坑 1）。
+type Entry =
+  | (typeof posts)[number]
+  | (typeof qa)[number]
+  | (typeof guides)[number]
+  | (typeof prompts)[number];
+const all: Entry[] = [...posts, ...qa, ...guides, ...prompts];
+const published: Entry[] = getSortedPosts(all);
+const drafts: Entry[] = all.filter(e => e.data.draft === true);
+
+/**
+ * 【2026-09-21】同一个问题 / 同一个选题**折成一段文案**。
+ *
+ * ★ 钥匙是 `foldQaGroups()` —— 和 /qa、首页、/s、/tags 那些列表卡片、以及详情页
+ *   那排切换**同一把**（`related.ts` 的 `qaGroupKey()`）。在这儿另写一套
+ *   "标题一样就算一组"的判据，症状是站上折了、发帖没折（或者反过来），而四处全绿。
+ * ★ `answers` 是无损的：加起来仍等于 published 的条数，所以下面两个数都报出来 ——
+ *   「发了几条内容」和「要发几段文案」是两件事，压成一个数的话，
+ *   合并这件事在屏幕上就完全看不出来了。
+ */
+const groups = foldQaGroups(published);
+
+const absoluteUrl = (entry: Entry) =>
+  new URL(
+    entryUrl(entry.collection, entry.id, entry.filePath, locale),
+    config.site.url
+  ).href;
+
+/** 这一格在这个集合的 schema 里有没有。教程 / 提示词没有 agent / model。 */
+const field = (entry: Entry, key: string): string | undefined => {
+  const data = entry.data as Record<string, unknown>;
+  const value = data[key];
+  return typeof value === "string" && value !== "" ? value : undefined;
+};
+
+/**
+ * 条目讲的那几只票，**名字从标的表查好**再交给文案（`symbolNames()` 是全站唯一判据，
+ * 站上那张芯片、分享卡读的是同一个）。【2026-09-22】
+ *
+ * 挡一道 `Array.isArray` 的理由同下面的 `tagsOf`：这一页上 `Entry` 是四个集合的
+ * 联合类型，而教程 / 提示词**根本没有这一格** —— 那时该当成"没有标的"，不是让整页抛。
+ */
+const symbolsOf = (entry: Entry) => {
+  const value = (entry.data as Record<string, unknown>).symbols;
+  return Array.isArray(value)
+    ? value.filter(c => typeof c === "string").map(symbolNames)
+    : [];
+};
+
+/**
+ * 条目的标签。四个集合的 schema 里它都是 `z.array(z.string())`（`tagsField()`），
+ * 所以正常情况下永远是数组 —— 这里仍然自己挡一道，是因为这一页上 `Entry` 是四个
+ * 集合的联合类型，读的又是 `data` 这个宽对象：哪天加了个没有 tags 的集合，
+ * 这里该**当成没有标签**，不是让整页抛。
+ */
+const tagsOf = (entry: Entry): string[] => {
+  const value = (entry.data as Record<string, unknown>).tags;
+  return Array.isArray(value) ? value.filter(t => typeof t === "string") : [];
+};
+
+/**
+ * 一条内容的出处。判据和站上那张芯片同一份：`findAgent` 的 `kind`。
+ *
+ * ★【2026-09-21 用户要的】帖子里只印**产品名**（`ChatGPT` / `Claude` / `Spark`），
+ *   厂商那一段由 `agentProductName()` 剪掉，**模型名整个不进帖子** ——
+ *   理由是 280 的账，写在 sharePost.ts 文件头那一节。
+ *   ⚠ 所以这里不再算 `modelSlot`：算了不用等于留一格没人读的数据，
+ *     下一个人会以为模型名在帖子里出现过而去找它为什么没印。
+ *     模型那一维在站上（AgentModelChip）、.md 导出口、搜索索引里一个都没少。
+ *
+ * ★ 教程 / 提示词的 schema 里**压根没有 agent 那一格**，所以它们恒为 undefined，
+ *   文案那边走"不写出处"那一支（`全文：…`）。这正是想要的：对着一篇没标作者的
+ *   教程说「由 X 生成」是替它认领出身（docs/engineering-notes.md 第二节）。
+ *   ⚠ 提示词那一格叫 `origin`（**谁发的**：站长 / 投稿），不是"谁写的" ——
+ *     别顺手把它拿来当署名：一条帖子写着「由 某某 生成」而那人只是转发的，
+ *     就是把投稿人说成了作者。落地页上那一格说得清清楚楚，帖子里不说不算漏。
+ */
+const voiceOf = (entry: Entry) => {
+  const agent = findAgent(field(entry, "agent"));
+  return {
+    description: entry.data.description,
+    // 只有 AI 智能体才署名；人写的 / 没标的不写出处（判 kind，不比 id）。
+    agentName:
+      agent?.kind === "ai"
+        ? agentProductName(agent.name, agent.vendor)
+        : undefined,
+  };
+};
+
+const t = useTranslations(locale);
+
+/**
+ * 页面上那一排平台。**X 不在 `SOCIAL_PLATFORMS` 那张表里**，是刻意的：
+ * 它的每一条规矩（280 加权、cashtag、标签拼进正文、模型名剪掉）都由
+ * `sharePost.ts` 自己端到端管着，把其中几格抄进那张表就是同一个答案落在两处 ——
+ * 坑 8 / 坑 22 那个形态。这里只借它一个 id 和名字来排这一排按钮。
+ */
+const X_TAB = { id: "x", name: "X" };
+const TABS = [
+  X_TAB,
+  ...ACTIVE_PLATFORMS.map(p => ({ id: p.id, name: p.name })),
+];
+
+/**
+ * 「这一条发到某个社区平台」的那段字。
+ *
+ * ⚠ 落款用的是 **`bylineOf()` 的整串**「OpenAI ChatGPT（GPT-6-Pro）」，
+ *   不是下面 `voiceOf()` 里那个只剩产品名的 `agentProductName()` ——
+ *   后者剪掉厂商和模型的理由是 **X 的 280 字预算**，而雪球 / 富途是长文平台，
+ *   根本没有那个约束。照抄一个不适用的取舍，代价是帖子上少了一维信息而四处全绿
+ *   （封面卡那边 2026-09-22 已经犯过一次，`xhsCard.ts` 的 F9 钉着别抄回去）。
+ */
+const communityFor = (
+  entry: Entry,
+  answers: Entry[],
+  url: string,
+  platform: SocialPlatform
+) =>
+  communityPost(
+    {
+      kindLabel: requireCollectionSpec(entry.collection).label,
+      title: entry.data.title,
+      symbols: symbolsOf(entry),
+      voices: answers.map(a => ({
+        description:
+          typeof a.data.description === "string" ? a.data.description : "",
+        label: bylineOf(a.collection, a.data, t),
+      })),
+      date: beijingDate(entry.data as Record<string, unknown>),
+      url,
+    },
+    platform
+  );
+
+const items = groups.map(({ entry, answers }) => {
+  const collection = entry.collection as ShareKind;
+  const url = absoluteUrl(entry);
+  const text = xPostText({
+    kind: collection,
+    title: entry.data.title,
+    url,
+    // 【2026-09-21 用户要的】公司中英文名进第一行 —— 标题只是个代码时，
+    // 那一行原来一个汉字都没有（`$NOK NOK`）。去重规矩在 sharePost.ts 的 headLine()。
+    // 【2026-09-22】改成一串：勾了好几只票时那一行只印 cashtag，名字不印（预算，见那边）。
+    symbols: symbolsOf(entry),
+    // 新在前 —— foldQaGroups 已经按这个顺序收好了，这里不再排一次。
+    voices: answers.map(voiceOf),
+    // 【2026-09-21 用户要的】末尾补一行话题标签。
+    // ★ 用**代表那条**（标题、链接的那条）的标签，不把全组的并起来 ——
+    //   并起来就是替这条帖子挂上另一份研究才有的话题。取几个、为什么，见 sharePost.ts。
+    tags: tagsOf(entry),
+  });
+  /**
+   * ★ 组里**每一条**的 key 都要留在卡片上。后台编辑页左侧菜单里那条「发帖文案」
+   *   按钮链过来是 `/_share#<集合>/<slug>`，带的是**那一条**的 slug ——
+   *   折叠之后有些条目不再是代表，只认代表的 id 的话，从那几条点过来
+   *   会落在页面顶上什么都不发生，而按钮照常能点、零报错。
+   */
+  const keys = answers.map(
+    a =>
+      `${a.collection}/${entrySlug(a.collection, a.id, a.filePath).replace(/^\/+/, "")}`
+  );
+  return {
+    key: keys[0]!,
+    keys: keys.join(" "),
+    collection,
+    // 集合的中文名从**登记表**取（研究稿 / 问答 / 教程 / 提示词），不在这儿写死 ——
+    // 写死的那版加一个集合就会给它印上另一个集合的名字，而页面照常渲染。
+    label: requireCollectionSpec(collection).label,
+    title: entry.data.title,
+    /** 组里几份。1 = 只写过一份，不显示角标。 */
+    count: answers.length,
+    countLabel: `${answers.length} ${collection === "qa" ? "个回答" : "份报告"}`,
+    url,
+    text,
+    length: xWeightedLength(text),
+    intent: xIntentUrl(text),
+    /**
+     * 每个平台一块。⚠ **一次全渲染出来、靠 `hidden` 切**，不是点了才去取：
+     * 这是 dev 页，十几条内容，省下的那点渲染换不来一个会转圈、会失败的异步。
+     */
+    blocks: [
+      {
+        id: "x",
+        name: "X",
+        text,
+        /** X 有官方的预填地址，点过去发帖框里字已经在了 —— 另外两家没有。 */
+        action: xIntentUrl(text),
+        actionLabel: "打开 X 发帖 ↗",
+        meta: `${xWeightedLength(text)} / ${X_LIMIT}`,
+        note: undefined as string | undefined,
+      },
+      ...ACTIVE_PLATFORMS.map(p => {
+        const post = communityFor(entry, answers, url, p);
+        return {
+          id: p.id,
+          name: p.name,
+          /** 标题和正文是**两格**（这两家都有独立的标题栏），中间空一行隔开。 */
+          text: `${post.title}\n\n${post.body}`,
+          action: p.siteUrl,
+          // ⚠ 措辞和 X 那条**刻意不一样**：这两家没有预填地址，点过去只是开站点，
+          //   字还得自己粘。写成「打开雪球发帖」就是许了一个它做不到的事。
+          actionLabel: `打开${p.name}（粘进去）↗`,
+          meta:
+            post.titleOver === undefined
+              ? `标题 ${[...post.title].length} 字`
+              : `标题 ${[...post.title].length} 字 · 超出上限 ${post.titleOver} 字`,
+          /**
+           * ⚠ 这一句把「没核过的数」摆到屏幕上。一个猜出来的上限长得像已知事实，
+           *   正是 docs/engineering-notes.md 第三节那个 `SC 13D` 的形态。
+           */
+          note: p.calibrated ? undefined : p.calibrationNote,
+        };
+      }),
+    ],
+  };
+});
+---
+
+<Layout title="发帖文案（仅 dev）">
+  <Header />
+  <Main
+    pageTitle="发帖文案"
+    pageDesc="每条已发布的内容（研究报告 / 问答 / 教程 / 提示词）各生成一段发到 X / 雪球 / 富途牛牛的话。只在 pnpm dev 里存在。复制，然后去那边粘上 —— 这三家都没有官方的发帖接口，最后一下人自己按。"
+  >
+    {
+      /* 两个数都报：「发了几条内容」和「要发几段文案」是两件事。
+         压成一个数的话，"同一个问题折成了一段"这件事在屏幕上完全看不出来。 */
+    }
+    <p class="text-muted-foreground font-mono text-sm">
+      已发布 {published.length} 条 · 合并成 {items.length} 段文案 · 草稿 {
+        drafts.length
+      } 条
+    </p>
+
+    {
+      items.length === 0 && (
+        <div class="app-callout mt-4">
+          <p class="font-semibold">还没有已发布的内容。</p>
+          <p class="mt-1">草稿没有公开地址，发不了 —— 先在后台取消草稿。</p>
+        </div>
+      )
+    }
+
+    {
+      /* ── 发到哪儿（【2026-09-23 用户定的】小红书停用之后换的两家）──────────
+         ★ 判据全在 `src/config/socialPlatforms.ts`，这儿只排按钮。
+         ★ 停用的那个**留在页面上并说出原因** —— 静默消失的话，
+           「这个站不发小红书了」和「小红书那块坏了」长得一模一样。 */
+    }
+    {
+      items.length > 0 && (
+        <div class="border-border bg-surface mt-6 rounded-md border p-3">
+          <div class="flex flex-wrap items-center gap-2">
+            <span class="text-muted-foreground text-sm">发到</span>
+            {TABS.map(tab => (
+              <button
+                type="button"
+                data-share-tab={tab.id}
+                class="border-border bg-surface hover:border-border-strong inline-flex items-center rounded-md border px-3 py-1.5 text-sm font-medium transition-colors"
+              >
+                {tab.name}
+              </button>
+            ))}
+          </div>
+          {RETIRED_PLATFORMS.map(p => (
+            <p class="text-muted-foreground mt-2 text-xs leading-relaxed">
+              <strong>{p.name}：已停用。</strong>
+              {p.modeWhy}
+            </p>
+          ))}
+        </div>
+      )
+    }
+
+    <ul class="mt-6 space-y-6" data-share-list>
+      {
+        items.map(item => (
+          <li>
+            <article
+              id={item.key}
+              data-share-keys={item.keys}
+              class="app-card p-5 sm:p-6"
+              data-share-item
+            >
+              <p class="mb-3 flex flex-wrap items-baseline gap-x-3 gap-y-1">
+                <span class="text-muted-foreground text-sm">{item.label}</span>
+                <a
+                  href={item.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  class="font-semibold underline decoration-1 underline-offset-4"
+                >
+                  {item.title}
+                </a>
+                {/* 折了才挂角标。只有一份时挂一个「1 个回答」是噪音 —— 那是完成态。 */}
+                {item.count > 1 && (
+                  <span class="border-border text-muted-foreground rounded-md border px-2 py-0.5 text-xs">
+                    {item.countLabel}合并
+                  </span>
+                )}
+              </p>
+              {item.blocks.map(block => (
+                <div data-share-block={block.id} hidden>
+                  {/* 只读文本框：复制失败时脚本会把它选中，让人按 Ctrl/⌘+C。
+                      ★ 用 set:text 而不是把文字写在标签中间：prettier 会把它换行缩进，
+                        而 <textarea> 里的缩进空格是**内容**，复制出去每行前面都会多一串空格。 */}
+                  <textarea
+                    readonly
+                    rows="8"
+                    data-share-text
+                    class="border-border bg-muted text-foreground rounded-app w-full border px-3 py-2 font-mono text-sm"
+                    set:text={block.text}
+                  />
+                  <p class="mt-3 flex flex-wrap items-center gap-2">
+                    <button
+                      type="button"
+                      data-share-copy
+                      class="border-border bg-surface hover:border-border-strong inline-flex items-center rounded-md border px-3 py-1.5 text-sm font-medium transition-colors"
+                    >
+                      复制
+                    </button>
+                    <a
+                      href={block.action}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      class="border-border bg-surface hover:border-border-strong inline-flex items-center rounded-md border px-3 py-1.5 text-sm font-medium no-underline transition-colors"
+                    >
+                      {block.actionLabel}
+                    </a>
+                    <span class="text-muted-foreground text-sm">
+                      {block.meta}
+                    </span>
+                    <span
+                      data-share-status
+                      role="status"
+                      aria-live="polite"
+                      class="text-sm"
+                    />
+                  </p>
+                  {/* ⚠ 没核过的那几个数必须在屏幕上自报家门，见 socialPlatforms.ts。 */}
+                  {block.note && (
+                    <p
+                      class="mt-2 text-xs leading-relaxed"
+                      style="color:#a16207"
+                    >
+                      ⚠ 这个平台有没核对过的参数：{block.note}
+                    </p>
+                  )}
+                </div>
+              ))}
+            </article>
+          </li>
+        ))
+      }
+    </ul>
+
+    {
+      drafts.length > 0 && (
+        <section class="mt-10">
+          <h2 class="mb-2 text-lg font-semibold">
+            草稿（没有公开地址，发不了）
+          </h2>
+          <ul class="text-muted-foreground space-y-1 font-mono text-sm">
+            {drafts.map(d => (
+              <li>{d.data.title}</li>
+            ))}
+          </ul>
+        </section>
+      )
+    }
+  </Main>
+  <Footer />
+</Layout>
+
+<script>
+  /**
+   * 发到哪个平台 —— 一排按钮切换，每张卡片里每个平台各有一块，
+   * 只显示选中那一块（判据在 `src/config/socialPlatforms.ts`，这儿只管显示）。
+   *
+   * ★ 记在 localStorage，**三档**：没选过 / 选了某一个 / 存的那个已经不在了
+   *   （平台表改了、或者那个平台停用了）。第三档回落到第一个标签，
+   *   而不是让整页一块都不显示 —— 那会长得像"文案没生成出来"。
+   */
+  const TAB_KEY = "lwj-share-platform";
+
+  function tabIds(): string[] {
+    return [...document.querySelectorAll<HTMLElement>("[data-share-tab]")].map(
+      b => b.dataset.shareTab ?? ""
+    );
+  }
+
+  function showTab(id: string) {
+    for (const btn of document.querySelectorAll<HTMLElement>(
+      "[data-share-tab]"
+    )) {
+      const on = btn.dataset.shareTab === id;
+      // 选中态**不只靠颜色**：aria-pressed 给读屏，粗体 + 实心边框给眼睛。
+      btn.setAttribute("aria-pressed", String(on));
+      btn.style.fontWeight = on ? "700" : "";
+      btn.style.borderColor = on ? "currentColor" : "";
+    }
+    for (const block of document.querySelectorAll<HTMLElement>(
+      "[data-share-block]"
+    )) {
+      block.hidden = block.dataset.shareBlock !== id;
+    }
+    try {
+      localStorage.setItem(TAB_KEY, id);
+    } catch {
+      // 存不住不影响这一次切换（隐私模式 / 配额满），只是下次回到默认。
+    }
+  }
+
+  function initTabs() {
+    const ids = tabIds();
+    if (ids.length === 0) return;
+    let saved: string | null = null;
+    try {
+      saved = localStorage.getItem(TAB_KEY);
+    } catch {
+      saved = null;
+    }
+    // ⚠ 存的那个不在了就回落到第一个 —— 直接拿 saved 去 showTab 的话，
+    //   页面上一块都不显示，而那和"文案没生成出来"长得一样。
+    showTab(saved && ids.includes(saved) ? saved : ids[0]!);
+
+    for (const btn of document.querySelectorAll<HTMLElement>(
+      "[data-share-tab]"
+    )) {
+      if (btn.dataset.bound === "1") continue;
+      btn.dataset.bound = "1";
+      btn.addEventListener("click", () => showTab(btn.dataset.shareTab ?? ""));
+    }
+  }
+
+  // 复制：成功「已复制」；失败「没复制成功，已选中文字，按 Ctrl/⌘+C」—— 两档不压成一句。
+  //
+  // ⚠ 逐**块**绑，不是逐条内容绑：一条内容里现在有三块（X / 雪球 / 富途），
+  //   用 querySelector 只拿第一个的话，切到雪球点复制**复制的还是 X 那段**，
+  //   而按钮照常有反应、零报错。
+  function bind() {
+    document
+      .querySelectorAll<HTMLElement>("[data-share-block]")
+      .forEach(item => {
+        const btn = item.querySelector<HTMLButtonElement>("[data-share-copy]");
+        const field =
+          item.querySelector<HTMLTextAreaElement>("[data-share-text]");
+        const status = item.querySelector<HTMLElement>("[data-share-status]");
+        if (!btn || !field || btn.dataset.bound === "1") return;
+        btn.dataset.bound = "1";
+        btn.addEventListener("click", async () => {
+          try {
+            if (!navigator.clipboard?.writeText)
+              throw new Error("no clipboard");
+            await navigator.clipboard.writeText(field.value);
+            if (status) status.textContent = "已复制";
+            window.setTimeout(() => {
+              if (status) status.textContent = "";
+            }, 2500);
+          } catch {
+            field.focus();
+            field.select();
+            if (status)
+              status.textContent = "没复制成功 —— 已选中文字，按 Ctrl/⌘+C";
+          }
+        });
+      });
+  }
+
+  // 从后台带 #posts/<slug> 过来：滚到那一条并框一下。
+  //
+  // ★ 认的是 `data-share-keys`（**组里每一条**的 key，空格分隔），不是元素 id。
+  //   【2026-09-21】同一个问题折成一张卡之后，非代表那几条的 slug 不再是任何元素的
+  //   id —— 只查 id 的话，从那几条点「发帖文案」过来会落在页面顶上、什么都不发生，
+  //   而按钮照常能点、一句报错都没有。
+  function focusHash() {
+    const key = decodeURIComponent(location.hash.slice(1));
+    if (!key) return;
+    // 用 JS 比对而不是拼一个 `[data-share-keys~="…"]` 选择器：key 里有斜杠、
+    // 而且是从地址栏来的，拼进选择器就得考虑转义；比字符串没有这回事。
+    const cards = [
+      ...document.querySelectorAll<HTMLElement>("[data-share-keys]"),
+    ];
+    const el = cards.find(card =>
+      (card.dataset.shareKeys ?? "").split(" ").includes(key)
+    );
+    if (!el) return;
+    // 先把上一次那个框擦掉 —— hashchange 能反复触发，不擦的话点第三条的时候
+    // 屏幕上有三个框，而"当前是哪一条"正是这个框存在的理由。
+    for (const card of cards) card.style.outline = "";
+    el.scrollIntoView({ block: "center" });
+    el.style.outline = "2px solid currentColor";
+    el.style.outlineOffset = "4px";
+  }
+
+  initTabs();
+  bind();
+  focusHash();
+  document.addEventListener("astro:page-load", () => {
+    initTabs();
+    bind();
+    focusHash();
+  });
+  /**
+   * ★ `hashchange` 这一条是**必须的**，不是锦上添花。
+   *
+   * 后台那个「发帖文案」按钮开的是新标签页，所以头一次点没问题（整页加载，
+   * 上面那句 focusHash 跑得到）。但 `/_share` 已经开着的时候再点另一条 ——
+   * 地址只有 `#` 后面变了，**页面不重新加载、astro:page-load 也不触发**。
+   * 【2026-09-21 实测过这个形态】而且从这天起浏览器自己那套跳锚点也救不了：
+   * 折叠之后非代表那几条的 slug 不再是任何元素的 id。症状是按钮点了毫无反应，
+   * 零报错。
+   */
+  window.addEventListener("hashchange", focusHash);
+</script>

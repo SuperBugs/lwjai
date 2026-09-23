@@ -1,0 +1,85 @@
+---
+/**
+ * 「分享到：」那一排（上游 AstroPaper 的组件）。
+ *
+ * ⚠ **【2026-09-21 起四个详情页都不挂它了】** —— 用户原话「分享就不要了」。
+ *   文末那一排现在是：复制本文链接 · 下载 Markdown · 复制全文 · 打印 / 存成 PDF。
+ *
+ * 文件留着而不是删掉，有两条理由：
+ *   1. 它是**上游文件**，这个站刻意保留上游的目录结构和命名，方便以后对照合并
+ *      （docs/engineering-notes.md 第四节）。`astro-paper.config.ts` 里那份 `shareLinks` 配置同理。
+ *   2. `scripts/gate/seo.test.ts` 钉着它的 `data-pagefind-ignore` ——
+ *      那条断言现在守的是"重新挂回去的那一天"：少了它，搜「分享」「Telegram」
+ *      会命中全站每一页（2026-09-20 实测过一次）。
+ *
+ * ★ 要加回来：把 `<ShareLinks />` 放回四个详情页文末那一排里，四页一起 ——
+ *   只加一页是零症状的（那一页多一排，别的页少一排，没有任何测试会红）。
+ */
+import LinkButton from "@/components/LinkButton.astro";
+import { tplStr, useTranslations } from "@/i18n";
+import config from "@/config";
+
+const { shareLinks } = config;
+const t = useTranslations(Astro.currentLocale);
+
+const icons = import.meta.glob<{
+  default: (_props: Record<string, unknown>) => unknown;
+}>("/src/assets/icons/socials/*.svg");
+
+const pageUrl = Astro.url;
+
+const platformLabel = (name: string) =>
+  name.charAt(0).toUpperCase() + name.slice(1);
+
+const items = await Promise.all(
+  shareLinks.map(async ({ name, url, linkTitle }) => {
+    const mod = await icons[`/src/assets/icons/socials/${name}.svg`]?.();
+    const Icon = mod?.default;
+    const title =
+      linkTitle ??
+      (name === "mail"
+        ? t.post.sharePostViaEmail
+        : tplStr(t.post.sharePostOn, { platform: platformLabel(name) }));
+    return { url, title, Icon };
+  })
+);
+---
+
+{
+  items.some(({ Icon }) => Icon) && (
+    /* 【2026-09-20】原来是竖着三段：一行字、一行图标、底下再一行「复制链接」按钮，
+       占了三行高度而内容只有一句话。现在**整排横过来**，和 CopyLinkButton 并成一行
+       （包裹在四个详情页里，见各自那段注释）。
+       ⚠ 这里只给横排和间距，**不要把 CopyLinkButton 并进这个文件** ——
+       它是上游 AstroPaper 的文件，理由在 CopyLinkButton.astro 顶部那三条
+       （【2026-09-20】data-pagefind-ignore 给下面这个 div 补上了：在那之前「分享到 X」
+       几个字每一页都搜得到；后两条理由照旧成立）。 */
+    <div
+      data-print-hide
+      data-pagefind-ignore
+      class="flex flex-none flex-wrap items-center justify-center gap-x-3 gap-y-2 md:justify-start"
+    >
+      {/* 【2026-09-21 用户要的】不要斜体。上游那版是 `italic` —— 中文没有真正的
+           斜体字形，浏览器只能把方块字整体倾斜（合成斜体），四个字歪着排在
+           一行正体旁边只是糊，不是强调。 */}
+      <span>{t.post.sharePostIntro}</span>
+      {/* 图标之间留一档间距：原来全靠 LinkButton 自己的 padding 挤在一起。 */}
+      <div class="flex items-center gap-x-1">
+        {items.map(({ url, title, Icon }) =>
+          Icon ? (
+            <LinkButton
+              href={`${url}${pageUrl}`}
+              class="scale-90 p-1.5 hover:rotate-6"
+              title={title}
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              <Icon class="inline-block size-6 scale-125 fill-transparent stroke-current stroke-2 opacity-90 group-hover:fill-transparent sm:scale-110" />
+              <span class="sr-only">{title}</span>
+            </LinkButton>
+          ) : null
+        )}
+      </div>
+    </div>
+  )
+}

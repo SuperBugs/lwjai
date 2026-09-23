@@ -1,0 +1,424 @@
+---
+import { type CollectionEntry, getCollection, render } from "astro:content";
+import PostLayout from "@/layouts/PostLayout.astro";
+import Header from "@/components/Header.astro";
+import Footer from "@/components/Footer.astro";
+import Datetime from "@/components/Datetime.astro";
+import ReadingTime from "@/components/ReadingTime.astro";
+import Tag from "@/components/Tag.astro";
+import IconArrowLeft from "@/assets/icons/IconArrowLeft.svg";
+import IconArrowRight from "@/assets/icons/IconArrowRight.svg";
+// 集合无关的纯 UI，复用文章详情页那份。`_` 前缀的目录不进路由，跨目录 import 安全。
+// 刻意不复用 AdjacentPostNav —— 它内部写死 getPostUrl，会把 prompts 链到 /posts/…
+// （不报错、构建全绿、链接 404）。
+import BackButton from "../../r/[...slug]/_components/BackButton.astro";
+import BackToTopButton from "../../r/[...slug]/_components/BackToTopButton.astro";
+import DownloadLinks from "@/components/DownloadLinks.astro";
+import CopyLinkButton from "@/components/CopyLinkButton.astro";
+import PromptOriginChip from "@/components/PromptOriginChip.astro";
+import RelatedEntries from "@/components/RelatedEntries.astro";
+import TableOfContents from "@/components/TableOfContents.astro";
+import JumpLink from "@/components/JumpLink.astro";
+import { tocItems } from "@/utils/tocItems";
+import ArticleEnhancements from "@/components/ArticleEnhancements.astro";
+import { readingStats } from "@/utils/readingTime";
+import { entryOgImageUrl } from "@/utils/ogImageUrl";
+import { entrySlug, entryUrl } from "@/utils/getPostPaths";
+import { getSortedPosts } from "@/utils/getSortedPosts";
+import { entriesUsingPrompt } from "@/utils/related";
+import { slugifyStr } from "@/utils/slugify";
+import { toTransitionName } from "@/utils/toTransitionName";
+import { tplStr, useTranslations } from "@/i18n";
+import { SEARCH_FILTER_KEY, SEARCH_KINDS } from "@/config/searchKinds";
+import config from "@/config";
+
+/**
+ * 提示词详情页。和 `guides/[...slug]/index.astro` 同构，多一样东西：
+ * 页首的来源芯片（站长自己在用的 / 读者投稿 · 署名）。
+ * （页尾原来还有一块投稿入口，2026-09-20 按用户要求整块删掉了。）
+ */
+
+type AdjacentPrompt = {
+  id: string;
+  title: string;
+  filePath: string | undefined;
+} | null;
+
+export async function getStaticPaths() {
+  /**
+   * ★ 这个小助手**必须定义在 getStaticPaths 内部**（docs/engineering-notes.md 坑 11）。
+   *
+   * 模块作用域的 `const adjacent = ... =>` 会被打包器（rolldown）在把
+   * `getStaticPaths` 提成单独 chunk 时**留下不带走**，产物里只剩调用、没有声明，
+   * 构建期报 `adjacent is not defined`。最阴的是它一开始是好的 ——
+   * 问答页用同样的写法跑通过好几次，直到加了第四个集合、分块方式变了，
+   * 问答页和教程页**同时**坏掉。能不能活取决于打包器当天怎么分块。
+   * 定义在函数里就没有这个问题：它是局部变量，摇不掉。
+   */
+  const adjacent = (e: CollectionEntry<"prompts">): AdjacentPrompt => ({
+    id: e.id,
+    title: e.data.title,
+    filePath: e.filePath,
+  });
+
+  const entries = await getCollection("prompts");
+
+  // ★ 过 getSortedPosts() 才有草稿 / 定时发布的过滤。少这一道，
+  //   草稿的详情页会被生成出来挂在公网上，而构建全绿（docs/engineering-notes.md 坑 1）。
+  const sorted = getSortedPosts(entries);
+  // ★ 「用这份提示词跑出来的研究」：研究稿 frontmatter 里 prompt 指向这一条的。
+  //   同样过 getSortedPosts —— 草稿研究稿不该在这里露出标题。
+  const posts = getSortedPosts(await getCollection("posts"));
+
+  return sorted.map((entry, index) => ({
+    // ★ entrySlug("prompts", …) 而不是 getPostSlug —— 后者把 "src/content/posts"
+    //   写死在剥前缀那一步，对别的集合是**空操作且不报错**。
+    params: { slug: entrySlug("prompts", entry.id, entry.filePath) },
+    props: {
+      entry,
+      usedBy: entriesUsingPrompt(posts, entry.id),
+      prevEntry: index < sorted.length - 1 ? adjacent(sorted[index + 1]) : null,
+      nextEntry: index > 0 ? adjacent(sorted[index - 1]) : null,
+    },
+  }));
+}
+
+type Props = {
+  entry: CollectionEntry<"prompts">;
+  /** 用这份提示词跑出来的研究稿，新在前。 */
+  usedBy: CollectionEntry<"posts">[];
+  prevEntry: AdjacentPrompt;
+  nextEntry: AdjacentPrompt;
+};
+
+const { entry, usedBy, prevEntry, nextEntry } = Astro.props;
+const {
+  title,
+  description,
+  pubDatetime,
+  modDatetime,
+  timezone,
+  tags,
+  origin,
+  contributor,
+} = entry.data;
+
+const { Content, headings } = await render(entry);
+
+/** 有没有目录 —— 决定正文那一格在 xl 以上开不开两列网格。
+ *  判据和 TableOfContents 内部**是同一个函数**（src/utils/tocItems.ts）。 */
+const hasToc = tocItems(headings).length > 0;
+
+const locale = Astro.currentLocale ?? config.site.lang;
+const t = useTranslations(locale);
+
+/** 阅读时长 / 字数是估的（readingTime.ts），页面上带「预计」。 */
+const reading = readingStats(entry.body ?? "");
+// 分享卡：dynamicOgImage 关着时是 undefined，Layout 回落到默认图。
+const ogImage = entryOgImageUrl("prompts", entry.id, entry.filePath, locale);
+
+/* 【2026-09-21】这里原来有个 `isContributed`，只为了给投稿那几份多挂一句
+   「我没有逐条验证过」。那一句按用户要求删了（见下面正文上方那个 <aside> 的注释），
+   判据跟着一起删 —— 留一个没人读的布尔值，下一个人会以为它还管着什么。
+   ⚠ `origin` 本身仍然有用：标题底下那一格 `PromptOriginChip` 读它分三档。 */
+---
+
+<PostLayout
+  title={`${title} | ${config.site.title}`}
+  headline={title}
+  description={description}
+  ogImage={ogImage}
+  pubDatetime={pubDatetime}
+  modDatetime={modDatetime}
+>
+  <Header />
+
+  <BackButton />
+
+  {
+    /* ★ data-pagefind-body 决定这一页**整页**进不进搜索索引；不带的话这一页
+       在搜索里根本不存在，而构建期没有任何提示。
+       ★ data-pagefind-filter 让搜索结果能按「研究 / 问答 / 教程 / 提示词」分面 ——
+       这里只负责标注，search.astro 那半边不配的话筛选框不出现，两边缺一不生效。 */
+  }
+  <main
+    id="main-content"
+    class:list={["app-layout", { "mt-8": !config.features.showBackButton }]}
+    data-pagefind-body
+    data-pagefind-filter={`${SEARCH_FILTER_KEY}:${SEARCH_KINDS.prompts}`}
+  >
+    {
+      /* ★ 标题必须是 body 区里的 <h1>：Pagefind 的结果标题取的是它，
+         不是 <title>（那个带「| 牢玩家」后缀）。
+         ★ transition 名带 `prompts-` 命名空间，且必须和列表项（Card）里的
+         `${collection}-${id}` 是同一个表达式 —— 后台写扁平文件，
+         不同集合里的同名文件 id 相同，不加命名空间会撞。 */
+    }
+    <h1
+      style={{ viewTransitionName: toTransitionName(`prompts-${entry.id}`) }}
+      class="text-accent inline-block text-3xl font-bold tracking-tight text-pretty sm:text-4xl"
+    >
+      {title}
+    </h1>
+
+    {
+      /* 作者排在时间前面：这一页上"谁写的"比"什么时候写的"更要紧
+         —— 收投稿的模块里，它是读者判断该不该照着用的第一个依据。
+         【2026-09-20】画成一段字「作者：牢玩家」，不再是芯片（和列表卡片一致，用户要的）。 */
+    }
+    <div class="mt-4 mb-2 flex flex-wrap items-center gap-x-3 gap-y-2">
+      {
+        /* ★ 标签排在这一行**最前面**，四个详情页和列表卡片逐项对齐
+           （【2026-09-21 用户定的】：名称（提示词没有标的）→ 标签 → 谁写的 → 时间）。
+           页脚那个 `<ul>` 同日删了 —— 同一排标签印两遍，底下那遍看起来像另一种东西。 */
+      }
+      {
+        tags.length > 0 && (
+          <ul class="flex flex-wrap items-center gap-2">
+            {tags.map(tag => (
+              <Tag tag={slugifyStr(tag)} tagName={tag} size="lg" />
+            ))}
+          </ul>
+        )
+      }
+      <PromptOriginChip {origin} {contributor} size="lg" variant="inline" />
+      <Datetime {pubDatetime} {modDatetime} {timezone} size="lg" />
+      {
+        /* 【2026-09-21 用户要的】「阅读预计」四个字换成一个眼睛图标
+           （`ReadingTime.astro`）。带 hedge 的整句没删，挡到了 title / 读屏那一侧 ——
+           这个数是估的，理由写在那个组件开头。字数跟在后面，两段说的是同一件事
+           （这篇有多长），所以合在一格里、中间那个·留着。 */
+      }
+      <span
+        class="text-muted-foreground inline-flex items-center gap-x-1.5 text-sm sm:text-base"
+      >
+        <ReadingTime minutes={reading.minutes} size="lg" />
+        <span aria-hidden="true">·</span>
+        <span>
+          {
+            tplStr(t.reading.chars, {
+              chars: reading.chars.toLocaleString("en-US"),
+            })
+          }
+        </span>
+      </span>
+      {
+        /* 【2026-09-20】下载 / 复制全文 / 打印那三样**也放在这一行**，只留图标、
+           文字进悬停提示。正文后面那一份（`bar` 档）没删：这里是"我已经决定要带走它"的
+           快捷入口，那里是读完之后的出口，两处服务的是两个时刻。
+           ★ 同一个组件、同一段脚本，靠 `variant` 分档 —— 见 DownloadLinks.astro 的 Props。 */
+      }
+      {
+        /* 【2026-09-21 用户要的】下载 / 复制 / PDF / 转发**挨在一起**，
+           四个图标一个间距。在这之前转发那个是外层那一行的直接成员，
+           吃的是 `gap-x-3`（12px），而另外三个在 DownloadLinks 自己的
+           `gap-1`（4px）里 —— 一眼看过去像"三个按钮和另一个东西"。
+           ★ `flex-wrap` 不能省：复制全文失败时 DownloadLinks 会放出一整块说明
+             （`basis-full`），没有 wrap 它会被挤进这一行压成一条缝。
+           ★【2026-09-21 用户要的】这四个图标**靠那一行的最右边**（`ms-auto`）。
+             在这之前它们紧跟在「使用的提示词：…」后面，而那一段的长短每篇都不一样 ——
+             于是同一排按钮在每一页上都停在不同的横坐标，翻页时它们在跳。
+             靠右之后四页同一个位置。
+             ⚠ 用 `ms-auto` 不用 `justify-between`：那一行是 `flex-wrap` 的，
+               `justify-between` 会把**每一行**的成员都摊开（窄屏上折行之后尤其难看），
+               而这里要的只是"这一格推到它那一行的右头"。 */
+      }
+      <div class="ms-auto flex flex-wrap items-center gap-1">
+        <DownloadLinks
+          variant="icons"
+          collection="prompts"
+          id={entry.id}
+          filePath={entry.filePath}
+          title={title}
+        />
+        {
+          /* 【2026-09-21 用户要的】转发按钮：点一下把本篇地址复制走，提示「已复制该文链接」。
+             ★ 和正文后面那一排里的「复制本文链接」**是同一个组件**（`variant` 分档），
+               不是照着抄了一个 —— 复制的是 `entryUrl` 算死的**规范地址**，
+               不是 `location.href`（读者手上那个可能带 utm、带锚点、或者是预览域名）。
+               抄第二份的那天，两处就会开始复制两个不同的地址，而页面上零症状。 */
+        }
+        <CopyLinkButton
+          variant="icon"
+          collection="prompts"
+          id={entry.id}
+          filePath={entry.filePath}
+        />
+      </div>
+    </div>
+
+    {
+      /* 这一句放在正文**之前**：读者要先知道下面是什么，再读下面的内容。样板字，不进索引。
+
+         【2026-09-21 用户要的】这里原来还有第二句，只对投稿显示：
+         「这一份是网友投稿的。我只做了排版整理，没有逐条验证过它跑出来的结果。」
+         **整句删了**（`t.prompts.contributedNotice` 从三份 i18n 里一并删掉）。
+
+         ⚠ 那句话原来承担两件事，删之前确认过两件都还有落点：
+           ① 「这一份是别人投来的」—— 标题底下那一格仍然印着「分享者：某某（网友投稿）」
+              （`PromptOriginChip`，三档，非草稿时哨兵挡构建）。出处没丢。
+           ② 「跑出来的结果我没验过」—— 上面留下的这一句里就有：
+              「不保证模型说得对 —— 跑出来的每个数字仍然要自己回原始来源核对」，
+              而且它对**每一份**都成立，不只是投稿。
+         真正没了的是"站长本人没逐条验证过这一份"这层自述。 */
+    }
+    <aside class="app-note mt-6" data-pagefind-ignore>
+      <p>{t.prompts.verbatimNotice}</p>
+    </aside>
+
+    {
+      /* 目录：提示词动辄十来节，三节以上才出现，见 TableOfContents.astro。
+         ★ **两份都在 DOM 里**，靠断点各显各的：这一份是窄屏用的折叠块，
+           `xl:hidden` **不许去掉**（去掉 = 大屏上目录出现两遍，一个在这儿、
+           一个在左边侧栏，而页面不报错、构建全绿）；侧栏那份在下面那个网格里。
+           `scripts/gate/toc.test.ts` 钉着。 */
+    }
+    <TableOfContents {headings} class="mt-6 xl:hidden" />
+
+    {
+      /* 【2026-09-21 用户要的】xl（≥1280px）以上：目录钉在左边，正文在右边 ——
+         和研究稿 / 问答两页一致（那两页 2026-09-20 先做的，这一页当时留了折叠块）。
+         窄屏什么都没变：下面这些 `xl:` 类在断点以下一条都不生效。
+
+         ★ `hasToc &&` 那一半是**功能性的**，不是洁癖：目录不够三节时不画，
+           而网格是写死两列的 —— 不跟着塌回一列的话，左边空着 13rem 的一条白带，
+           正文被推到右边。判据和组件内部是同一个（`tocItems()`），不是这里再数一遍。
+         ★ `minmax(0,1fr)` 不许写成 `1fr`：后者等于 `minmax(auto,1fr)`，
+           提示词正文里全是代码围栏和宽表，`auto` 下限会让那一列被撑宽，
+           整个网格顶破版心、侧栏被挤没。 */
+    }
+    {
+      /* 【2026-09-21 用户要的】正文右上角的「跳到末尾」。放在这儿而不是别处：
+         右下角那个浮动圆钮滚过 200px 才出现，而"不想读完、直接看结论"这个念头
+         在刚打开、还没滚的时候最强。滚动逻辑不在这个组件里，见它顶部那段。 */
+    }
+    <JumpLink to="end" class="mt-6" />
+
+    <div
+      class:list={[
+        hasToc && "xl:grid xl:grid-cols-[13rem_minmax(0,1fr)] xl:gap-x-8",
+      ]}
+    >
+      <TableOfContents {headings} variant="rail" class="mt-6" />
+      <article
+        id="prompt"
+        class:list={[
+          "mt-6 w-full",
+          "app-prose max-w-app",
+          "prose-pre:bg-(--shiki-light-bg) dark:prose-pre:bg-(--shiki-dark-bg)",
+        ]}
+      >
+        <Content />
+      </article>
+    </div>
+
+    <hr class="my-8 border-dashed" />
+
+    <BackToTopButton />
+
+    {
+      /* 【2026-09-21 用户要的】标签那一排**挪到标题底下那行元信息里了**（见上面），
+         这里原来那个 `<ul>` 整块删掉。四个详情页同一天一起改的。 */
+    }
+
+    {
+      /* 【2026-09-21 用户要的】这里原来是那段免责 <aside>（「不构成任何投资建议。
+       *   站长没有买入任何股票…不可据此操作，若据此操作，盈亏自负。」的提示词版）——
+       *   **整块删了**，四个详情页同一天一起删。免责现在只剩 /about 那一整节
+       *   ＋ 每一页页脚那条「免责声明」链接。
+       *
+       * ⚠ 跟着没了的还有那一句「这一页是提示词本身，不是它跑出来的结论」——
+       *   正文**上方**那个 <aside> 里的 `t.prompts.verbatimNotice` 说的是同一件事
+       *   （「以下是提示词原文…它约束的是模型的输出格式和证据要求，不保证模型说得对」），
+       *   而且说得更具体、位置更靠前。所以这不是把一句话删没了，是留下了更好的那一句。 */
+    }
+
+    {
+      /* ★ 这一整排放在免责 <aside> **之后**：文件一旦下载走就离开了这个站，
+        读者应当在**点下载之前**已经看过免责声明。四页同一个相对位置。
+        【2026-09-20】下载三个按钮和分享并成一行，四页同一个写法 ——
+        容器上那条「不许加 data-print-hide」的理由写在研究稿详情页那一段。 */
+    }
+    {
+      /* 【2026-09-21 用户要的】正文**底部右侧**的「跳到开头 ↑」，和正文右上角那个
+         「跳到末尾 ↓」配成一对（同一个组件，`to` 分档）。
+         ★ 它一进视口，右下角那个浮动圆钮就让位（BackToTopButton 里的 `takenOver`）——
+           用户原话：「当到底部的时候就应该变成文字跳到开头」。两个同时在屏幕上
+           指着同一个动作，就是同一个入口画了两遍。 */
+    }
+    <JumpLink to="top" class="mb-4" />
+
+    <div
+      class="mb-8 flex flex-wrap items-center justify-center gap-x-5 gap-y-3 md:justify-end print:block"
+    >
+      <DownloadLinks
+        collection="prompts"
+        id={entry.id}
+        filePath={entry.filePath}
+        title={title}
+      />
+      <CopyLinkButton
+        collection="prompts"
+        id={entry.id}
+        filePath={entry.filePath}
+      />
+    </div>
+
+    <hr class="my-8 border-dashed" />
+
+    {
+      /* ★ 用这份提示词跑出来的研究。一篇都没有时整块不渲染：交易规则手册本来就不出
+         研究稿，「还没有」对读者没有信息量 —— 和研究稿页脚那句「这只票目前只有这一篇」
+         不是一档（那一句是读者需要知道的事）。 */
+      usedBy.length > 0 && (
+        <RelatedEntries heading={t.prompts.usedByHeading} entries={usedBy} />
+      )
+    }
+
+    {
+      /* 【2026-09-20】这里原来是投稿入口（`PromptSubmit.astro`），用户要求整块删掉，
+        组件一并删了。投稿入口现在只在**列表页顶上那句说明**里
+        （`t.pages.promptsDesc` 的后半句「…欢迎通过网站底部的联系方式联系投稿。」）
+        —— 详情页上一个字都不提是刻意的，不是漏了。 */
+    }
+
+    {/* 上一篇 / 下一篇。走 entryUrl("prompts", …)，不用 AdjacentPostNav。 */}
+    <div
+      data-pagefind-ignore
+      class="my-8 grid grid-cols-1 gap-6 sm:grid-cols-2"
+    >
+      {
+        prevEntry && (
+          <a
+            href={entryUrl("prompts", prevEntry.id, prevEntry.filePath, locale)}
+            class="flex w-full gap-1 hover:opacity-75"
+          >
+            <IconArrowLeft class="inline-block flex-none rtl:rotate-180" />
+            <div>
+              <span>{t.post.previousPost}</span>
+              <div class="text-accent/85 text-sm">{prevEntry.title}</div>
+            </div>
+          </a>
+        )
+      }
+      {
+        nextEntry && (
+          <a
+            href={entryUrl("prompts", nextEntry.id, nextEntry.filePath, locale)}
+            class="flex w-full justify-end gap-1 text-end hover:opacity-75 sm:col-start-2"
+          >
+            <div>
+              <span>{t.post.nextPost}</span>
+              <div class="text-accent/85 text-sm">{nextEntry.title}</div>
+            </div>
+            <IconArrowRight class="inline-block flex-none rtl:rotate-180" />
+          </a>
+        )
+      }
+    </div>
+  </main>
+
+  <Footer />
+  {/* 进度条 / 锚点 / 代码复制 / 灯箱。四页都挂，detailParity.test.ts 钉着。 */}
+  <ArticleEnhancements />
+</PostLayout>

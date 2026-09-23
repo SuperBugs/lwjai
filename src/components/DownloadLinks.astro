@@ -1,0 +1,510 @@
+---
+import IconDownload from "@/assets/icons/IconDownload.svg";
+import IconCopy from "@/assets/icons/IconCopy.svg";
+// 【2026-09-21 用户要的】打印那个按钮的图标从打印机换成 PDF 文件。
+// ⚠ 图标换了，**文案一个字没动**：它仍然是「打印 / 存成 PDF」，因为它干的事
+//   没变 —— 打开浏览器的打印对话框，站上并不存在一个 .pdf 文件可下载
+//   （`src/i18n/types.ts` 里 `download.print` 那条注释写着为什么不许叫「下载 PDF」）。
+//   图标是"你会拿到一份 PDF"，标签是"经由打印对话框"，两句话合起来才是完整的。
+import IconFileTypePdf from "@/assets/icons/IconFileTypePdf.svg";
+import { entryUrl } from "@/utils/getPostPaths";
+import { useTranslations } from "@/i18n";
+import config from "@/config";
+
+/**
+ * 「把这篇带走」—— 一条 .md 下载链接 + 一个「复制全文」按钮 + 一个打印按钮。
+ *
+ * 【2026-09-20 改成一行图标按钮】原来是三栏、每栏一个链接加一段说明，太啰嗦。
+ * 现在是三个带图标的小按钮排一行，说明文字挪进 `title`（悬停提示），一个字没丢。
+ * 标题那句「把这篇带走：」不再显示，只留作这一块的无障碍名（aria-label）。
+ *
+ * ## ★ 复制按钮**运行时 fetch 那个 .md**，不在页面里另存一份正文
+ *
+ * 这是整个组件最要紧的一条，而且它是个**可以被静默推翻**的设计决定 ——
+ * 下一个人完全可能觉得"多一次网络请求何必呢"，把 `entry.body` 当 prop 传进来
+ * 塞进一个 `<script type="text/plain">`，页面照常、按钮照常、构建全绿。
+ *
+ * 不许那么做。理由是 docs/gate.md 7.5 节那条判据：
+ * **这条通道吐的字节，是不是闸门扫过的那些字节？** —— 以及它的推论：
+ * **读者拿走的东西只许有一个出口。**
+ *
+ *   - 现在这个写法：复制出去的就是 `/r/<号>.md` 的响应体，一个字节不多。
+ *     那条端点过了 `postFilter`，吐的是 `toExportMarkdown()` 的返回值
+ *     （【2026-09-23】起就是正文原文），`export.test.ts` 的 B / C 两组钉着它。
+ *     **复制按钮因此不是第五条出站通道，它是第四条的一个触发器。**
+ *   - 把正文内联进页面：今天内联的 `entry.body` 和端点吐的看起来是同一份，
+ *     但那就是**两个出口**了 —— 下载走端点、复制走页面里那一份，C 组只钉得住前者。
+ *     端点那一侧在历史上被加过一整段东西（frontmatter + 引用块，2026-09-23 拿掉的），
+ *     哪天任一侧再变，下载和复制就当场分叉，而页面上看不出来。
+ *     另外每一页的 HTML 会多背一整篇正文。
+ *
+ * 所以这个组件的 Props 里**没有、也不许有** `body` / `entry` 这类东西。
+ * `export.test.ts` 的 D 组钉着这一条。
+ *
+ * ## 五档状态，两档失败**不许合并**
+ *
+ * | 状态 | 界面 | 读者此刻该做什么 |
+ * |---|---|---|
+ * | 还没点 | 「复制全文」 | — |
+ * | 取文件中 | 「正在取全文…」+ 按钮禁用 | 等 |
+ * | 成功 | 「已复制 N 字」，两秒多后自己退回 | 去粘 |
+ * | **取不到文件** | 「没取到全文」+ 说明 | **别去粘**（剪贴板还是上次的东西），改用下载链接 |
+ * | **写不进剪贴板** | 「没复制成功」+ 露出整篇文本、已选好 | 按 Ctrl/⌘ + C |
+ *
+ * 后两档压成一句「复制失败」的代价很具体：第四档里剪贴板**没被动过**，
+ * 读者按经验去粘，粘出来是上一次剪贴板里的东西 —— 一段看起来正常、
+ * 但完全不是这篇文章的文字。这正是 docs/engineering-notes.md 第二节说的"两种没有不许合并成一种显示"。
+ *
+ * 成功档必须**报字数**，同一条理由：`res.ok` 挡不住一个 200 的 HTML 错误页，
+ * 而「已复制」三个字对着 8000 字的 HTML 垃圾和对着正文长得一模一样。
+ * 除了报数，下面还验了一句「取回来的不许是一张网页」（`looksLikeHtmlPage`）。
+ *
+ * 按钮变小之后这五档照旧：文案换在按钮里那个 `<span data-copy-md-label>` 上
+ * （图标留着），两档失败的说明块仍然在按钮下面整块出现 —— 那是读者唯一的出路，
+ * 不能因为"简约"就把它塞进悬停提示里。
+ *
+ * ## 三个详情页各插一行，而不是塞进 PostLayout
+ *
+ * `PostLayout.astro` 是个**只管 `<head>`** 的薄壳（meta / JSON-LD），正文结构在
+ * posts / qa / guides 三个 index.astro 里各写一份。所以没有"写一层三处都有"的办法。
+ * 漏插一处是完全零症状的（那一页悄悄没有下载口，构建全绿）——
+ * `scripts/gate/export.test.ts` 的 parity 用例就是钉这件事的。
+ *
+ * ## 为什么不复用 ShareLinks 的组件
+ *
+ * 三条具体理由，不是风格偏好：
+ *   1. `ShareLinks` 原来**没有** `data-pagefind-ignore`（【2026-09-20】补上了，在那之前
+ *      「分享到 X」几个字每一页都搜得到）。照抄它的结构就得连这类坑一起抄。
+ *   2. 它是上游 AstroPaper 的文件，改它等于给以后的上游合并埋冲突。
+ *   3. 它内部走 `LinkButton`，而 `LinkButton` 只渲染 `<a>` / `<span>`，
+ *      **渲不出 `<button>`** —— 打印触发器必须是真按钮，用 `<a href="#">` 是错语义
+ *      （键盘用户按空格不会触发，屏幕阅读器会念成"链接"）。
+ *
+ * ## 打印按钮的文案不许写「下载 PDF」
+ *
+ * 站上根本没有 .pdf 这个文件。点下去打开的是浏览器的打印对话框，PDF 是读者
+ * 自己在那儿另存的。写「下载 PDF」是三重失实：没有下载、没有 PDF、
+ * 按钮行为和文案对不上。文案在 `t.download.print`，types.ts 里也钉了这一条。
+ */
+
+type Props = {
+  /** 集合名（posts / qa / guides）。地址一律由 `entryUrl` 算，**不许手拼字符串** ——
+   *  手拼 `/posts/${slug}.md` 会在 qa / guides 上静默产出 404 链接。 */
+  collection: string;
+  id: string;
+  filePath?: string;
+  /** 条目标题，只用来做下载文件名。 */
+  title: string;
+  /**
+   * 【2026-09-20】两种画法，**同一个组件、同一段脚本**：
+   *
+   *   - `"bar"`（默认）：正文下面那一排带文字的按钮。
+   *   - `"icons"`：标题底下那一行里的三个小图标，文字只在悬停提示里。
+   *
+   * ★ 做成一个 prop 而不是复制一个组件出来：复制的那天起，"复制全文必须
+   *   运行时 fetch 那条 .md"这条纪律就有两份副本，而 `export.test.ts` 的 D 组
+   *   只认 `DownloadLinks.astro` 一个文件 —— 另一份怎么写都没人拦。
+   *   同一页可以同时挂两个，脚本按 `closest("section")` 各认各的那一块。
+   */
+  variant?: "bar" | "icons";
+};
+
+const { collection, id, filePath, title, variant = "bar" } = Astro.props;
+const compact = variant === "icons";
+const t = useTranslations(Astro.currentLocale);
+
+const pageUrl = entryUrl(collection, id, filePath, Astro.currentLocale);
+/** 末尾斜杠必须剥掉：路由是 `[...slug].md`，产物是 `/posts/foo.md`，
+ *  而 `entryUrl` 按站点配置可能给出 `/posts/foo/`。不剥 = `/posts/foo/.md`，404。 */
+const mdUrl = `${pageUrl.replace(/\/+$/, "")}.md`;
+const canonicalUrl = new URL(pageUrl, config.site.url).href;
+
+/**
+ * 下载时落到读者磁盘上的文件名。
+ *
+ * 用中文标题而不是 slug：`<a download>` 对中文文件名没有限制（和 docs/engineering-notes.md 坑 4
+ * 说的中文 URL 不是一回事 —— 那条讲的是地址栏里的百分号编码）。
+ * 读者下载夹里一排 `hello-20260918.md` 认不出哪篇是哪篇。
+ *
+ * 只剥 Windows / macOS 文件系统真正不接受的字符，别顺手"清理"中文标点。
+ * 标题被剥空（极端情况：整个标题都是斜杠）时回退到 slug —— **不许回退到空串**，
+ * 那会让浏览器拿 URL 末段当文件名，读者得到一个叫 `foo.md` 的文件而不知道为什么。
+ */
+const slug = id.split("/").pop() ?? id;
+const safeTitle = title
+  .replace(/[\\/:*?"<>|]/g, " ")
+  .replace(/\s+/g, " ")
+  .trim();
+const downloadName = `${safeTitle || slug}.md`;
+
+/** 三个按钮一副形状：和芯片同一套边框 / 底色，图标 + 短标签。
+ *  `<a>` 和 `<button>` 共用，所以把浏览器给 `<a>` 的下划线关掉。
+ *  `icons` 档只留图标（文字进 `title` 和 sr-only span），按钮收成方的。 */
+const buttonClass = [
+  "border-border bg-surface text-foreground inline-flex items-center",
+  "rounded-md border font-medium no-underline",
+  "hover:border-border-strong transition-colors",
+  compact ? "gap-1 p-1.5 text-xs" : "gap-1.5 px-3 py-1.5 text-sm",
+];
+
+/**
+ * ★ `icons` 档里标签是 `sr-only` 的，但**只在「还没点」那一档**。
+ *
+ * 复制按钮有五档状态，两档失败（取不到文件 / 写不进剪贴板）的区别是这个组件
+ * 最要紧的东西（见文件顶部那张表）。文字要是永远藏着，那五档在小图标上就**全长一样** ——
+ * 等于把它们压成一档。所以脚本在状态不是 idle 时把 `sr-only` 摘掉，让按钮临时长出字来，
+ * 两秒后退回 idle 再收回去。判据挂在 `data-compact` 上，脚本两档共用一份。
+ */
+const labelClass = compact ? "sr-only" : undefined;
+
+/** 悬停提示：`icons` 档要把按钮名字也带上（屏幕上看不见字，只剩一个图标）。 */
+const tip = (name: string, hint: string) =>
+  compact ? `${name} —— ${hint}` : hint;
+---
+
+{
+  /**
+   * ★ `icons` 档的根是 `display: contents`（Tailwind 的 `contents`）。
+   *
+   * 它挂在标题底下那一行（芯片 / 日期 / 字数所在的 `flex flex-wrap` 里）。
+   * 根要是个普通盒子，那三个按钮和**失败档那整块说明**会被一起塞进一个
+   * flex 项里 —— 说明块一露出来就把那一行撑成一条细缝。`contents` 让里面的
+   * 元素直接成为那一行的 flex 项：按钮组跟着字数走，说明块 `basis-full` 自己占一行。
+   *
+   * ⚠ `display: contents` 会把这个元素本身从无障碍树里摘掉，所以 `icons` 档
+   *   **不挂 aria-label**（挂了也没人念）。三个按钮各自有 sr-only 的名字，够用；
+   *   带 landmark 的那一份仍然是下面正文后的 `bar` 档。
+   * ⚠ 两个 data- 钩子照旧有效：`data-pagefind-ignore` 是 Pagefind 解析 HTML 时看的，
+   *   跟 CSS 无关；`data-print-hide` 那条 `display:none!important` 压得过 `contents`。
+   */
+}
+{
+  /* ⚠ `bar` 档**没有外边距**。【2026-09-20】这一排现在和「分享到：」并在同一行里，
+     底边距挪到了四个详情页那个 flex 容器上 —— 留在这里的话，它是个 flex item，
+     `mb-8` 会把那一行整体往上顶，和旁边的分享图标错开一截。 */
+}
+<section
+  data-pagefind-ignore
+  data-print-hide
+  class:list={compact ? "contents" : undefined}
+  aria-label={compact ? undefined : t.download.intro}
+>
+  <div
+    class:list={compact
+      ? "inline-flex items-center gap-1"
+      : "flex flex-wrap items-center gap-2"}
+  >
+    <a
+      href={mdUrl}
+      download={downloadName}
+      title={tip(t.download.markdown, t.download.markdownHint)}
+      class:list={buttonClass}
+    >
+      <IconDownload class="size-4 shrink-0" aria-hidden="true" />
+      <span class:list={labelClass}>{t.download.markdown}</span>
+    </a>
+
+    {
+      /* ★ 复制按钮默认 `hidden`，由脚本放出来。
+         关掉 JS 的读者点它只会毫无反应 —— 一个看不出坏了的坏按钮，是这个项目
+         最不许出现的东西。藏起来之后他看到的是旁边那条纯 `<a>` 下载链接，
+         那条不需要 JS，拿到的是同一份文件。
+         （`hidden` 压得住 utilities：Tailwind 4 preflight 里那条
+          `[hidden]{display:none!important}` 在 `@layer base`，`!important`
+          跨层反序生效。别改成 `class="hidden"` 再去 toggle 类名。） */
+    }
+    <button
+      type="button"
+      data-copy-md
+      data-md-url={mdUrl}
+      data-label-idle={t.download.copy}
+      data-label-working={t.download.copyWorking}
+      data-label-copied={t.download.copied}
+      data-label-failed-fetch={t.download.copyFailedFetch}
+      data-label-failed-clipboard={t.download.copyFailedClipboard}
+      data-compact={compact ? "1" : undefined}
+      title={tip(t.download.copy, t.download.copyHint)}
+      hidden
+      class:list={[...buttonClass, "disabled:cursor-wait disabled:opacity-60"]}
+    >
+      <IconCopy class="size-4 shrink-0" aria-hidden="true" />
+      {
+        /* 五档文案只换这个 span，图标不动。icons 档里它平时 sr-only，
+          一进非 idle 档由脚本摘掉 —— 理由见上面 labelClass 那段。 */
+      }
+      <span data-copy-md-label class:list={labelClass}>{t.download.copy}</span>
+    </button>
+
+    <button
+      type="button"
+      data-print-trigger
+      title={tip(t.download.print, t.download.printHint)}
+      class:list={buttonClass}
+    >
+      <IconFileTypePdf class="size-4 shrink-0" aria-hidden="true" />
+      <span class:list={labelClass}>{t.download.print}</span>
+    </button>
+  </div>
+
+  {
+    /* 屏幕阅读器那一路。按钮上的字换了**不保证**会被念出来，所以结果单独播报一次。
+       这个元素必须在构建期就存在于 DOM 里 —— 事后插进来的 live region 不播报。
+       （和 `CopyLinkButton.astro` 同一条理由。） */
+  }
+  <span data-copy-md-status role="status" aria-live="polite" class="sr-only"
+  ></span>
+
+  {
+    /* 两个失败档共用这一块，但**文案和文本框各自独立**：
+       - 取不到文件 → 只出说明，`<textarea>` 整个不出现。此刻我们手上一个字都没有，
+         摆一个空文本框就是拿空状态冒充完成态。
+       - 写不进剪贴板 → 说明 + 整篇文本，已经替读者选好。
+       两段说明挂在 data- 上，由脚本按档选；不自动消失（这是读者唯一的出路）。 */
+  }
+  <div
+    data-copy-md-fallback
+    data-hint-fetch={t.download.copyFailedFetchHint}
+    data-hint-clipboard={t.download.copyFailedClipboardHint}
+    hidden
+    class:list={[
+      "app-note mt-4",
+      // icons 档：根是 display:contents，所以这一块是那一行的 flex 项 ——
+      // 给它整行，别让它挤在字数后面被压成一条缝。
+      compact && "w-full basis-full",
+    ]}
+  >
+    <p class="mb-2" data-copy-md-fallback-hint></p>
+    <textarea
+      readonly
+      rows="6"
+      aria-label={t.download.copyFieldLabel}
+      data-copy-md-field
+      hidden
+      class="border-border bg-muted text-foreground rounded-app w-full border px-2 py-1 font-mono text-xs"
+    ></textarea>
+  </div>
+</section>
+
+{
+  /* ★ 打印件里的回链。屏幕上**不显示**（`hidden`），只有 print.css 把它放出来。
+     没有这一块，读者手里那份 PDF 就是一份没有出处的文件 —— 而这是个财经站，
+     "这段话是哪儿来的、什么时候写的"比排版重要。
+     用页面元素而不是 `@page` 的 margin box：margin box 里放不下一整条 URL，
+     而且 Chrome 会在它上面**再叠一层**自己的页眉页脚（实测，关不掉）。 */
+}
+{
+  /* ⚠ 只有 `bar` 档渲染它。同一页上两份的话，打印出来的 PDF 顶上会有**两条**出处 ——
+     print.css 里那条是 `display: block !important`，两份都会被放出来。
+     ★ data-pagefind-ignore：它在上面那个带 ignore 的 <section> **外面**，而 Pagefind 不认
+       hidden —— 【2026-09-20 实测】在那之前每一页的正文末尾都索引着自己的地址。 */
+  !compact && (
+    <p data-print-source data-pagefind-ignore hidden class="text-sm">
+      {canonicalUrl}
+    </p>
+  )
+}
+
+<script>
+  // ★ 验钞机那条判据单独一个零依赖的小文件（会被打进浏览器的包）。
+  //   它是一个能被裸 tsx 跑的纯函数，`export.test.ts` 的 D 组拿磁盘上每一篇真实内容
+  //   验它**不误伤** —— 误伤的症状是那一篇的「复制全文」每一次都报失败。
+  import { looksLikeHtmlPage } from "@/utils/looksLikeHtmlPage";
+
+  /**
+   * 打印前先把图片读进来。
+   *
+   * 正文图是 `loading="lazy"` 的（Astro 默认），没滚到的图在打印那一刻还没开始下载，
+   * 于是 PDF 里是一片空白框 —— 教程模块几十张截图，这个坑一踩就是整篇。
+   * `decode()` 等到图真正解码完成，比 `load` 事件更稳。
+   *
+   * ★ 必须挂 `astro:page-load`，不能只在模块顶层跑一次：ClientRouter 按
+   *   src/textContent 给 script 去重，站内跳到第二篇文章时这段**不会再执行**，
+   *   而 DOM 已经换了一批 —— 按钮就成了死的，且只有点下去才发现。
+   *   （`Main.astro` 里那段 backUrl 用的是同一个事件，同一条理由。）
+   *   `printBound` 标记防的是另一件事：同一个按钮被绑两次、点一下弹两个打印框。
+   */
+  function bindPrintTriggers() {
+    document
+      .querySelectorAll<HTMLButtonElement>("[data-print-trigger]")
+      .forEach(btn => {
+        if (btn.dataset.printBound === "1") return;
+        btn.dataset.printBound = "1";
+        btn.addEventListener("click", async () => {
+          const imgs = Array.from(
+            document.querySelectorAll<HTMLImageElement>("#main-content img")
+          );
+          imgs.forEach(img => {
+            img.loading = "eager";
+          });
+          // allSettled 而不是 all：一张图挂了不该把整个打印动作卡死。
+          // 打印出来缺一张图，比点了按钮没反应好。
+          await Promise.allSettled(
+            imgs.map(img => img.decode().catch(() => undefined))
+          );
+          window.print();
+        });
+      });
+  }
+
+  // ── 复制全文 ──────────────────────────────────────────────────────────────
+  //
+  // 取的是**上面那条下载链接的同一个地址**（`data-md-url` 就是 `mdUrl`），
+  // 不是页面里另存的副本。为什么必须这样，见本文件顶部那一大段。
+
+  type CopyState =
+    "idle" | "working" | "copied" | "failedFetch" | "failedClipboard";
+
+  /** 「已复制」退回「复制全文」的定时器，一个按钮一个。
+   *  连点两下时要把上一个取消掉，否则第一个到点了会把刚刚那次的提示抹掉。 */
+  const copyTimers = new WeakMap<HTMLElement, number>();
+
+  function setCopyState(
+    btn: HTMLButtonElement,
+    state: CopyState,
+    detail?: { chars?: number; text?: string }
+  ) {
+    const root = btn.closest("section");
+    const live = root?.querySelector<HTMLElement>("[data-copy-md-status]");
+    const fallback = root?.querySelector<HTMLElement>(
+      "[data-copy-md-fallback]"
+    );
+    const hintEl = fallback?.querySelector<HTMLElement>(
+      "[data-copy-md-fallback-hint]"
+    );
+    const field = fallback?.querySelector<HTMLTextAreaElement>(
+      "[data-copy-md-field]"
+    );
+    // 文案落在按钮里的 label span 上，图标留着；没有 span（不该发生）就退回整个按钮。
+    const labelEl =
+      btn.querySelector<HTMLElement>("[data-copy-md-label]") ?? btn;
+
+    const label = {
+      idle: btn.dataset.labelIdle,
+      working: btn.dataset.labelWorking,
+      copied: (btn.dataset.labelCopied ?? "").replaceAll(
+        "{{chars}}",
+        String(detail?.chars ?? 0)
+      ),
+      failedFetch: btn.dataset.labelFailedFetch,
+      failedClipboard: btn.dataset.labelFailedClipboard,
+    }[state];
+
+    if (label) labelEl.textContent = label;
+    // ★ icons 档：平时只有图标（标签 sr-only），但**一离开 idle 就得把字露出来**。
+    //   五档里有两档是失败，而它们的区别正是这个组件存在的理由 ——
+    //   文字永远藏着的话，三个小图标上那五档长得一模一样，等于压成一档。
+    //   （bar 档的标签从来不是 sr-only，这一句对它是空操作。）
+    if (btn.dataset.compact === "1") {
+      labelEl.classList.toggle("sr-only", state === "idle");
+    }
+    btn.disabled = state === "working";
+    // 成功才加强调色。失败不靠颜色说话（这个站是中性黑白，没有危险色）——
+    // 靠下面那整块说明出现，比换个颜色显眼得多。
+    btn.classList.toggle("text-accent", state === "copied");
+
+    // idle 时清空 live region：不清的话下次失败仍是同一句文本，内容没变，
+    // 屏幕阅读器就**不播报**了。
+    if (live) live.textContent = state === "idle" ? "" : (label ?? "");
+
+    const failed = state === "failedFetch" || state === "failedClipboard";
+    if (fallback) fallback.hidden = !failed;
+    if (hintEl) {
+      hintEl.textContent = !failed
+        ? ""
+        : ((state === "failedFetch"
+            ? fallback?.dataset.hintFetch
+            : fallback?.dataset.hintClipboard) ?? "");
+    }
+    if (field) {
+      // ★ 只有「文件取到了、写不进剪贴板」那一档才摆文本框。取不到文件时我们手上
+      //   一个字都没有 —— 摆一个空框出来就是拿空状态冒充完成态。
+      const text = state === "failedClipboard" ? (detail?.text ?? "") : "";
+      field.hidden = text === "";
+      field.value = text;
+      if (text !== "") {
+        field.focus();
+        field.select();
+      }
+    }
+  }
+
+  /** 取回导出文件，并且**证明取回来的真是它**。取不到就抛。 */
+  async function fetchExport(url: string): Promise<string> {
+    const res = await fetch(url, {
+      headers: { Accept: "text/markdown,text/plain" },
+    });
+    // ★ 不查 res.ok 的后果很具体：Cloudflare 对不存在的路径返回一个 text/html
+    //   的 404 页，`await res.text()` 照样给你一大段字符串，按钮照常写
+    //   「已复制 8342 字」，读者粘出来是一整页 HTML。
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const text = await res.text();
+    if (text.trim() === "") throw new Error("empty body");
+    // ★ `res.ok` 挡不住「200 了但不是那个文件」（宿主配错、中间层改写响应、
+    //   连上的是一张登录页）—— 那几种回来的都是一张网页，这一句就是那道验钞机。
+    //   【2026-09-23】这里原来验的是「必须以 `---` 开头」：那时导出件永远带 frontmatter。
+    //   现在导出件就是正文原文（exportMarkdown.ts 顶部），开头是什么取决于作者写了什么。
+    //   ⚠ 别改回验开头：研究稿以 `# ` 开头、问答以一段话开头、教程以一张图开头 ——
+    //   任何一种"必须以 X 开头"都会让某个集合的复制**每一次都失败**。
+    if (looksLikeHtmlPage(res.headers.get("content-type"), text)) {
+      throw new Error("got an HTML page, not the .md");
+    }
+    return text;
+  }
+
+  function bindCopyMarkdown() {
+    document
+      .querySelectorAll<HTMLButtonElement>("[data-copy-md]")
+      .forEach(btn => {
+        // 放出按钮。这一句在去重判断**外面**：ClientRouter 换过来
+        // 的是新元素，而 transition:persist 的场景下又可能是旧元素 —— 两种都得显示。
+        btn.hidden = false;
+
+        if (btn.dataset.copyMdBound === "1") return;
+        btn.dataset.copyMdBound = "1";
+
+        btn.addEventListener("click", async () => {
+          const prev = copyTimers.get(btn);
+          if (prev) window.clearTimeout(prev);
+
+          setCopyState(btn, "working");
+
+          let text: string;
+          try {
+            text = await fetchExport(btn.dataset.mdUrl ?? "");
+          } catch {
+            // 这一档剪贴板**一个字节都没动过** —— 文案里说清楚了，否则读者
+            // 按经验去粘，粘出来是上次复制的东西，而那看起来完全正常。
+            // 不设定时器：让它粘在屏幕上。
+            setCopyState(btn, "failedFetch");
+            return;
+          }
+
+          try {
+            // ★ 非安全上下文（`pnpm dev --host` 之后用 http://192.168.x.x 打开）里
+            //   `navigator.clipboard` 整个是 undefined。不判也会撞进 catch，
+            //   显式写出来是为了让下一个人知道这条路是真的存在的。
+            if (!navigator.clipboard?.writeText) {
+              throw new Error("clipboard API unavailable");
+            }
+            await navigator.clipboard.writeText(text);
+            // 字数按**码点**算，不是 `.length` 的 UTF-16 码元：正文里一个 emoji
+            // 会被 `.length` 数成 2 个字，报出去的数就不是人看见的那个数。
+            setCopyState(btn, "copied", { chars: [...text].length });
+            copyTimers.set(
+              btn,
+              window.setTimeout(() => setCopyState(btn, "idle"), 2500)
+            );
+          } catch {
+            setCopyState(btn, "failedClipboard", { text });
+          }
+        });
+      });
+  }
+
+  bindPrintTriggers();
+  bindCopyMarkdown();
+  document.addEventListener("astro:page-load", () => {
+    bindPrintTriggers();
+    bindCopyMarkdown();
+  });
+</script>

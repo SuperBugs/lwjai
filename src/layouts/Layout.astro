@@ -1,0 +1,202 @@
+---
+import { Font } from "astro:assets";
+import { ClientRouter } from "astro:transitions";
+import { resolveDefaultOgImagePath } from "@/utils/resolveDefaultOgImagePath";
+import { getAssetPath } from "@/utils/withBase";
+import { SITEMAP_FILE } from "@/config/sitemap";
+import { PUBLIC_CF_BEACON_TOKEN } from "astro:env/client";
+import config from "@/config";
+import "@/styles/global.css";
+
+type Props = {
+  title?: string;
+  description?: string;
+  ogImage?: string;
+  canonicalURL?: string;
+  /**
+   * og:type。**全站只有这个文件写它**，一处。【2026-09-20 查出来的】原来这里无条件写
+   * `website`，PostLayout 又在 head slot 里补一条 `article` —— OGP 规范冲突时取第一个，
+   * 文章页一直被抓取方当成普通网页（docs/engineering-notes.md 坑 22）。详情页由 PostLayout 传 "article"。
+   */
+  ogType?: "website" | "article";
+  /**
+   * `<meta name="robots">`。默认允许收录、允许大图预览（Google Discover 要 large）。
+   * 工具页传 "noindex, follow"（search.astro）—— 那一页还要同时从 sitemap 里排除，
+   * 见 astro.config.ts；seo.test.ts 钉着两处一起。
+   */
+  robots?: string;
+};
+
+const { site } = config;
+
+const {
+  title = site.title,
+  description = site.description,
+  ogImage = resolveDefaultOgImagePath(config),
+  canonicalURL = new URL(Astro.url.pathname, Astro.site).href,
+  ogType = "website",
+  robots = "index, follow, max-image-preview:large",
+} = Astro.props;
+
+const socialImageURL = new URL(ogImage, Astro.site ?? Astro.url);
+// og:locale 要的是下划线写法（zh_CN），<html lang> 是连字符（zh-CN）。同一个来源，两种写法。
+const ogLocale = (Astro.currentLocale ?? site.lang).replace("-", "_");
+
+/* ★ 这里**不能**用 `getRelativeLocaleUrl(locale, "rss.xml")`（2026-09-18 查出来的）。
+ *
+ * 在 i18n + `build.format: "directory"`（默认）下，它会给路径补一个尾斜杠，于是每一页
+ * <head> 里的 RSS 自动发现链接变成 `.../rss.xml/` —— 而 `dist/rss.xml` 是个**文件**，
+ * 没有同名目录，public/ 下也没有 _redirects 兜底，那条地址取不到 feed。
+ *
+ * 症状是本项目最怕的那种：首页那个肉眼可见的 RSS 按钮是另一处单独拼的（index.astro），
+ * 它一直是对的，人点一遍永远正常；坏掉的是 Feedly / Inoreader 粘首页地址时
+ * **唯一**会读的那条 <link rel="alternate">。构建全绿，页面全绿。
+ *
+ * ⚠ 别试图给 `getRelativeLocaleUrl` 传 `{ trailingSlash: "never" }` —— astro:i18n 的
+ *   `GetLocaleOptions` 只有 `normalizeLocale` 和 `prependWith` 两个字段，传进去过不了
+ *   `astro check`（它在 build 链里排在 astro build 前面）。也别去动全局的 trailingSlash，
+ *   那会改掉全站每一个页面地址。
+ *
+ * 站点只有 zh-CN 一个 locale 且 `prefixDefaultLocale: false`（astro.config.ts:51-57），
+ * rss.xml 也只有根上这一条路由，所以根相对路径就是正确答案。
+ */
+const rssHref = getAssetPath("rss.xml");
+---
+
+<!doctype html>
+<html
+  dir={site.dir ?? "ltr"}
+  lang={Astro.currentLocale ?? site.lang}
+  class="overflow-y-scroll scroll-smooth"
+>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    {
+      /* ★ 只有 SVG 这一条，**没有 favicon.ico**（2026-09-18 删掉的）。
+        上游 AstroPaper 在这里并排挂了一条 `favicon.ico`，但它的 .ico 文件
+        从来没进过这个仓库 —— 于是每次开页都白打一个 404，而页面完全正常：
+        浏览器拿 SVG 那条顶上了。零症状，所以建站起没人发现。
+        要加回来就先把文件放进 public/ —— scripts/gate/logo.test.ts 会核对
+        这里每一条 rel="icon" 指的文件是不是真的存在。 */
+    }
+    <link rel="icon" type="image/svg+xml" href={getAssetPath("favicon.svg")} />
+    <link rel="canonical" href={canonicalURL} />
+    <meta name="generator" content={Astro.generator} />
+
+    <!-- Font -->
+    <Font
+      cssVariable="--font-google-sans-code"
+      preload={[{ subset: "latin", weight: 400, style: "normal" }]}
+    />
+
+    <!-- Primary meta -->
+    <title>{title}</title>
+    <meta name="title" content={title} />
+    <meta name="description" content={description} />
+    <meta name="author" content={site.author} />
+    <meta name="robots" content={robots} />
+    {
+      /* ⚠【2026-09-22】文件名读 `SITEMAP_FILE`，**不许手写**。这里原来写死着
+        `sitemap-index.xml`，而 robots.txt 里另写着一份 —— 全站三处各写一遍
+        （这一条在**每一页**上，另两处在 robots.txt 和构建产物里）。
+        判据在 src/config/sitemap.ts，`sitemap.test.ts` 的 E3 钉着"src/ 里没有第二处"。 */
+    }
+    <link rel="sitemap" href={getAssetPath(SITEMAP_FILE)} />
+
+    <!-- Open Graph -->
+    <meta property="og:type" content={ogType} />
+    <meta property="og:locale" content={ogLocale} />
+    <meta property="og:site_name" content={site.title} />
+    <meta property="og:title" content={title} />
+    <meta property="og:description" content={description} />
+    <meta property="og:url" content={canonicalURL} />
+    <meta property="og:image" content={socialImageURL} />
+
+    <!-- Twitter / X（X 的文档写的是 name=，不是 property=；2026-09-20 改） -->
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:url" content={canonicalURL} />
+    <meta name="twitter:title" content={title} />
+    <meta name="twitter:description" content={description} />
+    <meta name="twitter:image" content={socialImageURL} />
+
+    <!-- RSS autodiscovery -->
+    <link
+      rel="alternate"
+      type="application/rss+xml"
+      title={site.title}
+      href={new URL(rssHref, Astro.site)}
+    />
+
+    <!-- Filled at runtime by theme.ts to match the current background colour -->
+    <meta name="theme-color" content="" />
+
+    <!-- Extra head content injected by child layouts (e.g. JSON-LD, article meta) -->
+    <slot name="head" />
+
+    {
+      site.googleVerification && (
+        <meta
+          name="google-site-verification"
+          content={site.googleVerification}
+        />
+      )
+    }
+
+    <!--
+      Inline FOUC-prevention script: sets data-theme on <html> before
+      the browser paints. Runs synchronously, no defer/async.
+    -->
+    <script is:inline>
+      (function () {
+        // ★ 默认亮色，不跟随系统。判据和 src/scripts/theme.ts 的
+        //   getPreferredTheme() 必须逐字一致 —— 这里决定**首屏那一帧**，
+        //   那边决定脚本接管之后。两边不一致的症状是页面先闪一个颜色再跳成另一个，
+        //   而且构建、类型、测试全绿（那边还有第三处，见那个函数上面的注释）。
+        const stored = localStorage.getItem("theme");
+        const theme = stored ?? "light";
+        const root = document.firstElementChild;
+        root?.setAttribute("data-theme", theme);
+        root?.classList.toggle("dark", theme === "dark");
+        // Expose value so theme.ts can skip re-detection.
+        window.__theme = { value: theme };
+      })();
+    </script>
+
+    <ClientRouter />
+
+    {
+      /**
+       * Cloudflare Web Analytics 的 beacon（手动那条路）。
+       *
+       * ★ **三个条件同时成立才渲染**，少一个就什么都不输出：
+       *   ① `import.meta.env.PROD` —— dev 里绝不上报。本机每存一次盘都刷一遍页面，
+       *      不挡住的话线上的日活数字里会混进你自己改稿子的次数。
+       *   ② token 非空 —— 没配就是没配，不塞一个空 token 的脚本进去。
+       *   ③ 见 astro.config.ts 里 `PUBLIC_CF_BEACON_TOKEN` 那段：
+       *      **优先走 Cloudflare 后台的自动注入**（零代码）。两条路同时开会**双计**，
+       *      而且两边都不报错 —— 只会看到一份 2 倍的数字。
+       *
+       * ⚠ 这个脚本只把数据送到 Cloudflare 后台，**站上不显示任何数字**。
+       *   要在文章页上显示「阅读 N 次」是另一件事：那需要一个能实时读数的端点
+       *   （Worker + KV），站就不再是纯静态的了。
+       */
+      import.meta.env.PROD && PUBLIC_CF_BEACON_TOKEN && (
+        <script
+          is:inline
+          defer
+          src="https://static.cloudflareinsights.com/beacon.min.js"
+          data-cf-beacon={JSON.stringify({ token: PUBLIC_CF_BEACON_TOKEN })}
+        />
+      )
+    }
+  </head>
+  <body
+    class="bg-background font-app text-foreground selection:bg-accent/75 selection:text-accent-foreground flex min-h-svh flex-col"
+  >
+    <slot />
+    <script>
+      import "@/scripts/theme";
+    </script>
+  </body>
+</html>

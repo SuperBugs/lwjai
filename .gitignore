@@ -1,0 +1,67 @@
+# build output
+dist/
+
+# generated types
+.astro/
+
+# dependencies
+node_modules/
+
+# logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# environment variables
+# ★ 通配，不是字面量。原来只写了 `.env` 和 `.env.production` 两行，于是 Vite 真会去读的
+#   `.env.local` / `.env.production.local` 都不在忽略里 —— 同一个 mode 的两个文件一个忽略
+#   一个不忽略。发布闸看不见这类文件（它的范围从 src/config/collections.ts 推，只覆盖
+#   src/content/*），一个只含 .env.local 的提交会走「这次提交没有改动内容，跳过」那条路。
+# ⚠ `!.env.example` 必须排在 `.env*` 后面 —— git 取最后一条匹配规则。
+.env*
+!.env.example
+
+# cloudflare wrangler：本地密钥（.dev.vars）+ 部署时生成的 tmp/state
+.dev.vars
+.dev.vars.*
+.wrangler/
+
+# claude code 的本机权限白名单。
+# 别依赖 ~/.config/git/ignore 那份 —— 它在仓库外，换台机器就没了，而且没有任何提示。
+.claude/settings.local.json
+
+# macOS-specific files
+.DS_Store
+
+# jetbrains setting folder
+.idea/
+
+# pagefind
+public/pagefind
+
+# pnpm
+.pnpm-store
+
+# 批量清理（pnpm content:prune）删东西之前打的备份包。
+# ★ 不进 git 是刻意的：它装的正是**刚被清理掉**的内容，提交回来等于把清理撤销了一半，
+#   而且是一堆二进制 blob 永久留在内容仓库里。
+# ⚠ 代价要知道：它因此**只在这台机器上**，`git clean -xdf` 会连它一起删。
+#   要长期留就用 `--backup-dir` 指到仓库外面（别的盘、同步盘）。
+.backups/
+
+# docker compose
+compose.override.yaml
+
+# 小红书发过什么的流水账（/_xhs 的「已发过」那一行）。
+# ★ 不进 git 是刻意的：这是**这台机器的**备忘，不是内容 ——
+#   提交它会让两台机器互相覆盖对方的记录，而那比没有记录更难查。
+# ⚠ 但它也**不放在 node_modules 下**：丢了会让人发重，而 pnpm install --force
+#   会把那儿清掉且一句话都不说。理由写在 src/dev/xhsPublished.ts 文件头。
+.xhs-published.json
+
+# 嵌在这个目录里的别的仓库（开源镜像的工作副本，有自己的 .git）。
+# ★ 忽略它不只是为了 git status 干净：不忽略的话 `git add -A` 会把它当嵌套仓库收进来，
+#   而 Tailwind 这类按 .gitignore 取扫描范围的工具会去扫它里面的文件 ——
+#   那是一个任何人都能提 PR 的公开仓库，里面的字节不该影响这个站的构建。
+open_source/

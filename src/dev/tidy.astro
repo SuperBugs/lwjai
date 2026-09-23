@@ -1,0 +1,318 @@
+---
+import Layout from "@/layouts/Layout.astro";
+import Header from "@/components/Header.astro";
+import Main from "@/components/Main.astro";
+import Footer from "@/components/Footer.astro";
+import { missingDirs, scanTidy } from "./tidyScan";
+
+/**
+ * 「清理特殊字符」—— `/_tidy`，**只在 `pnpm dev` 里存在**（和 /_gate、/_publish
+ * 同一条路：astro.config.ts 按 isDev 注入，文件不在 src/pages 下）。
+ *
+ * 【2026-09-22 用户要的】模型交上来的稿子里有些字符会**原样印在页面上、却什么也
+ * 不表示**：整行只有 `\\` 的行（LaTeX 的换行，站上没有数学渲染），以及没解析成
+ * 粗体、退化成文字的那两个星号。在后台一处处删要翻半页，所以给一个按钮。
+ * 两种脏各有各的档，见 `scripts/content/tidyPlan.ts`。
+ *
+ * ★ 这一页**先把要动的每一行摆出来，再给按钮** —— 和 /_publish 同一条规矩：
+ *   按钮不替人省掉"看一眼"那一步。能删的东西被判据完全描述（一行里除了空白
+ *   只有杠；或者连着两个以上的转义星号），所以这里没有"不知道删了什么"这一档，
+ *   也就不需要 prune 那道备份。
+ * ★ **两档在屏幕上长得不一样**：一个写「整行删掉」，一个写「这一行去掉 N 处」。
+ *   合成一句「要清的」的话，人按下去之前分不出会不会整行没了 ——
+ *   而第二档那些行里**有正文**。
+ *
+ * ★ 真去写盘的是 `POST /_tidy/run`（./tidy-run.ts）。这一页和它**读同一份扫描**
+ *   （./tidyScan.ts）：屏幕上列的和按下去删的必须是同一批行。
+ */
+
+const files = scanTidy();
+const total = files.reduce((s, f) => s + f.removed.length, 0);
+// ★ 第三档：登记在册但磁盘上找不到的目录。「扫不全」不许长得像「没东西可清」。
+const missing = missingDirs();
+
+/** 长正文那一档摆出来会占半屏 —— 截一下。纯显示，不参与判断。 */
+const clip = (s: string, cap = 72) =>
+  [...s].length <= cap ? s : `${[...s].slice(0, cap).join("")}…`;
+---
+
+<Layout title="清理特殊字符（仅 dev）">
+  <Header />
+  <Main
+    pageTitle="清理特殊字符"
+    pageDesc="把稿子里那些原样印在页面上、却什么也不表示的字符清掉：整行只有反斜杠 / 斜杠的行，和没解析成粗体的那两个星号。只在 pnpm dev 里存在，直接改磁盘上的 .md。"
+  >
+    <div class="app-note mt-6 p-5 sm:p-6">
+      <p class="font-semibold">它清什么、不清什么</p>
+      <ul class="mt-2 space-y-1 text-sm">
+        <li>
+          <strong>整行删掉</strong>：<span class="font-mono"
+            >一整行除了空白只有 \ 或 /</span
+          > 的行（站上那些都是 <span class="font-mono">\\</span
+          >），并顺手把多出来的那个空行收掉。
+        </li>
+        <li>
+          <strong>只去掉标记</strong>：页面上原样印出来的
+          <span class="font-mono">**</span
+          >（中文标点后面紧跟汉字时，这段粗体根本没被解析，后台存盘时会把它转义掉）。
+          那一行别的字<strong>一个不动</strong>。
+        </li>
+        <li>
+          不清：代码围栏和行内代码里的（那里一根 <span class="font-mono">\</span
+          > 是 shell 的续行、<span class="font-mono">**</span> 是给人抄的字）、<span
+            class="font-mono">\&lt;</span
+          >（后台能不能编开靠它）、算式里的 <span class="font-mono"
+            >3.76\\%</span
+          >、真的粗体、以及单独一个星号（脚注 / 乘号，那是作者想印的字）。
+        </li>
+      </ul>
+      <p class="mt-3 text-sm">
+        ⚠ 星号那一档是<strong>删掉标记，不是把它修成真的粗体</strong>：
+        要真加粗得把作者写的标点挪位置或者在汉字中间塞空格，那是机器替人改文章。
+        删掉之后页面上一个字都没少 —— 那个粗体本来就没渲染出来过。
+      </p>
+      <p class="mt-3 text-sm">
+        ⚠ 后台正开着某一条的话，清完<strong>去那一页刷新一下</strong>：
+        编辑器里还是清理前那一份，直接再存一次会把它们写回去。
+      </p>
+    </div>
+
+    {
+      missing.length > 0 && (
+        <div class="app-callout mt-6 p-5 sm:p-6">
+          <p class="font-semibold">
+            ⚠ 这几个登记在册的目录没找到，下面那张清单是不全的
+          </p>
+          <ul class="mt-2 space-y-1 font-mono text-sm">
+            {missing.map(d => (
+              <li>{d}</li>
+            ))}
+          </ul>
+          <p class="mt-2 text-sm">
+            这<strong>不是</strong>"那个集合还没有内容" ——
+            是它根本没看到那个目录。 去 src/config/collections.ts 把 dir
+            改对；登记表是唯一的一份。
+          </p>
+        </div>
+      )
+    }
+
+    {
+      files.length === 0 ? (
+        <div class="app-callout mt-6 p-5 sm:p-6">
+          <p class="font-semibold">一份都没有。</p>
+          <p class="mt-1">
+            这不是出错 —— 站上现在真的没有这两种字符。新稿子进来之后再回来看。
+          </p>
+        </div>
+      ) : (
+        <section class="mt-6">
+          <h2 class="mb-2 text-lg font-semibold">
+            要清的（{files.length} 份 · 共 {total} 行）
+          </h2>
+          <ul class="space-y-4">
+            {files.map(f => (
+              <li class="app-card p-4 sm:p-5">
+                <p class="flex flex-wrap items-baseline gap-x-3">
+                  <span class="font-semibold">{f.title}</span>
+                  <span class="text-muted-foreground font-mono text-sm">
+                    {f.path}
+                  </span>
+                  {f.collection && (
+                    <span class="text-muted-foreground text-sm">
+                      {f.collection}
+                    </span>
+                  )}
+                </p>
+                {/*
+                  两档写得不一样是承重的（见文件头）：「整行删掉」那一行只有杠，
+                  摆全没问题；「去掉 N 处」那一行**有正文**，所以先说清楚只动标记，
+                  再把原文截一段摆出来。压成一句的话人分不出这一行会不会整个没了。
+                */}
+                <ul class="text-muted-foreground mt-2 space-y-1 text-sm">
+                  {f.removed.map(r => (
+                    <li>
+                      <span class="font-mono">正文第 {r.line} 行</span>
+                      {r.kind === "slash_line" ? (
+                        <>
+                          <span> · 整行删掉：</span>
+                          <span class="text-foreground font-mono">
+                            {r.text.trim() === "" ? "（空白）" : r.text}
+                          </span>
+                        </>
+                      ) : (
+                        <>
+                          <span> · 去掉 {r.marks} 处 </span>
+                          <span class="text-foreground font-mono">**</span>
+                          <span>，这一行别的字不动：</span>
+                          <span class="text-foreground block font-mono">
+                            {clip(r.text)}
+                          </span>
+                        </>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+                <p class="mt-3">
+                  <button
+                    type="button"
+                    data-tidy-file={f.path}
+                    class="border-border bg-surface hover:border-border-strong inline-flex items-center rounded-md border px-3 py-1.5 text-sm font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    只清这一份（{f.removed.length} 行）
+                  </button>
+                </p>
+              </li>
+            ))}
+          </ul>
+
+          <p class="mt-8 flex flex-wrap items-center gap-3">
+            <button
+              type="button"
+              data-tidy-all
+              class="border-border bg-surface hover:border-border-strong inline-flex items-center rounded-md border px-4 py-2 text-sm font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              全部清理（{files.length} 份 · {total} 行）
+            </button>
+            <span class="text-muted-foreground text-sm">
+              直接改磁盘上的 .md。改完记得去 /_publish 提交。
+            </span>
+          </p>
+        </section>
+      )
+    }
+
+    {/* 结果区：四档各自长得不一样（见 tidy-run.ts 文件头），由脚本填。 */}
+    <section data-tidy-result hidden class="mt-6"></section>
+  </Main>
+  <Footer />
+</Layout>
+
+<script>
+  type FileResult = {
+    path: string;
+    removed: number;
+    lines: number[];
+    error?: string;
+  };
+  type Result = {
+    stage: string;
+    detail?: string;
+    removed?: number;
+    results?: FileResult[];
+  };
+
+  /** 四档 + 两档出错，屏幕上长得不一样 —— 压成一句"完成"就看不出哪份没清成。 */
+  const TIER: Record<string, { title: string; box: string }> = {
+    tidied: { title: "✓ 清掉了", box: "app-card" },
+    partial: { title: "⚠ 清了一部分，有几份没清成", box: "app-callout" },
+    noop: { title: "没东西可清", box: "app-note" },
+    busy: { title: "上一次还没跑完", box: "app-note" },
+    "bad-request": { title: "✗ 请求不对", box: "app-callout" },
+  };
+
+  function render(root: HTMLElement, r: Result, httpOk: boolean) {
+    root.replaceChildren();
+    const tier = TIER[r.stage] ?? {
+      title: httpOk ? r.stage : `✗ 接口出错（${r.stage}）`,
+      box: "app-callout",
+    };
+    const box = document.createElement("div");
+    box.className = `${tier.box} p-5 sm:p-6`;
+    const h = document.createElement("p");
+    h.className = "font-semibold";
+    h.textContent =
+      typeof r.removed === "number" && r.removed > 0
+        ? `${tier.title} —— 共 ${r.removed} 行`
+        : tier.title;
+    box.append(h);
+    if (r.detail) {
+      const p = document.createElement("p");
+      p.className = "mt-2 text-sm";
+      p.textContent = r.detail;
+      box.append(p);
+    }
+    for (const f of r.results ?? []) {
+      const p = document.createElement("p");
+      p.className = "mt-2 font-mono text-sm";
+      p.textContent = f.error
+        ? `✗ ${f.path} —— ${f.error}`
+        : f.removed === 0
+          ? `· ${f.path} —— 已经是干净的`
+          : `✓ ${f.path} —— 清了第 ${f.lines.join("、")} 行`;
+      box.append(p);
+    }
+    if (r.stage === "tidied" || r.stage === "partial") {
+      const p = document.createElement("p");
+      p.className = "mt-3 text-sm";
+      p.textContent =
+        "后台开着这几条的话，去那一页刷新一下再继续编辑；改完记得去 /_publish 提交。";
+      box.append(p);
+    }
+    root.append(box);
+    root.hidden = false;
+    root.scrollIntoView({ block: "nearest" });
+  }
+
+  const result = document.querySelector<HTMLElement>("[data-tidy-result]");
+
+  async function post(payload: unknown, button: HTMLButtonElement) {
+    if (!result) return;
+    const label = button.textContent;
+    button.disabled = true;
+    button.textContent = "正在清…";
+    try {
+      const res = await fetch("/_tidy/run", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-Requested-With": "lwj-tidy",
+        },
+        body: JSON.stringify(payload),
+      });
+      let data: Result;
+      try {
+        data = (await res.json()) as Result;
+      } catch {
+        data = {
+          stage: `HTTP ${res.status}`,
+          detail: await res.text().catch(() => ""),
+        };
+      }
+      render(result, data, res.ok);
+      // 清过之后上面那张清单已经过时：重新加载，让它反映磁盘上的真实状态。
+      if (data.stage === "tidied" || data.stage === "partial") {
+        window.setTimeout(() => location.reload(), 2500);
+      }
+    } catch (err) {
+      render(
+        result,
+        {
+          stage: "网络错误",
+          detail: err instanceof Error ? err.message : String(err),
+        },
+        false
+      );
+    } finally {
+      button.disabled = false;
+      button.textContent = label;
+    }
+  }
+
+  document
+    .querySelector<HTMLButtonElement>("[data-tidy-all]")
+    ?.addEventListener("click", e => {
+      // ★ 发 `all: true` 而不是把页面上那张清单发回去：这一页可能开了半小时，
+      //   中间后台又存过盘 —— 范围由服务端现扫一遍。
+      post({ all: true }, e.currentTarget as HTMLButtonElement);
+    });
+
+  for (const button of document.querySelectorAll<HTMLButtonElement>(
+    "[data-tidy-file]"
+  )) {
+    button.addEventListener("click", () => {
+      const path = button.dataset.tidyFile;
+      if (path) post({ files: [path] }, button);
+    });
+  }
+</script>

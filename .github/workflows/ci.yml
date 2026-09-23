@@ -1,0 +1,31 @@
+# 每个 PR 和 main 上的每次推送都跑一遍完整的发版链（pnpm build =
+# 发布闸 → 稿件体检 → pnpm test → astro check → astro build → pagefind）。
+#
+# ★ 用的是 `pull_request`，不是 `pull_request_target`：来自 fork 的 PR 在 GitHub 的隔离环境里跑，
+#   拿不到任何密钥 —— 这个流程本来也不需要密钥。
+# ★ permissions 收到只读；checkout 不留凭证。
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@v4 # 版本读 package.json 的 packageManager
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build

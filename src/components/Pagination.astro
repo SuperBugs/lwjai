@@ -1,0 +1,83 @@
+---
+import type { Page } from "astro";
+import IconArrowLeft from "@/assets/icons/IconArrowLeft.svg";
+import IconArrowRight from "@/assets/icons/IconArrowRight.svg";
+import LinkButton from "./LinkButton.astro";
+import { useTranslations } from "@/i18n";
+
+/**
+ * ★ 2026-09-18：类型参数从 `Page<CollectionEntry<"posts">>` 放宽成 `Page<unknown>`。
+ *
+ * 这个组件**从来不碰 `page.data`** —— 通读下面的模板，它只读 `lastPage`、
+ * `currentPage`、`url.prev`、`url.next` 四样，全是分页器自己的元数据。
+ * 把条目类型钉在 props 上是一条**不对应任何真实约束**的限制：
+ * 它挡不住任何 bug，只会在新增一个内容集合（问答）时逼人来改这里。
+ *
+ * `Page<unknown>` 仍然保住了真正要保的东西 —— 传进来的必须是一个 Astro 分页对象，
+ * 而不是随便一个 any。
+ */
+type Props = {
+  page: Page<unknown>;
+};
+
+const { page } = Astro.props;
+
+const t = useTranslations(Astro.currentLocale);
+---
+
+{
+  /* ★ 上一页 / 下一页画成**按钮形状**（2026-09-18 改）。
+   *
+   * 原来是两段裸文字加一个箭头图标，靠 `opacity-50` 表示"到头了"。
+   * 两个问题：
+   *   ① 半透明的文字和"这一页在加载"长得一样，而它其实是**禁用**；
+   *      现在禁用那一档是"边框变虚线 + 灰字 + 不可选"，和可点的实线框
+   *      在形状上就不同，不只是淡一点。
+   *   ② 裸文字的点击区只有字那么大。带边框的按钮把可点范围画了出来，
+   *      在手机上尤其重要（44px 是触摸目标的通行下限）。
+   *
+   * 页码用等宽 + tabular-nums：翻页时 `9 / 12` → `10 / 12` 数字宽度不变，
+   * 中间那一块不会跟着跳。
+   */
+}
+{
+  page.lastPage > 1 && (
+    <nav
+      class="mt-auto mb-10 flex items-center justify-center gap-3"
+      role="navigation"
+      aria-label="Pagination Navigation"
+    >
+      <LinkButton
+        disabled={!page.url.prev}
+        href={page.url.prev as string}
+        class:list={[
+          "rounded-app border px-4 py-2 text-sm transition-colors select-none",
+          page.url.prev
+            ? "border-border bg-surface hover:border-border-strong"
+            : "border-border text-muted-foreground border-dashed",
+        ]}
+        aria-label={t.a11y.goToPreviousPage}
+      >
+        <IconArrowLeft class="inline-block size-4 rtl:rotate-180" />
+        {t.pagination.prev}
+      </LinkButton>
+      <span class="text-muted-foreground font-mono text-sm tabular-nums">
+        {page.currentPage} / {page.lastPage}
+      </span>
+      <LinkButton
+        disabled={!page.url.next}
+        href={page.url.next as string}
+        class:list={[
+          "rounded-app border px-4 py-2 text-sm transition-colors select-none",
+          page.url.next
+            ? "border-border bg-surface hover:border-border-strong"
+            : "border-border text-muted-foreground border-dashed",
+        ]}
+        aria-label={t.a11y.goToNextPage}
+      >
+        {t.pagination.next}
+        <IconArrowRight class="inline-block size-4 rtl:rotate-180" />
+      </LinkButton>
+    </nav>
+  )
+}

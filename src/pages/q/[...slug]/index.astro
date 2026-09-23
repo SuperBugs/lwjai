@@ -1,0 +1,601 @@
+---
+import { type CollectionEntry, getCollection, render } from "astro:content";
+import { getRelativeLocaleUrl } from "astro:i18n";
+import PostLayout from "@/layouts/PostLayout.astro";
+import Header from "@/components/Header.astro";
+import Footer from "@/components/Footer.astro";
+import Datetime from "@/components/Datetime.astro";
+import ReadingTime from "@/components/ReadingTime.astro";
+import SymbolChip from "@/components/SymbolChip.astro";
+import AgentModelChip from "@/components/AgentModelChip.astro";
+import Tag from "@/components/Tag.astro";
+import IconArrowLeft from "@/assets/icons/IconArrowLeft.svg";
+import IconArrowRight from "@/assets/icons/IconArrowRight.svg";
+// 这三个是集合无关的纯 UI（返回、回到顶部、分享），直接复用文章详情页那份，
+// 不再抄一遍。`_` 前缀的目录不进路由，跨目录 import 是安全的。
+// 刻意没有复用那个目录里的 EditPost（它的 Props 写死 CollectionEntry<"posts">）
+// 和 AdjacentPostNav（它内部写死 getPostUrl，会把 qa 链到 /posts/…，见下面那段）。
+import BackButton from "../../r/[...slug]/_components/BackButton.astro";
+import BackToTopButton from "../../r/[...slug]/_components/BackToTopButton.astro";
+import DownloadLinks from "@/components/DownloadLinks.astro";
+import CopyLinkButton from "@/components/CopyLinkButton.astro";
+import RelatedEntries from "@/components/RelatedEntries.astro";
+import SymbolLookupLinks from "@/components/SymbolLookupLinks.astro";
+import QaAnswerSwitch from "@/components/QaAnswerSwitch.astro";
+import TableOfContents from "@/components/TableOfContents.astro";
+import JumpLink from "@/components/JumpLink.astro";
+import { tocItems } from "@/utils/tocItems";
+import ArticleEnhancements from "@/components/ArticleEnhancements.astro";
+import { readingStats } from "@/utils/readingTime";
+import { entryOgImageUrl } from "@/utils/ogImageUrl";
+import { entrySlug, entryUrl } from "@/utils/getPostPaths";
+import { getSortedPosts } from "@/utils/getSortedPosts";
+import { symbolSlug } from "@/utils/getUniqueSymbols";
+import { qaGroupKey, qaSiblings, relatedBySymbol } from "@/utils/related";
+import { sortAnswers } from "@/config/answerOrder";
+import { slugifyStr } from "@/utils/slugify";
+import { toTransitionName } from "@/utils/toTransitionName";
+import { findAgent, UNSPECIFIED_AGENT } from "@/config/agents";
+import { modelSlot } from "@/config/models";
+import { searchMetaAttr } from "@/utils/searchMeta";
+import { tplStr, useTranslations } from "@/i18n";
+import { SEARCH_FILTER_KEY, SEARCH_KINDS } from "@/config/searchKinds";
+import config from "@/config";
+
+type AdjacentQa = {
+  id: string;
+  title: string;
+  filePath: string | undefined;
+} | null;
+
+export async function getStaticPaths() {
+  /**
+   * ★ 这个小助手**必须定义在 getStaticPaths 内部**。
+   *
+   * 【2026-09-18 踩到】原来它是模块作用域的 `const adjacent = ... =>`，
+   * 而打包器（rolldown）把 `getStaticPaths` 提出去单独成 chunk 时
+   * **没有把那个 const 一起带走** —— 产物里只剩两处调用、没有声明，
+   * 构建期报 `adjacent is not defined`。
+   *
+   * 最阴的地方：它一开始是好的。问答页用同样的写法跑通过好几次，
+   * 直到加了第四个集合、分块方式变了，两页**同时**坏掉。
+   * 也就是说这类写法能不能活，取决于打包器当天怎么分块 —— 那不是可以依赖的东西。
+   * 定义在函数里就没有这个问题：它是局部变量，摇不掉。
+   */
+  const adjacent = (e: CollectionEntry<"qa">): AdjacentQa => ({
+    id: e.id,
+    title: e.data.title,
+    filePath: e.filePath,
+  });
+
+  const entries = await getCollection("qa");
+
+  // ★ 同列表页：过 getSortedPosts() 才有草稿 / 定时发布的过滤。
+  //   这里少一道，草稿的详情页就会被生成出来挂在公网上（且构建全绿）。
+  const sorted = getSortedPosts(entries);
+  // ★ 「关于这只票的其他内容」要连研究稿一起数；同样过 getSortedPosts。
+  const pool = getSortedPosts([...sorted, ...(await getCollection("posts"))]);
+
+  return sorted.map((entry, index) => {
+    // 同一个问题、其他智能体的回答：按 questionKey 归组，本条排除（src/utils/related.ts）。
+    /**
+     * 组内展示顺序由后台「回答排序」那一页说了算（`src/config/answerOrder.ts`）。
+     * 表空着时 `sortAnswers` 是恒等（稳定排序），也就是照旧新在前。
+     *
+     * ★ 必须裹在**这一行**：下面那排切换、页脚「相关条目」、以及 relatedBySymbol
+     *   的排除，读的都是这一个 `siblings` —— 排序写到其中某一处，就是同一组内容
+     *   在两个地方两个顺序，而四处全绿。`detailParity.test.ts` 钉着两页都裹了。
+     */
+    const siblings = sortAnswers(
+      qaSiblings(sorted, entry, entry.data.questionKey)
+    );
+    return {
+      // ★ 用 entrySlug("qa", …) 而不是 getPostSlug：后者剥前缀时把
+      //   "src/content/posts" 写死了，对 qa 的 filePath 是个**空操作且不报错** ——
+      //   最终会生成 /qa/src/content/qa/<slug> 这种路由。构建绿，链接 404。
+      params: { slug: entrySlug("qa", entry.id, entry.filePath) },
+      props: {
+        entry,
+        siblings,
+        // ★ 已经列在「其他智能体的回答」里的条目不再出现在这一块 ——
+        //   同一条两张卡会带同一个 view-transition-name，动画整个被跳过且不报错。
+        related: relatedBySymbol(pool, entry, entry.data.symbols, siblings),
+        // sorted 是新到旧，所以"上一条"（更旧）在更大的下标上。
+        prevEntry:
+          index < sorted.length - 1 ? adjacent(sorted[index + 1]) : null,
+        nextEntry: index > 0 ? adjacent(sorted[index - 1]) : null,
+      },
+    };
+  });
+}
+
+type Props = {
+  entry: CollectionEntry<"qa">;
+  /** 同一个问题、其他智能体的回答（本条已排除）。 */
+  siblings: CollectionEntry<"qa">[];
+  /** 同一只票的其他研究和问答（本条和 siblings 都已排除），新在前。 */
+  related: (CollectionEntry<"posts"> | CollectionEntry<"qa">)[];
+  prevEntry: AdjacentQa;
+  nextEntry: AdjacentQa;
+};
+
+const { entry, siblings, related, prevEntry, nextEntry } = Astro.props;
+const locale = Astro.currentLocale ?? config.site.lang;
+const t = useTranslations(locale);
+
+const {
+  title,
+  description,
+  pubDatetime,
+  modDatetime,
+  timezone,
+  tags,
+  symbols,
+  agent,
+  model,
+  questionKey,
+} = entry.data;
+
+const { Content, headings } = await render(entry);
+
+/** 有没有目录 —— 决定回答那一格在 xl 以上开不开两列网格。
+ *  判据和 TableOfContents 内部**是同一个函数**（src/utils/tocItems.ts）。 */
+const hasToc = tocItems(headings).length > 0;
+
+/** 页脚「关于这只票」最多列几条；全部去 /s/<代码>。 */
+const RELATED_LIMIT = 5;
+const relatedShown = related.slice(0, RELATED_LIMIT);
+/** 「{{symbol}} 的全部内容」只在勾了**一只**票时才画 —— 理由同研究稿详情页那一份
+ *  （站上没有"好几只票的合集页"，硬凑一个等于替读者选了一只）。 */
+const onlySymbol = symbols.length === 1 ? symbols[0] : undefined;
+const symbolIndexUrl = onlySymbol
+  ? getRelativeLocaleUrl(locale, `s/${symbolSlug(onlySymbol)}`)
+  : undefined;
+
+/** 阅读时长 / 字数是估的（readingTime.ts），页面上带「预计」。 */
+const reading = readingStats(entry.body ?? "");
+
+/** 搜索结果里那两个小标签「智能体: …」「模型: …」（Pagefind 的 data-pagefind-meta）。
+ *  【2026-09-20】名字和上面两张芯片读同一份判据，三档不合并 —— 见 src/utils/searchMeta.ts。 */
+const searchMeta = searchMetaAttr(
+  {
+    agent: t.searchUi.metaAgent,
+    model: t.searchUi.metaModel,
+    unspecifiedAgent: t.qa.unspecifiedAgent,
+    unspecifiedModel: t.qa.unspecifiedModel,
+  },
+  agent,
+  model
+);
+// 分享卡：dynamicOgImage 关着时是 undefined，Layout 回落到默认图。
+const ogImage = entryOgImageUrl("qa", entry.id, entry.filePath, locale);
+
+/**
+ * 「谁答的」三档，**不许压成两档**（docs/engineering-notes.md 第二节）：
+ *
+ *   ① `unspecified`（哨兵）→ 「来源未标注」。这是"人没记"，
+ *      不是"这是作者自己写的" —— 后者是 `human` 那一档，两者含义完全相反。
+ *   ② 登记表里查得到 → 「由 X 回答」。
+ *   ③ 登记表里查不到（id 被改过 / 被删过，而库里还有条目用着它）→
+ *      把 id 原样摊出来并说清查不到。**不许兜成 ②**，否则"表和库不一致"
+ *      这件需要人去处理的事在页面上完全看不出来（见 src/config/agents.ts
+ *      里 findAgent 的那段说明）。schema 的 z.enum 是第一道，这里是第二道。
+ */
+const isUnspecifiedAgent = agent === UNSPECIFIED_AGENT;
+const agentEntry = isUnspecifiedAgent ? undefined : findAgent(agent);
+const isUnknownAgent = !isUnspecifiedAgent && agentEntry === undefined;
+
+/** 【2026-09-20】「以下是模型的原话」那句提示**不再挂在页面上**（正文上方和页脚原来各一份，
+ *  用户要的：研究和回答页都不要，挪进「关于」页说一次）。之后它只跟着导出的 .md 走；
+ *  【2026-09-23】那一份也拿掉了（导出件改成正文原文，站方一个字都不加），
+ *  判据 isAiAnswer 跟着删了。现在全站只有「关于」页说这句。 */
+
+/**
+ * 第二维：底下跑的是哪个模型。三档判据在 models.ts 的 modelSlot（AgentModelChip 和
+ * 分享卡读的都是它）：known → 「，用的模型是 X」；unspecified → 「，模型未标注」（待补）；
+ * none → 什么都不缀（人写的没有模型这回事；或者智能体本身就没标，那句已经说完了）。
+ */
+const slot = modelSlot(agentEntry?.kind, model);
+const modelPart =
+  slot.tier === "known"
+    ? `，${tplStr(t.qa.modelUsed, { model: slot.entry.name })}`
+    : slot.tier === "unspecified"
+      ? `，${t.qa.unspecifiedModel}`
+      : "";
+
+const answeredByLine = agentEntry
+  ? // ② 正常情况。名字本身就是「厂商 产品」（Anthropic Claude），
+    // 【2026-09-20】不再另缀一次「（Anthropic）」—— 那是重复。
+    `${tplStr(t.qa.answeredBy, { agent: agentEntry.name })}${modelPart}。`
+  : isUnknownAgent
+    ? // ③ 这一句是给维护者的告警，不是 UI 文案，所以不进 i18n：
+      //   正常情况下它永远不该出现（schema 的 z.enum 先拦一道）。
+      `登记表里没有「${agent}」这个智能体 —— 它可能被改名或删掉了，需要人回来对一下登记表（src/config/agents.ts）。`
+    : // ① 哨兵：人没选。**不是**"作者自己写的"，后者是 `human` 那一档。
+      `${t.qa.unspecifiedAgent}。`;
+
+// qa 没有 ogImage 字段，也没有 index.png 路由 —— 刻意的。
+// 动态 OG 图（satori）对中文是满屏豆腐块且构建全绿（docs/engineering-notes.md 坑 6），
+// 全站统一走 public/default-og.jpg，由 Layout 兜。
+---
+
+<PostLayout
+  title={`${title} | ${config.site.title}`}
+  headline={title}
+  description={description}
+  ogImage={ogImage}
+  pubDatetime={pubDatetime}
+  modDatetime={modDatetime}
+>
+  <Header />
+
+  <BackButton />
+
+  {
+    /* ★ data-pagefind-body 决定这一页**整页**是否进搜索索引 ——
+       【2026-09-18 实测】全站现在只有文章详情页带这一个标记，Pagefind 的
+       page_count 就是 1；不带的页面（/about、首页、/s、/tags）整页被排除，
+       搜不到，而且构建期没有任何提示。
+
+       ★ data-pagefind-filter="kind:问答"：仓库里现在一处 filter 都没有，
+       fragment 里 filters 恒为 {}。这里只负责**标注**；
+       search.astro 那半边（PagefindUI 的 filters 配置）不改的话筛选框不出现。 */
+  }
+  <main
+    id="main-content"
+    class:list={["app-layout", { "mt-8": !config.features.showBackButton }]}
+    data-pagefind-body
+    data-pagefind-filter={`${SEARCH_FILTER_KEY}:${SEARCH_KINDS.qa}`}
+    data-pagefind-meta={searchMeta}
+  >
+    {
+      /* 版式上先说明这是"问"，再是问题本身 —— 这一页读起来要像一问一答，
+        不像一篇文章。标签本身是样板字，不进索引。 */
+    }
+    <p data-pagefind-ignore class="text-muted-foreground text-sm">
+      {t.qa.questionLabel}
+    </p>
+
+    {
+      /* ★ 问题必须是 data-pagefind-body 内的 <h1>：Pagefind 的结果标题取的是
+         body 区里的 <h1>，不是 <title>（那个带「| 牢玩家」后缀）。
+
+         ★ transition 名带 `qa-` 命名空间，且必须和列表项（Card）里的
+         `${collection}-${id}` 是同一个表达式。后台写的是扁平文件，
+         `qa/foo.md` 和 `posts/foo.md` 的 id 相同 —— 不加命名空间的话，
+         同页会出现重复名字（浏览器直接跳过动画），跨页还会和一篇不相关的
+         研究稿配对 morph。两个方向都不报错。
+         【2026-09-20】名字按**问题组**起（`qa-group-<qaGroupKey>`），和列表里折叠后的
+         那张卡（Card.astro 传了 answers 时）一致：从卡片点进来标题原地接上；
+         在同一个问题的几条回答之间切换时，两页的 <h1> 同名，标题**一动不动** ——
+         各起各的名的话，旧标题淡出、新标题淡入，同一行字闪一下。
+         ⚠ 页脚「相关条目」里的卡片不传 answers、仍按单条起名，否则和这个 <h1> 撞名。 */
+    }
+    <h1
+      style={{
+        viewTransitionName: toTransitionName(`qa-group-${qaGroupKey(entry)}`),
+      }}
+      class="text-accent inline-block text-3xl font-bold tracking-tight text-pretty sm:text-4xl"
+    >
+      {title}
+    </h1>
+
+    <div class="mt-4 mb-2 flex flex-wrap items-center gap-x-3 gap-y-2">
+      {
+        /* ★ 顺序是**名称（标的）→ 标签 → 智能体（模型）→ 时间**，四个详情页和列表卡片
+           逐项对齐（【2026-09-21 用户定的】）。标签**不在页脚再来一份**，
+           那个 `<ul>` 同日删了 —— 同一排标签印两遍，底下那遍看起来像另一种东西。 */
+      }
+      {symbols.map(code => <SymbolChip {code} size="lg" />)}
+      {
+        tags.length > 0 && (
+          <ul class="flex flex-wrap items-center gap-2">
+            {tags.map(tag => (
+              <Tag tag={slugifyStr(tag)} tagName={tag} size="lg" />
+            ))}
+          </ul>
+        )
+      }
+      {
+        /* 谁答的、底下跑的是哪个模型 —— 一张芯片「智能体（模型）」，三档见
+           AgentModelChip.astro。这个集合里它**是内容本身**：同一个问题不同智能体
+           给的答案不一样，谁答的正是读者判断可信度的依据。 */
+      }
+      <AgentModelChip {agent} {model} size="lg" />
+      <Datetime {pubDatetime} {modDatetime} {timezone} size="lg" />
+      {
+        /* 【2026-09-21 用户要的】「阅读预计」四个字换成一个眼睛图标
+           （`ReadingTime.astro`）。带 hedge 的整句没删，挡到了 title / 读屏那一侧 ——
+           这个数是估的，理由写在那个组件开头。字数跟在后面，两段说的是同一件事
+           （这篇有多长），所以合在一格里、中间那个·留着。 */
+      }
+      <span
+        class="text-muted-foreground inline-flex items-center gap-x-1.5 text-sm sm:text-base"
+      >
+        <ReadingTime minutes={reading.minutes} size="lg" />
+        <span aria-hidden="true">·</span>
+        <span>
+          {
+            tplStr(t.reading.chars, {
+              chars: reading.chars.toLocaleString("en-US"),
+            })
+          }
+        </span>
+      </span>
+      {
+        /* 【2026-09-20】下载 / 复制全文 / 打印那三样**也放在这一行**，只留图标、
+           文字进悬停提示。正文后面那一份（`bar` 档）没删：这里是"我已经决定要带走它"的
+           快捷入口，那里是读完之后的出口，两处服务的是两个时刻。
+           ★ 同一个组件、同一段脚本，靠 `variant` 分档 —— 见 DownloadLinks.astro 的 Props。 */
+      }
+      {
+        /* 【2026-09-21 用户要的】下载 / 复制 / PDF / 转发**挨在一起**，
+           四个图标一个间距。在这之前转发那个是外层那一行的直接成员，
+           吃的是 `gap-x-3`（12px），而另外三个在 DownloadLinks 自己的
+           `gap-1`（4px）里 —— 一眼看过去像"三个按钮和另一个东西"。
+           ★ `flex-wrap` 不能省：复制全文失败时 DownloadLinks 会放出一整块说明
+             （`basis-full`），没有 wrap 它会被挤进这一行压成一条缝。
+           ★【2026-09-21 用户要的】这四个图标**靠那一行的最右边**（`ms-auto`）。
+             在这之前它们紧跟在「使用的提示词：…」后面，而那一段的长短每篇都不一样 ——
+             于是同一排按钮在每一页上都停在不同的横坐标，翻页时它们在跳。
+             靠右之后四页同一个位置。
+             ⚠ 用 `ms-auto` 不用 `justify-between`：那一行是 `flex-wrap` 的，
+               `justify-between` 会把**每一行**的成员都摊开（窄屏上折行之后尤其难看），
+               而这里要的只是"这一格推到它那一行的右头"。 */
+      }
+      <div class="ms-auto flex flex-wrap items-center gap-1">
+        <DownloadLinks
+          variant="icons"
+          collection="qa"
+          id={entry.id}
+          filePath={entry.filePath}
+          title={title}
+        />
+        {
+          /* 【2026-09-21 用户要的】转发按钮：点一下把本篇地址复制走，提示「已复制该文链接」。
+             ★ 和正文后面那一排里的「复制本文链接」**是同一个组件**（`variant` 分档），
+               不是照着抄了一个 —— 复制的是 `entryUrl` 算死的**规范地址**，
+               不是 `location.href`（读者手上那个可能带 utm、带锚点、或者是预览域名）。
+               抄第二份的那天，两处就会开始复制两个不同的地址，而页面上零症状。 */
+        }
+        <CopyLinkButton
+          variant="icon"
+          collection="qa"
+          id={entry.id}
+          filePath={entry.filePath}
+        />
+      </div>
+    </div>
+
+    {
+      /* ★【2026-09-20】同一个问题的几条回答，摆在**读之前**、紧贴标题下面那行
+         （谁答的 · 什么模型 · 什么时候）—— 用户要的位置：「放在副标题下面」。
+         在这之前它们只在正文读完之后的「相关条目」里 —— 读者得先读完一整篇，
+         才知道旁边还有两篇可以对着看，而"对比"正是这个模块存在的理由。
+         页脚那块没删，两处回答的是两个问题（见 QaAnswerSwitch.astro 开头）。
+         这里原来还夹着两句提示（时效那句、「以下是模型的原话」那句），
+         【2026-09-20】都挪进「关于」页了 —— 详情页上标题和回答之间只剩这一排。 */
+    }
+    <QaAnswerSwitch
+      collection="qa"
+      {siblings}
+      current={entry}
+      {description}
+      class="mt-5"
+    />
+
+    {
+      /* 目录：长回答（三节以上）才出现，见 TableOfContents.astro。
+         ★ 和研究稿页一样**两份都在 DOM 里**：这一份是窄屏的折叠块，
+           `xl:hidden` 不许去掉（去掉 = 大屏上目录出现两遍，零症状）；
+           侧栏那一份在下面那个网格里。`scripts/gate/toc.test.ts` 钉着。 */
+    }
+    <TableOfContents {headings} class="mt-6 xl:hidden" />
+
+    {
+      /* 【2026-09-21 用户要的】这里原来有一行小字「回答」（`t.qa.answerLabel`），
+         整块删了 —— 用户原话「多此一举」。它上面紧挨着的就是那排切换
+         （「这个问题有 2 个回答，点一下换着看」），下面就是回答本身：
+         同一件事在三厘米内说了两遍。
+         ⚠ 标题上面那行「问题」**留着**：它是标题的名牌，而标题在这一页上
+           是**问题原文**，不带名牌的话它看起来就是一篇文章的题目。 */
+    }
+
+    {
+      /* ★ 正文带一个固定的 transition 名（`qa-answer`）：切换回答时（QaAnswerSwitch.astro
+         的脚本），这一格先换成转圈，新回答到了再从转圈**淡进来**；页面其余部分那一次
+         不做整页交叉淡化。名字固定而不带 id，是因为它要在两页之间**配对** ——
+         带 id 的两个名字配不上，就退回"旧的淡出、新的淡入"，正文闪一下。 */
+    }
+    {
+      /* 【2026-09-20 用户要的】xl 以上目录钉在左边、回答在右边。
+         理由和写法逐条同研究稿详情页那一段（`hasToc &&` 为什么是功能性的、
+         `minmax(0,1fr)` 为什么不能写 `1fr`）。
+
+         ★ 这个 div **不许带 transition:name**：换回答那一次配对的是
+           `#answer` 自己（QaAnswerSwitch 的脚本 + detailParity.test.ts 钉着），
+           外面再套一个有名字的盒子会让浏览器改去配外层，正文那一格的
+           「先转圈、再淡进来」当场退回整屏一闪。 */
+    }
+    {
+      /* 【2026-09-21 用户要的】正文右上角的「跳到末尾」。放在这儿而不是别处：
+         右下角那个浮动圆钮滚过 200px 才出现，而"不想读完、直接看结论"这个念头
+         在刚打开、还没滚的时候最强。滚动逻辑不在这个组件里，见它顶部那段。 */
+    }
+    <JumpLink to="end" class="mt-6" />
+
+    <div
+      class:list={[
+        hasToc && "xl:grid xl:grid-cols-[13rem_minmax(0,1fr)] xl:gap-x-8",
+      ]}
+    >
+      <TableOfContents {headings} variant="rail" class="mt-2" />
+      <article
+        id="answer"
+        transition:name="qa-answer"
+        class:list={[
+          "mt-2 w-full",
+          "app-prose max-w-app",
+          "prose-pre:bg-(--shiki-light-bg) dark:prose-pre:bg-(--shiki-dark-bg)",
+        ]}
+      >
+        <Content />
+      </article>
+    </div>
+
+    <hr class="my-8 border-dashed" />
+
+    {
+      /* ★ 同一个问题、其他智能体的回答 —— 这个模块存在的理由就是"同一个问题不同智能体
+         答得不一样"，所以它紧跟在回答后面，不沉到页脚。
+         ★【2026-09-20 改了判据】原来是 `questionKey &&` —— 只有**自己填了键**才渲染。
+         归组改成「填了用键、没填用自己的地址」之后，一组里的**第一条是没有键的**
+         （它被创建时还没有"已有问题"可挑），于是那一条的这一块会整个消失，
+         而它明明有两条回答指向它。所以条件是「有兄弟 **或者** 自己填了键」：
+           - 有兄弟 → 列出来（完成态）；
+           - 填了键却没兄弟 → 说一句「目前只有这一条」（待补：多半是选的那条被删了）；
+           - 两者都没有 → 只问过一次，整块不渲染（完成态）。
+         中间那一档不许合并进第三档：选错了和"真的只有一条"在别处一模一样。 */
+      (siblings.length > 0 || questionKey) && (
+        <RelatedEntries
+          heading={t.qa.siblingsHeading}
+          entries={siblings}
+          emptyMessage={t.qa.siblingsOnlyThis}
+        />
+      )
+    }
+
+    <BackToTopButton />
+
+    {
+      /* 【2026-09-21 用户要的】标签那一排**挪到标题底下那行元信息里了**（见上面），
+         这里原来那个 `<ul>` 整块删掉。四个详情页同一天一起改的。 */
+    }
+
+    {
+      /* ★ 「谁答的」+ 免责，每条都挂。三档见上面 isUnspecifiedAgent 那段注释。 */
+    }
+    <aside class="app-note mb-8" data-pagefind-ignore>
+      {
+        /* ★ 每句中文各自包一层 <span>，不是洁癖：
+           【2026-09-18 踩到】prettier 会把两句挨着的中文**并成一行**，
+           中间留一个真实的空格 —— 浏览器按 CSS 的 segment break 规则会
+           吃掉 CJK 之间的**换行**，但不会吃掉空格，于是句号后面多出一个可见空隙。
+           包一层之后行宽超了 80，prettier 只能保留换行。（`pnpm format`
+           会把裸文本重新并回去，所以这里不能只靠"手动换行别动它"。） */
+      }
+      {
+        /* 【2026-09-20】这里原来还跟着一句「上面的回答是模型的原话，没有改写。」
+           （按 isAiAnswer 分档，和正文上方那条同一个判据 —— docs/engineering-notes.md 坑 8）。
+           两处都挪进「关于」页了；导出的 .md 里那一份 2026-09-23 也拿掉了
+           （导出件就是回答原文）。 */
+      }
+      <p>
+        <span>{answeredByLine}</span>
+      </p>
+      {
+        /* 【2026-09-21 用户要的】这里原来还有一段免责（「不构成任何投资建议。站长没有
+           买入任何股票…不可据此操作，若据此操作，盈亏自负。」），四个详情页一起删了。
+           免责现在只剩 /about 那一整节 ＋ **每一页页脚**那条「免责声明」链接。 */
+      }
+    </aside>
+
+    {
+      /* ★ 这一整排放在免责 <aside> **之后**：文件一旦下载走就离开了这个站，
+        读者应当在**点下载之前**已经看过免责声明。四页同一个相对位置。
+        【2026-09-20】下载三个按钮和分享并成一行，四页同一个写法 ——
+        容器上那条「不许加 data-print-hide」的理由写在研究稿详情页那一段。 */
+    }
+    {
+      /* 【2026-09-21 用户要的】正文**底部右侧**的「跳到开头 ↑」，和正文右上角那个
+         「跳到末尾 ↓」配成一对（同一个组件，`to` 分档）。
+         ★ 它一进视口，右下角那个浮动圆钮就让位（BackToTopButton 里的 `takenOver`）——
+           用户原话：「当到底部的时候就应该变成文字跳到开头」。两个同时在屏幕上
+           指着同一个动作，就是同一个入口画了两遍。 */
+    }
+    <JumpLink to="top" class="mb-4" />
+
+    <div
+      class="mb-8 flex flex-wrap items-center justify-center gap-x-5 gap-y-3 md:justify-end print:block"
+    >
+      <DownloadLinks
+        collection="qa"
+        id={entry.id}
+        filePath={entry.filePath}
+        title={title}
+      />
+      <CopyLinkButton collection="qa" id={entry.id} filePath={entry.filePath} />
+    </div>
+
+    <hr class="my-8 border-dashed" />
+
+    {
+      /* ★ 同一只票的其他研究和问答（「其他智能体的回答」里已经列过的不再重复）。
+         理由和研究稿详情页那一块逐字相同：勾了票没别的 → 说一句，不许整块消失。
+         ★【2026-09-22】问答可以勾好几只，所以那句话和标题都分两档，同研究稿那一份。 */
+      symbols.length > 0 && (
+        <RelatedEntries
+          heading={tplStr(t.related.bySymbolHeading, {
+            symbol: symbols.join(" / "),
+          })}
+          entries={relatedShown}
+          emptyMessage={
+            onlySymbol
+              ? t.related.bySymbolOnlyThis
+              : t.related.bySymbolOnlyThisMulti
+          }
+          moreHref={related.length > 0 ? symbolIndexUrl : undefined}
+          moreLabel={tplStr(t.related.bySymbolAll, {
+            symbol: onlySymbol ?? "",
+          })}
+        >
+          <SymbolLookupLinks slot="intro" {symbols} class="mb-4" />
+        </RelatedEntries>
+      )
+    }
+
+    {
+      /* 上一条 / 下一条。**没有复用 AdjacentPostNav** ——
+         【2026-09-18 实测】它内部写死了 getPostUrl，qa 条目会静默拿到
+         /posts/src/content/qa/<slug>：不报错、构建全绿、链接 404。
+         这里走 entryUrl("qa", …)。样板导航，不进索引。 */
+    }
+    <div
+      data-pagefind-ignore
+      class="my-8 grid grid-cols-1 gap-6 sm:grid-cols-2"
+    >
+      {
+        prevEntry && (
+          <a
+            href={entryUrl("qa", prevEntry.id, prevEntry.filePath, locale)}
+            class="flex w-full gap-1 hover:opacity-75"
+          >
+            <IconArrowLeft class="inline-block flex-none rtl:rotate-180" />
+            <div>
+              <span>{t.post.previousPost}</span>
+              <div class="text-accent/85 text-sm">{prevEntry.title}</div>
+            </div>
+          </a>
+        )
+      }
+      {
+        nextEntry && (
+          <a
+            href={entryUrl("qa", nextEntry.id, nextEntry.filePath, locale)}
+            class="flex w-full justify-end gap-1 text-end hover:opacity-75 sm:col-start-2"
+          >
+            <div>
+              <span>{t.post.nextPost}</span>
+              <div class="text-accent/85 text-sm">{nextEntry.title}</div>
+            </div>
+            <IconArrowRight class="inline-block flex-none rtl:rotate-180" />
+          </a>
+        )
+      }
+    </div>
+  </main>
+
+  <Footer />
+  {/* 进度条 / 锚点 / 代码复制 / 灯箱。四页都挂，detailParity.test.ts 钉着。 */}
+  <ArticleEnhancements />
+</PostLayout>

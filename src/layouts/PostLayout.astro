@@ -1,0 +1,98 @@
+---
+import Layout from "./Layout.astro";
+import { resolveDefaultOgImagePath } from "@/utils/resolveDefaultOgImagePath";
+import { blogPostingJsonLd } from "@/utils/structuredData";
+import { getAssetPath } from "@/utils/withBase";
+import config from "@/config";
+
+/**
+ * 四个详情页共用的 `<head>` 薄壳：og:type=article、发布 / 修改时间、一份 BlogPosting JSON-LD。
+ * 正文结构不在这里，各页自己写（理由见 DownloadLinks.astro 顶部那段）。
+ */
+type Props = {
+  /** 给 `<title>` 的，带「| 站名」后缀。 */
+  title?: string;
+  /**
+   * 结构化数据里的 headline —— **不带**「| 站名」后缀的原标题。
+   * 【2026-09-20 修】在这之前 JSON-LD 直接拿 `title` 当 headline，
+   * Google 看到的每篇标题后面都挂着「| 牢玩家」。不传时退回 title；
+   * `scripts/gate/seo.test.ts` 钉着四个详情页都传了。
+   */
+  headline?: string;
+  description?: string;
+  ogImage?: string;
+  canonicalURL?: string;
+  pubDatetime?: Date;
+  modDatetime?: Date | null;
+};
+
+const { site } = config;
+
+const {
+  title,
+  headline,
+  description,
+  ogImage,
+  canonicalURL = new URL(Astro.url.pathname, Astro.site).href,
+  pubDatetime,
+  modDatetime,
+} = Astro.props;
+
+const siteBase = Astro.site ?? Astro.url;
+
+// JSON-LD 里的 image 必须是绝对地址：qa / guides / prompts 传进来的是根相对路径
+// （/qa/…/index.png），Layout 给 og:image 补过一次域名，这里给结构化数据补同一个。
+const imageUrl = new URL(ogImage ?? resolveDefaultOgImagePath(config), siteBase)
+  .href;
+
+const structuredData = blogPostingJsonLd({
+  headline: headline ?? title ?? site.title,
+  description,
+  url: canonicalURL,
+  image: imageUrl,
+  datePublished: pubDatetime,
+  dateModified: modDatetime,
+  lang: Astro.currentLocale ?? site.lang,
+  author: { name: site.author, url: site.profile },
+  publisher: {
+    name: site.title,
+    url: site.url,
+    logoUrl: new URL(getAssetPath("favicon.svg"), siteBase).href,
+  },
+});
+---
+
+<Layout {title} {description} {ogImage} {canonicalURL} ogType="article">
+  <Fragment slot="head">
+    {
+      /* ★ og:type **不在这里写**。【2026-09-20 查出来的】原来这里补一条 `article`，
+         而 Layout 已经无条件写了一条 `website` 在前面 —— OGP 规范冲突时取第一个，
+         所以文章页一直被抓取方当成普通网页，下面两条 article:* 也就一直被忽略。
+         现在由 Layout 的 `ogType` prop 决定，全站只有那一处写它（docs/engineering-notes.md 坑 22）。 */
+    }
+    {
+      pubDatetime && (
+        <meta
+          property="article:published_time"
+          content={pubDatetime.toISOString()}
+        />
+      )
+    }
+    {
+      modDatetime && (
+        <meta
+          property="article:modified_time"
+          content={modDatetime.toISOString()}
+        />
+      )
+    }
+
+    <script
+      type="application/ld+json"
+      is:inline
+      set:html={JSON.stringify(structuredData)}
+    />
+  </Fragment>
+
+  <slot />
+</Layout>

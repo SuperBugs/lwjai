@@ -1,0 +1,52 @@
+---
+import { getRelativeLocaleUrl } from "astro:i18n";
+import { ROUTES } from "@/config/routes";
+import config from "@/config";
+
+type Props = {
+  tag: string;
+  tagName: string;
+  size?: "sm" | "lg";
+};
+
+const { tag, tagName, size = "lg" } = Astro.props;
+
+const locale = Astro.currentLocale ?? config.site.lang;
+---
+
+<li>
+  <a
+    href={getRelativeLocaleUrl(locale, `${ROUTES.tags}/${tag}`)}
+    transition:name={tag}
+    class:list={[
+      // ★【2026-09-18 改】原来是"底部一条虚线 + 悬停时 `-mt-0.5`"。
+      //   两个问题：① `-mt-0.5` 让标签在悬停时**往上跳半格**，同一行里其他
+      //   标签跟着重排 —— 位移式悬停是公认要避开的做法（指针还没落下，
+      //   目标已经移开了）；② 一条底边虚线和正文里的链接下划线撞车，
+      //   而标签不是正文链接。
+      // ★【2026-09-22 用户要的】形状收进了 `app-chip`（src/styles/global.css）——
+      //   四张芯片一处定义，扁平、无边框。悬停只换底色，**不动布局**。
+      "app-chip app-chip-link",
+      { "text-sm": size === "sm" },
+      { "text-base": size === "lg" },
+    ]}
+  >
+    {
+      /* ★【2026-09-22 用户要的】标签前面那个 `#` 图标**删了**（原来是
+         `IconHash`，`size-4` / `size-3.5` 跟着字号走）。它是给"标签"这个概念
+         加的一个记号，而这张芯片周围全是同一副形状的芯片（标的、智能体）——
+         那几张都没有前缀图标，只有它顶着一个 `#`，看起来像是另一类东西。
+         ⚠ 发帖文案里那个 `#` 是**另一回事**（X 的话题标签，`sharePost.ts`），
+           别跟着一起删：那儿的 `#` 是功能，不是装饰。 */
+    }
+    {
+      /* ★【2026-09-21 用户要的】标签文字**加粗**，和另外两张芯片里那一段
+         "这是什么"的字对齐（SymbolChip 的代码、AgentModelChip 的智能体名都是
+         `font-semibold`）。在这之前它是常规字重 —— 一行里三张芯片并排，
+         只有标签那张的字是细的，看着像是另一类、次一等的东西。
+         ⚠ 加的是 `font-semibold`、**不带 `tracking-wide`**：那两张里的字是拉丁
+         字母和代码，撑开字距是为了好认；中文标签撑开之后是"字 与 字 之 间 有 缝"。 */
+    }
+    <span class="font-semibold">{tagName}</span>
+  </a>
+</li>

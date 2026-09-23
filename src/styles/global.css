@@ -1,0 +1,207 @@
+@import "tailwindcss";
+@import "./theme.css";
+@import "./typography.css";
+@import "rehype-callouts/theme/obsidian";
+/* ★ 必须排在 `./theme.css` **之后**，而且 print.css 里**不许有 @layer**。
+ *   两条都是硬性的，理由写在 print.css 顶部那一大段里 ——
+ *   顺序反了 / 包进 layer，打印出来仍然是深色主题的灰字，而构建全绿。
+ *   `scripts/gate/export.test.ts` 有一条用例钉着这两件事。 */
+@import "./print.css";
+
+@custom-variant dark (&:where([data-theme=dark], [data-theme=dark] *));
+
+@layer base {
+  * {
+    @apply border-border outline-accent/75;
+    scrollbar-width: auto;
+    scrollbar-color: var(--color-muted) transparent;
+  }
+  a,
+  button,
+  #main-content {
+    @apply outline-accent outline-offset-1 focus-visible:no-underline focus-visible:outline-2 focus-visible:outline-dashed;
+  }
+  button:not(:disabled),
+  [role="button"]:not(:disabled) {
+    cursor: pointer;
+  }
+
+  /* ── 中西文混排：让浏览器自己插那个"四分空"────────────────────────────
+   *
+   * 这个站的每一句话里都夹着拉丁和数字（「TSLA 的 10-K 里写了…」）。
+   * 排版惯例（W3C CLREQ、Apple 的中文排版、InDesign 的"标点挤压"）是
+   * 在汉字与西文之间插入约四分之一字宽的间隙，以及把中文标点两侧多余的
+   * 空白收掉 —— 手写全角空格是**不能做**的（它会进搜索索引、进 RSS、
+   * 进复制粘贴），所以只能交给浏览器。
+   *
+   * 两条都是渐进增强：不支持的浏览器**原样渲染**，和现在一模一样，
+   * 没有任何兜底逻辑要写。所以放在 body 上全站生效。
+   *   text-spacing-trim —— 收掉中文标点两侧的多余空白（Chrome 123+）
+   *   text-autospace    —— 汉字 / 西文之间自动插间隙（较新，未支持即忽略）
+   */
+  body {
+    text-spacing-trim: space-first;
+    text-autospace: normal;
+  }
+
+  /* ── 检索命中高亮 ─────────────────────────────────────────────────────
+   * `<mark>` 的浏览器默认样式是**黄底黑字** —— 在一个刻意不用主色的站里，
+   * 那是整页唯一一块彩色，而且深色模式下黄底会刺眼。
+   * 这里换成"底色淡染 + 加粗 + 正文色"：周围的摘要是灰的，命中的词是黑的，
+   * 明度差本身就够把它挑出来。
+   * 来源是 Pagefind 生成的摘要（集合检索框和 /search 两处都用）。 */
+  mark {
+    @apply bg-muted text-foreground rounded-sm px-0.5 font-semibold;
+  }
+}
+
+/* ── 版心宽度：一处改，全站跟着走 ─────────────────────────────────────
+ *
+ * 页眉、页脚、列表、正文四处都读这一个 utility —— 所以它是**响应式**的，
+ * 而不是在正文上单独放宽：只放宽正文的话，文章会比它上面的页眉更宽，
+ * 两条边界对不齐，看起来像布局坏了。
+ *
+ * 【2026-09-20 用户要的】原来全站恒定 `max-w-3xl`（48rem）。在 1440 / 1600 的
+ * 屏幕上那是中间一条窄带，两侧各留两百多像素空白 —— 而这个站的研究稿里几乎
+ * 每篇都有宽表格（rehypeTableScroll 包的那种），48rem 下它们全在横向滚动。
+ * 所以按断点放宽两档：
+ *
+ *   < 64rem（手机 / 平板 / 小窗）  3xl = 48rem   ← 一个字没动，中文正文的舒适行长
+ *   ≥ 64rem（lg，常见笔记本）      4xl = 56rem
+ *   ≥ 80rem（xl，大屏 / 外接显示器）5xl = 64rem
+ *
+ * ⚠ 别再往上加一档（6xl+）。中文 16px 下 64rem 已经是每行 60 来个字，
+ *   再宽就是"读完一行找不到下一行的行首"那种宽 —— 那不是不拥挤，是另一种难读。 */
+@utility max-w-app {
+  @apply max-w-3xl lg:max-w-4xl xl:max-w-5xl;
+}
+
+@utility app-layout {
+  @apply max-w-app mx-auto w-full px-4 sm:px-6;
+}
+
+/* ★ 选中态：从 `decoration-wavy` 换成实线 + 加粗（2026-09-18）。
+ *
+ * 波浪线是 AstroPaper 自带的。它在**没有主色**的界面里其实是个不错的主意
+ * （形状承担信息），但波浪的振幅在中文字下面读起来像拼写错误的红线，
+ * 而且 2px 波浪在 1x 屏上会糊成一条毛边。
+ *
+ * 换成「加粗 + 2px 实线下划线」——顶部导航选中态的国际通行做法
+ * （Apple、Stripe、Vercel、GitHub 都是一条实心指示线）。
+ * 色相仍然不承担信息：线是 currentColor，和 docs/engineering-notes.md 第二节定的
+ * 「选中靠加粗 + 线」逐字一致。 */
+@utility active-nav {
+  @apply font-semibold underline decoration-2 underline-offset-8;
+}
+
+/* ── 卡片：列表里的"一条内容" ─────────────────────────────────────────
+ * 列表项、标的格子、搜索结果共用这一个形状。写成 utility 而不是在五个
+ * 调用点各写一串 Tailwind：卡片的边框、圆角、悬停反馈要是能各写各的，
+ * 半年后这个站上会有五种略微不同的卡片，而每一种看起来都没错。 */
+@utility app-card {
+  @apply bg-surface border-border rounded-app shadow-card border transition-[border-color,box-shadow,transform] duration-150;
+}
+
+/* 可点的卡片才加这一条。**不可点的卡片不许加** —— 悬停会抬起来却点不动，
+ * 是最典型的假可点（docs/engineering-notes.md 第二节那条纪律在交互上的落点）。 */
+@utility app-card-interactive {
+  @apply hover:border-border-strong hover:shadow-card-hover focus-within:border-border-strong;
+}
+
+/* ── 提示框：两档，不许合并 ───────────────────────────────────────────
+ *
+ *   app-note （虚线、无填充、灰字）—— 样板话 / 背景信息。
+ *                                     「以下是模型的原话」「这篇写于…」
+ *   app-callout（实线、有填充、正文色）—— 读之前必须知道的事。
+ *                                     免责声明、风险提示。
+ *
+ * 再加上"什么框都不加的纯文字"，页面上一共三档密度：
+ * 纯文字 < 虚线框 < 填充框。docs/engineering-notes.md 第二节要的"三者长得不一样"，
+ * 在提示这一类上就是靠这三档撑住的 —— 所以**别再加第四档**，
+ * 也别把这两档的视觉调得互相接近。 */
+@utility app-note {
+  @apply border-border text-muted-foreground rounded-app border border-dashed p-4 text-sm;
+}
+
+@utility app-callout {
+  @apply border-border bg-muted/60 text-foreground rounded-app border p-4 text-sm;
+}
+
+/* ── 芯片：一条内容上那几个小标记 ─────────────────────────────────────
+ *
+ * 标的（SymbolChip）、标签（Tag）、出处（AgentModelChip）、分享者
+ * （PromptOriginChip）—— 四张共用这一个形状。
+ *
+ * 【2026-09-22 用户要的】**扁平**：一格底色，**没有边框**。
+ * 在这之前是「1px 边 + surface 底 + rounded-md」—— 那副形状和按钮、输入框
+ * 是同一套语言（边框 = 可操作的边界），于是一行里四个小方框都在喊"我是控件"，
+ * 而它们其实是**标记**。去掉边框之后，层次只由一格底色承担：
+ * 页底 → 卡片（surface）→ 芯片（muted），三级明度，一级比一级往前，
+ * 和这个站"层次靠明度、色相不承担信息"那条是同一条（theme.css 开头）。
+ * 这也是 GitHub / Vercel / Notion 那几家标签的做法。
+ *
+ * ★ 写成 utility 而不是在四个组件里各写一串 class：那四处原来各写一份，
+ *   靠一句注释「改其中一张的形状时三张一起改」守着 —— 一条只能靠人记的规矩。
+ *   （而且那句话写的是"三张"，实际早就是四张了。）
+ *
+ * ★ 两档，**不许合并**（docs/engineering-notes.md 第二节）：
+ *     app-chip       —— 有填充。这一格**有一个确定的答案**。
+ *     app-chip-empty —— 无填充 + 一圈虚线。这一格**还空着**（「来源未标注」
+ *                       「模型未标注」「分享者未标注」）。
+ *   扁平化之后这两档比以前更分得开：以前两档都有边框，差别只在虚实和底色；
+ *   现在是"一块底色" vs "一圈虚线"，隔着半米也看得出哪个没填。 */
+/*
+ * 【2026-09-22 第二轮，用户定的那一版】三条都是他点名的：
+ *
+ *   ① **不挤** —— 内边距 `px-2.5 py-0.5` → `px-3 py-1`，芯片内部两段之间 `gap-2`
+ *      （原来 SymbolChip 自己写 `gap-1.5`）。
+ *   ② **不那么圆** —— `rounded-full`（药丸）→ `rounded-md`（6px）。
+ *      ★ 6px 不是随手挑的：卡片是 `--radius-app` = 12px，**嵌在里面的东西圆角要更小**，
+ *        否则两个弧度并排看着像没对齐（嵌套圆角的通行规矩）。
+ *   ③ **底色淡一半** —— `bg-muted` → `bg-muted/60`。
+ *      浅色下是 `#e8e8ed` 盖在白卡上 → `#f1f1f4`；深色下 `#2a2a30` 盖在 `#1e1e23` 上
+ *      → `#25252a`。**一个 class 管两个主题**，不用各写一个十六进制。
+ *
+ * ⚠ 别写成 `bg-[#f1f1f4]`：那在深色下是一块白斑。这个站的层次全靠明度，
+ *   而"淡一档"在两个主题里是相反的方向 —— 用透明度让它自己算。
+ */
+@utility app-chip {
+  @apply bg-muted/60 text-foreground inline-flex items-center gap-2 rounded-md px-3 py-1;
+}
+
+/* 可点的那两张（标的、标签）才加。悬停 = **同一格底色开到满** —— `bg-muted/60`
+ * → `bg-muted`。浅色下 `#f1f1f4` → `#e8e8ed`，深色下 `#25252a` → `#2a2a30`，
+ * 两个主题各自都是"往前一步"。
+ * ⚠ 别改成 `hover:bg-muted/40` 之类更淡的：那在两个主题里都是往**卡片色**靠，
+ *   悬停反而更淡 —— 读者会以为自己把它点没了。
+ * ⚠ 也别回 `hover:bg-border`：底色淡了一档之后那是跨两级，在一排扁平芯片里
+ *   像是某一个被选中了，而它只是鼠标碰到了。 */
+@utility app-chip-link {
+  @apply hover:bg-muted no-underline transition-colors;
+}
+
+/* ★ 形状（圆角、内边距、gap）必须和上面那条**逐项一致**，只差"有没有底 / 有没有
+ *   虚线"这一件事。差一点点的话，一行里混着两档时看着像其中一个没对齐，
+ *   而那一档要说的是「这一格还空着」，不是「这里排版坏了」。 */
+@utility app-chip-empty {
+  @apply border-border text-muted-foreground inline-flex items-center gap-2 rounded-md border border-dashed px-3 py-1;
+}
+
+/* ── 锚点跳转要躲开 sticky 页眉 ───────────────────────────────────────
+ *
+ * 只有**这一条**负责让出页眉的高度：滚动容器（html）上的 scroll-padding。
+ * 它对 hash 跳转、`scrollIntoView()`、`:target` 三条路径同时生效。
+ *
+ * ⚠【2026-09-18 实测踩到】不要再给目标元素加一份等值的 `scroll-margin`。
+ *   scroll-padding（容器侧）和 scroll-margin（元素侧）是**相加**的：
+ *   两边都写 96px，实测标题停在距顶 192px 处 —— 半屏空白，
+ *   而且这种"多让了一倍"在截图里像是留白设计，不像 bug。
+ *   下面 `:target` 那一行是上游原有的 1rem 呼吸位，**故意留着**：
+ *   96 + 16 = 112px，对 81px 的页眉是 31px 的余量。 */
+html {
+  scroll-padding-block-start: calc(var(--header-h) + 1rem);
+}
+
+:target {
+  scroll-margin-block: 1rem;
+}

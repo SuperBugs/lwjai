@@ -1,0 +1,255 @@
+---
+import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
+import { join, relative, sep } from "node:path";
+import Layout from "@/layouts/Layout.astro";
+import Header from "@/components/Header.astro";
+import Main from "@/components/Main.astro";
+import Footer from "@/components/Footer.astro";
+import {
+  inspect,
+  inspectDataJson,
+  SCANNED_DATA_FILES,
+  SCANNED_SPECS,
+  type FileReport,
+} from "../../scripts/gate/inspect";
+import { verdictLabel } from "../../scripts/gate/scan";
+
+/**
+ * 发布闸预览 —— `/_gate`，**只在 `pnpm dev` 里存在**。
+ *
+ * 这个文件不在 src/pages/ 下，是 astro.config.ts 里的 `devGate` 集成按 `isDev`
+ * 用 injectRoute 挂上去的：生产构建里既没有这条路由，也不会碰这个文件。
+ *
+ * ## 为什么要有它
+ *
+ * rules.ts 文件头写着：后台从不调 scan()，第一道防线是 pre-commit。也就是说，
+ * 人在后台粘完一篇稿子，要到 `git commit` 那一刻才第一次知道哪句话过不了闸 ——
+ * 中间隔着填字段、存盘、切终端。这一页把那个反馈提前到"存盘、刷新"：
+ * 每次请求现扫一遍工作树，判据和两道闸是同一份（`scripts/gate/inspect.ts`），
+ * 这里一行判据都没有，只有排版。
+ *
+ * ## 三档 + 两种故障，一档都不许压
+ *
+ *   block（实线填充框）/ warn（虚线框）/ clean（一行灰字），
+ *   外加「登记的目录找不到」和「一篇都没扫到」两种**闸门没跑起来**的状态 ——
+ *   它们必须比 block 还显眼，因为它们长得最像"通过"。
+ */
+
+const abs = (dir: string) => join(process.cwd(), ...dir.split("/"));
+
+function walk(dir: string): string[] {
+  const out: string[] = [];
+  for (const name of readdirSync(dir)) {
+    // 和 check.ts 同一条约定：下划线开头的不进 collection，闸门也不扫。
+    if (name.startsWith("_")) continue;
+    const full = join(dir, name);
+    if (statSync(full).isDirectory()) out.push(...walk(full));
+    else if (/\.mdx?$/.test(name)) out.push(full);
+  }
+  return out;
+}
+
+type Row = FileReport & { label: string; verdict: "block" | "warn" | "clean" };
+const tally: { label: string; dir: string; count: number; missing: boolean }[] =
+  [];
+const rows: Row[] = [];
+
+for (const spec of SCANNED_SPECS) {
+  const d = abs(spec.dir);
+  const missing = !existsSync(d) || !statSync(d).isDirectory();
+  const files = missing ? [] : walk(d);
+  tally.push({
+    label: spec.label,
+    dir: spec.dir,
+    count: files.length,
+    missing,
+  });
+  for (const f of files) {
+    const r = inspect(
+      relative(process.cwd(), f).split(sep).join("/"),
+      readFileSync(f, "utf8")
+    );
+    rows.push({
+      ...r,
+      label: spec.label,
+      verdict:
+        r.blocked.length > 0
+          ? "block"
+          : r.warnings.length > 0
+            ? "warn"
+            : "clean",
+    });
+  }
+}
+
+// ★ 不按篇算的那几份数据文件也过闸（智能体与模型登记表、标签表 ——
+//   名单见 collections.ts 的 SCANNED_DATA_FILES，三道闸共用那一份）。
+//   它们不是集合：在报数里各占一项，找不到时和"登记目录找不到"同一档（闸门没跑起来）。
+for (const f of SCANNED_DATA_FILES) {
+  const path = abs(f.path);
+  const missing = !existsSync(path);
+  tally.push({ label: f.label, dir: f.path, count: missing ? 0 : 1, missing });
+  if (!missing) {
+    const r = inspectDataJson(f.path, readFileSync(path, "utf8"));
+    rows.push({
+      ...r,
+      label: f.label,
+      verdict:
+        r.blocked.length > 0
+          ? "block"
+          : r.warnings.length > 0
+            ? "warn"
+            : "clean",
+    });
+  }
+}
+
+const missingDirs = tally.filter(t => t.missing);
+const blocked = rows.filter(r => r.verdict === "block");
+const warned = rows.filter(r => r.verdict === "warn");
+const clean = rows.filter(r => r.verdict === "clean");
+---
+
+<Layout title="发布闸预览（仅 dev）">
+  <Header />
+  <Main
+    pageTitle="发布闸预览"
+    pageDesc="只在 pnpm dev 里存在，刷新即重扫工作树。判据和 pre-commit、构建期那两道是同一份（scripts/gate/inspect.ts），这里没有第二份规则。"
+  >
+    {/* 逐集合报数，不合并成一个总数（docs/gate.md 第 2 节）。 */}
+    <p class="text-muted-foreground font-mono text-sm">
+      {tally.map(t => `${t.label} ${t.count} 篇`).join(" · ")}
+    </p>
+
+    {
+      missingDirs.length > 0 && (
+        <div class="app-callout mt-4">
+          <p class="font-semibold">
+            ✗ 闸门没跑起来：有登记在册的内容目录找不到。
+          </p>
+          <ul class="mt-2 list-disc ps-5">
+            {missingDirs.map(t => (
+              <li>
+                {t.label} —— 期望 <code>{t.dir}</code>
+              </li>
+            ))}
+          </ul>
+          <p class="mt-2">
+            这不是"这个集合还没有内容"，是闸门根本没看到那个目录。
+          </p>
+        </div>
+      )
+    }
+
+    {
+      rows.length === 0 && missingDirs.length === 0 && (
+        <div class="app-callout mt-4">
+          <p class="font-semibold">
+            ✗ 一篇都没扫到 —— 这不是通过，闸门没有东西可看。
+          </p>
+        </div>
+      )
+    }
+
+    {
+      blocked.length > 0 && (
+        <section class="mt-8">
+          <h2 class="mb-3 text-xl font-semibold">
+            发不出去（{blocked.length}）
+            <span class="text-muted-foreground ms-2 text-sm font-normal">
+              {verdictLabel("block")}
+            </span>
+          </h2>
+          {blocked.map(r => (
+            <article class="app-callout mb-3">
+              <p class="font-mono text-sm font-semibold">
+                {r.file}
+                <span class="text-muted-foreground ms-2 font-normal">
+                  {r.label}
+                </span>
+                {r.isDraft && (
+                  <span class="text-muted-foreground ms-2 font-normal">
+                    草稿 —— 构建只提醒不拦，取消草稿前要改
+                  </span>
+                )}
+              </p>
+              <ul class="mt-2 space-y-3">
+                {[...r.blocked, ...r.warnings].map(h => (
+                  <li class="text-sm">
+                    <span class="font-mono font-semibold">{h.code}</span>
+                    <span class="ms-2">
+                      命中「<strong>{h.matched}</strong>」
+                    </span>
+                    <pre class="text-muted-foreground mt-1 font-mono text-xs whitespace-pre-wrap">
+                      {h.context}
+                    </pre>
+                    <p class="text-muted-foreground mt-1">{h.rule.why}</p>
+                  </li>
+                ))}
+              </ul>
+            </article>
+          ))}
+        </section>
+      )
+    }
+
+    {
+      warned.length > 0 && (
+        <section class="mt-8">
+          <h2 class="mb-3 text-xl font-semibold">
+            能发，但看一眼（{warned.length}）
+            <span class="text-muted-foreground ms-2 text-sm font-normal">
+              {verdictLabel("warn")}
+            </span>
+          </h2>
+          {warned.map(r => (
+            <article class="app-note mb-3">
+              <p class="text-foreground font-mono text-sm font-semibold">
+                {r.file}
+                <span class="text-muted-foreground ms-2 font-normal">
+                  {r.label}
+                </span>
+              </p>
+              <ul class="mt-2 space-y-3">
+                {r.warnings.map(h => (
+                  <li>
+                    <span class="font-mono font-semibold">{h.code}</span>
+                    <span class="ms-2">
+                      命中「<strong>{h.matched}</strong>」
+                    </span>
+                    <pre class="mt-1 font-mono text-xs whitespace-pre-wrap">
+                      {h.context}
+                    </pre>
+                    <p class="mt-1">{h.rule.why}</p>
+                  </li>
+                ))}
+              </ul>
+            </article>
+          ))}
+        </section>
+      )
+    }
+
+    {
+      clean.length > 0 && (
+        <section class="mt-8">
+          <h2 class="mb-3 text-xl font-semibold">
+            没命中已知说法（{clean.length}）
+            <span class="text-muted-foreground ms-2 text-sm font-normal">
+              不等于安全 —— 词表必然有漏网
+            </span>
+          </h2>
+          <ul class="text-muted-foreground space-y-1 font-mono text-sm">
+            {clean.map(r => (
+              <li>
+                {r.file}
+                {r.isDraft && <span class="ms-2">（草稿）</span>}
+              </li>
+            ))}
+          </ul>
+        </section>
+      )
+    }
+  </Main>
+  <Footer />
+</Layout>

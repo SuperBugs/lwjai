@@ -1,0 +1,50 @@
+# Ignore everything
+/*
+
+# Except these files & folders
+!/src
+!/public
+!/.github
+!tsconfig.json
+!astro.config.ts
+!package.json
+!.prettierrc
+!eslint.config.js
+!README.md
+!.vscode
+
+# Ignore MDX files
+*.mdx
+
+# 【2026-09-21】后台写的内容不归 prettier 管
+#
+# `src/content/` 下面那些 .md 是 Keystatic 写出来的（frontmatter 的引号、空行
+# 都由它的序列化器定），外加人直接在后台或编辑器里改的正文。prettier 的 markdown
+# 规则和它们天天打架：格式化一遍，后台下次保存又写回去，`pnpm format:check` 就在
+# 红绿之间来回跳，而**两边都没有错**。实测 about.md 那两个空行被这么来回改了两次。
+#
+# ★ 内容的正确性不靠 prettier 守，靠发布闸（`scripts/gate/`）和 schema
+#   （`src/content.config.ts`）—— 那两道都不看空行和引号。
+# ★ 排的是**目录** `/src/content/`，不是 `src/content.config.ts`：后者是代码，
+#   四个集合的 schema 在里面，仍旧归 prettier 管。
+/src/content/
+
+# 【2026-09-21 同一场架的另一半】`src/data/` 也是后台写的
+#
+# 这个目录下**四样东西全是 Keystatic 存的**：智能体与模型登记表（registry.json）、
+# 标签表（tags.json）、回答排序表（answerOrder.json）、常用提示词
+# （system-prompts/*.json）—— 三个 singleton 加一个集合，路径都在
+# keystatic.config.ts 里。它存出来的是多行 JSON，prettier 要把短数组压成一行：
+#
+#     Keystatic:  "agents": [\n  "chatgpt",\n  "claude",\n  "spark"\n]
+#     prettier:   "agents": ["chatgpt", "claude", "spark"]
+#
+# 谁都没错，而站长在后台排一次序，`pnpm format:check` 就红一次 —— 和上面 .md
+# 那一场是同一场架，只是换了个文件后缀。
+#
+# ★ 这几份的正确性同样不靠 prettier：它们上公网，所以**三道闸都扫**
+#   （`SCANNED_DATA_FILES`），而且各有一个解析函数，坏数据在 import 时就抛
+#   （registry.ts / tags.ts / answerOrder.ts，都是"宁可红，不许静默当成空表"）。
+#   那几道一个都不看缩进和换行。
+# ★ 排的是**目录** `/src/data/`，`src/config/` 下那几个读它们的 .ts 是代码，照旧归 prettier 管。
+/src/data/

@@ -1,0 +1,39 @@
+---
+/**
+ * 空状态：这一块**现在没有东西可列**，而且这不是故障。
+ *
+ * ## 为什么值得有一个组件
+ *
+ * 原来每个列表页各写一行 `<p class="text-muted-foreground">{t.pages.xxxEmpty}</p>`。
+ * 一行灰字坐在一片空白里，和"页面没加载出来"长得一模一样 —— 而这个站上
+ * 「还没写」是**常态**（一个每天发一两篇的站，新集合上线头几天全是空的）。
+ *
+ * 一个画出来的框在说一件文字说不了的事：**这块地方是有人管的，只是还没填**。
+ * 这是 Linear / Notion / GitHub（它管这个叫 blankslate）共同的做法。
+ *
+ * ## 它**不**负责哪一档
+ *
+ * ★ 「搜索索引不存在」「数据读不出来」这类**故障**不许用这个组件。
+ *   故障要长得比空状态更重（实线 + 填充，`app-callout`），
+ *   因为读者对它该有的反应完全不同：空状态是"过两天再来"，
+ *   故障是"这站坏了"。CollectionSearch.astro 里那两档就是这么分的。
+ *   —— 这条是 docs/engineering-notes.md 第二节（空状态 / 失败状态 / 我不知道，
+ *   三者在界面上必须长得不一样）在列表页上的落点。
+ *
+ * ★ 所以这里**没有 `tone` / `variant` 之类的参数**。一个能切换成"故障样子"
+ *   的空状态组件，迟早会有人在故障处传 `tone="empty"`，而那一天没有任何
+ *   测试会红。让它只会说一件事。
+ */
+type Props = {
+  /** 一句话，直接来自 i18n 的 `t.pages.*Empty` 之类。 */
+  message: string;
+};
+
+const { message } = Astro.props;
+---
+
+<div
+  class="border-border text-muted-foreground rounded-app border border-dashed px-6 py-12 text-center"
+>
+  <p class="text-pretty">{message}</p>
+</div>

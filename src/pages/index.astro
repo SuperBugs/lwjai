@@ -1,0 +1,447 @@
+---
+import { getCollection } from "astro:content";
+import { getRelativeLocaleUrl } from "astro:i18n";
+import { collectionUrl } from "@/utils/getPostPaths";
+import IconArrowRight from "@/assets/icons/IconArrowRight.svg";
+import Layout from "@/layouts/Layout.astro";
+import Header from "@/components/Header.astro";
+import Footer from "@/components/Footer.astro";
+import Card from "@/components/Card.astro";
+import EmptyState from "@/components/EmptyState.astro";
+import LinkButton from "@/components/LinkButton.astro";
+import { getSortedPosts } from "@/utils/getSortedPosts";
+import { foldQaGroups } from "@/utils/qaGroups";
+import { siteJsonLd } from "@/utils/structuredData";
+import { getAssetPath } from "@/utils/withBase";
+import { useTranslations } from "@/i18n";
+import config from "@/config";
+
+const { socials, posts: postsConfig } = config;
+
+const locale = Astro.currentLocale ?? config.site.lang;
+const t = useTranslations(locale);
+
+// ★ 刻意不在 getCollection 里过滤 draft：草稿与"定时还没到"这两件事由
+//   getSortedPosts 内部的 postFilter 统一兜住。两个集合都走同一条口径 ——
+//   复制出第二份过滤逻辑的下场见 docs/engineering-notes.md 坑 1（dev 里有、dist 里没有、构建全绿）。
+const posts = await getCollection("posts");
+const qaEntries = await getCollection("qa");
+const guides = await getCollection("guides");
+const prompts = await getCollection("prompts");
+
+// 两个集合一起排一次，再切三份。
+// ★ 置顶区**混排**：一条重要的问答也该能顶上去，所以 featured 不分集合。
+//   下面两块则各自只认自己的集合 —— 首页的结构本身就是"这个站有两种内容"。
+const sortedEntries = getSortedPosts([
+  ...posts,
+  ...qaEntries,
+  ...guides,
+  ...prompts,
+]);
+
+const featuredEntries = sortedEntries.filter(({ data }) => data.featured);
+
+/** ★ 每个集合的**总数**（含被置顶收走的）。首页两个模块的空状态靠它分档：
+ *  总数 0 = 真的还没写；总数 > 0 但这块空 = 都在置顶区里了。
+ *  没有这个数的话，一个内容全被置顶的站会在首页写"还没有研究稿" —— 那是假话，
+ *  而且是 docs/engineering-notes.md 第二节点名不许犯的那种（把"在别处"说成"没有"）。 */
+const totalByCollection = (key: string) =>
+  sortedEntries.filter(entry => entry.collection === key).length;
+const postsTotal = totalByCollection("posts");
+const qaTotal = totalByCollection("qa");
+const guidesTotal = totalByCollection("guides");
+const promptsTotal = totalByCollection("prompts");
+const recentPosts = sortedEntries.filter(
+  entry => entry.collection === "posts" && !entry.data.featured
+);
+const recentQa = sortedEntries.filter(
+  entry => entry.collection === "qa" && !entry.data.featured
+);
+const recentGuides = sortedEntries.filter(
+  entry => entry.collection === "guides" && !entry.data.featured
+);
+const recentPrompts = sortedEntries.filter(
+  entry => entry.collection === "prompts" && !entry.data.featured
+);
+
+// 【2026-09-21】`telegramChannel` 和 `disclaimerUrl` 都挪去了
+// `src/components/Footer.astro`（连同页尾那一行整块）。那两段注释一起搬过去了，
+// 别在这里重建一份 —— 同一个地址在两处各算一遍就是两处各指一个地方的开始。
+
+const homePath = getRelativeLocaleUrl(locale, "");
+const postsUrl = collectionUrl("posts", locale);
+const qaUrl = collectionUrl("qa", locale);
+const guidesUrl = collectionUrl("guides", locale);
+const promptsUrl = collectionUrl("prompts", locale);
+
+/** 首页 <title>：「牢玩家 · AI 美股研究、问答与提示词」。
+ *  【2026-09-20】原来只有站名两个字 —— 人在 Google 里敲「牢玩家 AI」「AI 美股研究」时，
+ *  首页上没有一个词能对上。后半句在 i18n（home.tagline），措辞的纪律写在那儿。 */
+const homeTitle = `${config.site.title} · ${t.home.tagline}`;
+
+/** 首页那份 WebSite + Organization 结构化数据（src/utils/structuredData.ts）。
+ *  ★ 只挂首页：Google 的「站点名称」只读首页那份。站名别名在 astro-paper.config.ts 的
+ *    site.alternateNames；socials 当 sameAs，mailto 不是账号，滤掉。 */
+const structuredData = siteJsonLd({
+  name: config.site.title,
+  alternateNames: config.site.alternateNames,
+  url: config.site.url,
+  description: config.site.description,
+  lang: locale,
+  logoUrl: new URL(getAssetPath("favicon.svg"), Astro.site ?? Astro.url).href,
+  sameAs: socials
+    .map(social => social.url)
+    .filter(url => !url.startsWith("mailto:")),
+});
+---
+
+<Layout title={homeTitle}>
+  <Fragment slot="head">
+    <script
+      type="application/ld+json"
+      is:inline
+      set:html={JSON.stringify(structuredData)}
+    />
+  </Fragment>
+  <Header />
+  <main
+    id="main-content"
+    data-layout="index"
+    data-home-path={homePath}
+    class="app-layout my-1"
+  >
+    {
+      /* ── 首屏 ──────────────────────────────────────────────────────────
+       *
+       * 【第一版 2026-09-18】把裸 RSS 图标从首屏第一个元素挪走（它既是键盘
+       * Tab 的第一站、又没有任何文字说明自己是干什么的），并把简介抬成导语尺寸。
+       *
+       * 【第二版 2026-09-18】三句话**拆成三行**，免责收成一行小字。
+       *
+       * 【第三版 2026-09-20】下半截那四段竖排**并成一行**（按钮＋找到我＋RSS＋频道），
+       * 免责仍旧单独一行。上面那三行导语是**三个分量**，该分开；下面那四样是**同一类
+       * 东西**（把这个站带走的几个出口），竖着排只是在占地方。见下面那段注释。
+       *
+       *   ① 原来三句挤在一个 <p> 里：「记录分享 AI 分析结果…」是**这个站是什么**、
+       *      「站名是因为…」是**一句题外话**、「没有任何收费内容」是**一句承诺**。
+       *      三件事三个分量，挤成一段之后读者只能一口气读完再自己分，
+       *      而排版本来就该替他分好。现在三行三档：
+       *        大号 semibold  —— 这个站是什么（整页的视觉锚点）
+       *        正文灰字      —— 站名的来历（题外话，就该退一档）
+       *        正文加粗      —— 不收费的承诺（这是要人记住的那句）
+       *   ② 导语**自己控制断行**（断在逗号上，不让浏览器逐字断）——
+       *      做法和为什么不用 `text-balance`，见那一段自己的注释。
+       *
+       * ★ 免责那一块【2026-09-21】整个不在这一页了，见 `src/components/Footer.astro`。
+       *
+       * 【第四版 2026-09-20，用户要的三条】
+       *   ① 「站名是因为…」和「无任何收费…」并成**一行灰字、不加粗** ——
+       *      两句都是导语底下的注脚，分两行、一句加粗只是把注脚做大了；
+       *   ② 首屏顶上的留白收窄（pt-20 → pt-8）：导语上面空一整屏的三分之一，没必要；
+       *   ③ 出口行（按钮 / 找到我 / RSS / 频道）和免责**挪到页尾**（#outro）：
+       *      它们是"读完了往哪去"，放在四个内容模块之后。首屏只剩导语 + 一行注脚。
+       *
+       * 【第五版 2026-09-20，用户要的三条】导语改成「记录分享 AI 生成的美股标的相关的内容。」
+       *   （句子里没有逗号了，两个盒子改在「生成的 | 美股标的」之间断）；
+       *   页尾那块收成**一行**：免责 ＋ RSS ＋ Telegram 频道。
+       *
+       * 【第六版 2026-09-21，用户要的】上面那个 `#outro` **整块挪进了页脚**
+       *   （`src/components/Footer.astro`），这一页因此没有出口行了 ——
+       *   免责链接归版权那一组、RSS 和频道归联系方式那一组，
+       *   「本站所有内容都不构成任何投资建议」那句删掉。
+       */
+    }
+    <section
+      id="hero"
+      class="border-border border-b pt-6 pb-8 sm:pt-8 sm:pb-10"
+    >
+      {
+        /* ★ 站名在页眉已经有一份，这里**不再显示第二遍**（重复的大标题只是噪音）。
+           但 h1 本身留着、只是 sr-only：页眉那个站名是 `<a>` 不是标题，
+           整页删掉 h1 的话首页就一个 h1 都没有了 —— 屏幕阅读器按标题跳转时
+           首页会变成"没有标题的一页"，搜索结果里也少一层结构。
+           **看不见 ≠ 不存在**，这两件事别一起删。 */
+      }
+      <h1 class="sr-only">{config.site.title}</h1>
+
+      {
+        /* 行高 1.55，不是正文那档 1.9：字号越大，舒适行高越小 —— 34px 的中文
+          套 1.9 会让两行之间空出一整行的洞，看起来像两段而不是一句话。
+
+          ★ **每个分句包一层 `inline-block`，断行断在词与词之间。**
+            中文允许在任意两个汉字之间断行，所以交给浏览器自己排，上一版那句在
+            1150px 上实测断成「…AI 分析结」/「果，主要为…」——**从词中间劈开**。
+            一行大字里出现这种断法，整屏的精致感就没了。
+            `inline-block` 把每个分句变成一个不可拆的盒子：放得下就并成一行，
+            放不下**优先在两个盒子之间**断，只有单个分句自己都放不下时才退回
+            逐字断行（窄屏上仍然有兜底，不会溢出）。这是中文长标题的通行做法。
+            【第五版】这句没有逗号，盒子的边界定在「生成的 | 美股标的」——
+            两半在手机字号（24px）上各自都放得下一行，不会退回逐字断。
+            ★【2026-09-22 用户要的】「记录分享 AI 生成的美股标的相关的内容。」
+            **整句删了**，导语只剩「前沿 AI 分析美股标的。」—— 于是这里只剩
+            一个盒子，上面那套"在盒子之间断行"的讲究**这一刻用不上了**
+            （一句十一个字，任何屏宽都是一行）。盒子留着是因为它是这段版式的
+            默认写法：下次导语再变长时，断点规矩已经在原地，不用重新想一遍。
+            ⚠ 那句话在 `src/content/pages/about.md` 里**还有一份**（关于页开头），
+            那是另一处、另一件事，别顺手一起删。
+
+          ★ 同时**去掉了 `text-balance`**：它按"两行等长"挑断点，正是它把断点
+            推到词中间的。断点已经由上面那层盒子定死，再让它配平只会打架。
+
+          ⚠ 两个 `<span>` 必须**紧挨着**（`</span><span`），中间不许有空白 ——
+            两个 inline-block 之间的空白会渲染成一个**真实的空格**，
+            「生成的」和「美股」中间就多一个洞。下面 `></span>` 那种换行写法
+            是 prettier 唯一不会插空白的格式，别"顺手排整齐"。 */
+      }
+      <p
+        class="max-w-2xl text-2xl leading-[1.55] font-semibold tracking-tight sm:text-[2.125rem]"
+      >
+        <span class="inline-block">前沿 AI 分析美股标的。</span>
+      </p>
+
+      {
+        /* 一行注脚：题外话 + 承诺，灰字、不加粗（第四版，见上面）。
+           两句各包一层 <span> 且**紧挨着**：prettier 会在两句中间留一个真实空格，
+           而浏览器只吃 CJK 之间的换行、不吃空格 —— 句号后面会多一个洞。
+           `></span` 那种换行写法是 prettier 唯一不会插空白的格式（同上面导语那段）。 */
+      }
+      <p class="text-muted-foreground mt-4 max-w-2xl leading-[1.9] sm:text-lg">
+        <span>站名是因为博主曾经在某股像坐牢。</span><span
+          >网站无任何收费内容，以后也不会有任何收费。</span
+        >
+      </p>
+    </section>
+
+    {
+      /* 置顶区**跟着内容走**：什么都没顶起来时整块消失，这里不摆空状态。
+         它不是一个"模块"，是给下面两块加的一层强调 —— 一句「还没有置顶」
+         对读者没有任何信息量。下面那两块不一样，见各自的注释。 */
+      featuredEntries.length > 0 && (
+        <section id="featured" class="border-border border-b pt-12 pb-8">
+          <h2 class="mb-5 text-xl font-semibold tracking-tight sm:text-2xl">
+            {t.home.featured}
+          </h2>
+          <ul>
+            {foldQaGroups(featuredEntries).map(({ entry, answers }) => (
+              <Card variant="h3" {...entry} {answers} />
+            ))}
+          </ul>
+        </section>
+      )
+    }
+
+    {
+      /* ★ 研究 / 问答这两块**不带 `length > 0` 的条件渲染**。
+         一个"消失了的模块"和一个"还没有内容的模块"在读者眼里完全不是一回事：
+         前者看起来像这个站没有这种内容（或者页面坏了），后者是"作者还没写"。
+         这是 docs/engineering-notes.md 第二节那条纪律在首页的落点。
+         （hero 里 `socials.length > 0` 那一处是另一回事 —— 那是一行链接，
+         不是一个模块，没有"还没写"这档语义。） */
+    }
+    {
+      /* ── 分节标题行（2026-09-18 改）────────────────────────────────────
+       *
+       * 「全部研究 →」从**列表下方居中**挪到**标题行右端**。三个理由：
+       *   ① 居中的那个位置在国际上基本只用于"加载更多"，而这是一条去往
+       *      另一页的导航；标题行右端才是"这一块的全部"的通行位置
+       *      （Apple Newsroom、Stripe、Vercel、YouTube 首页分区都是这么排的）。
+       *   ② 首页有三块，三个居中链接在视觉上排成一列，读者会以为它们是一组
+       *      同级的东西，而它们分别属于上面三个不同的块。
+       *   ③ 一屏之内看得见入口，不用先滚过 6 张卡片。
+       *
+       * ★ 判据从 `recentX.length > 0` 换成 `xTotal > 0`。
+       *   原来那条的用意是"别把人送进一个空列表页"，但**空不空取决于集合总数**，
+       *   不取决于这一块里剩几条：全部条目都被置顶区收走时（allInFeatured 那一档），
+       *   `/posts` 上是有内容的，而原来那版恰恰在这时把入口藏了。
+       *   总数为 0 时入口仍然不出现 —— 那才是真的死胡同。
+       */
+    }
+    <section id="recent-posts" class="border-border border-b pt-12 pb-8">
+      <div class="mb-5 flex items-baseline justify-between gap-4">
+        <h2 class="text-xl font-semibold tracking-tight sm:text-2xl">
+          {t.home.recentPosts}
+        </h2>
+        {
+          postsTotal > 0 && (
+            <LinkButton
+              href={postsUrl}
+              class="text-muted-foreground hover:text-foreground shrink-0 text-sm transition-colors"
+            >
+              {/* 屏幕上只印「全部」，完整那句留给读屏和 hover（见 zh-CN.ts 的 home.all）。 */}
+              <span aria-hidden="true">{t.home.all}</span>
+              <span class="sr-only">{t.home.allPosts}</span>
+              <IconArrowRight class="inline-block size-4 rtl:-rotate-180" />
+            </LinkButton>
+          )
+        }
+      </div>
+      {
+        recentPosts.length === 0 ? (
+          <EmptyState
+            message={
+              postsTotal === 0 ? t.pages.postsEmpty : t.home.allInFeatured
+            }
+          />
+        ) : (
+          <ul>
+            {/* 同一个选题的几份研究折成一张卡 —— 和 /posts、/s、/tags 同一个函数。
+                 ★ 先折再切片：反过来的话「最近 N 条」里同一个选题会占掉两格。 */}
+            {foldQaGroups(recentPosts)
+              .slice(0, postsConfig.perIndex)
+              .map(({ entry, answers }) => (
+                <Card variant="h3" {...entry} {answers} />
+              ))}
+          </ul>
+        )
+      }
+    </section>
+
+    <section id="recent-qa" class="border-border border-b pt-12 pb-8">
+      <div class="mb-5 flex items-baseline justify-between gap-4">
+        <h2 class="text-xl font-semibold tracking-tight sm:text-2xl">
+          {t.home.recentQa}
+        </h2>
+        {
+          qaTotal > 0 && (
+            <LinkButton
+              href={qaUrl}
+              class="text-muted-foreground hover:text-foreground shrink-0 text-sm transition-colors"
+            >
+              {/* 屏幕上只印「全部」，完整那句留给读屏和 hover（见 zh-CN.ts 的 home.all）。 */}
+              <span aria-hidden="true">{t.home.all}</span>
+              <span class="sr-only">{t.home.allQa}</span>
+              <IconArrowRight class="inline-block size-4 rtl:-rotate-180" />
+            </LinkButton>
+          )
+        }
+      </div>
+      {
+        recentQa.length === 0 ? (
+          <EmptyState
+            message={qaTotal === 0 ? t.pages.qaEmpty : t.home.allInFeatured}
+          />
+        ) : (
+          <ul>
+            {/* 先折再截：同一个问题的几条回答算一张卡，不占掉"最近 6 条"里的两个位置。 */}
+            {foldQaGroups(recentQa)
+              .slice(0, postsConfig.perIndex)
+              .map(({ entry, answers }) => (
+                <Card variant="h3" {...entry} {answers} />
+              ))}
+          </ul>
+        )
+      }
+    </section>
+
+    {
+      /* 教程和提示词排在最后两块，是因为它们和上面两块的读者不是同一批：
+        上面两块是"今天有什么新东西"，这两块是"我要开户，怎么弄"和
+        "这些研究是怎么跑出来的" —— 后两者是带着目的来的，会直接点导航，
+        不靠首页刷到。 */
+    }
+    <section id="recent-guides" class="border-border border-b pt-12 pb-8">
+      <div class="mb-5 flex items-baseline justify-between gap-4">
+        <h2 class="text-xl font-semibold tracking-tight sm:text-2xl">
+          {t.home.recentGuides}
+        </h2>
+        {
+          guidesTotal > 0 && (
+            <LinkButton
+              href={guidesUrl}
+              class="text-muted-foreground hover:text-foreground shrink-0 text-sm transition-colors"
+            >
+              {/* 屏幕上只印「全部」，完整那句留给读屏和 hover（见 zh-CN.ts 的 home.all）。 */}
+              <span aria-hidden="true">{t.home.all}</span>
+              <span class="sr-only">{t.home.allGuides}</span>
+              <IconArrowRight class="inline-block size-4 rtl:-rotate-180" />
+            </LinkButton>
+          )
+        }
+      </div>
+      {
+        recentGuides.length === 0 ? (
+          <EmptyState
+            message={
+              guidesTotal === 0 ? t.pages.guidesEmpty : t.home.allInFeatured
+            }
+          />
+        ) : (
+          <ul>
+            {recentGuides.slice(0, postsConfig.perIndex).map(entry => (
+              <Card variant="h3" {...entry} />
+            ))}
+          </ul>
+        )
+      }
+    </section>
+
+    {
+      /* 提示词。放在最后一块：它回答的是"上面那些研究是怎么跑出来的" ——
+        读者得先看见研究，这一块才有意义。
+        ★ 和上面三块同一套两档空状态（`xTotal === 0` 才是"还没写"，
+        否则是"都在置顶区里了"），别退回单一句"还没有"。 */
+    }
+    <section id="recent-prompts" class="pt-12 pb-8">
+      <div class="mb-5 flex items-baseline justify-between gap-4">
+        <h2 class="text-xl font-semibold tracking-tight sm:text-2xl">
+          {t.home.recentPrompts}
+        </h2>
+        {
+          promptsTotal > 0 && (
+            <LinkButton
+              href={promptsUrl}
+              class="text-muted-foreground hover:text-foreground shrink-0 text-sm transition-colors"
+            >
+              {/* 屏幕上只印「全部」，完整那句留给读屏和 hover（见 zh-CN.ts 的 home.all）。 */}
+              <span aria-hidden="true">{t.home.all}</span>
+              <span class="sr-only">{t.home.allPrompts}</span>
+              <IconArrowRight class="inline-block size-4 rtl:-rotate-180" />
+            </LinkButton>
+          )
+        }
+      </div>
+      {
+        recentPrompts.length === 0 ? (
+          <EmptyState
+            message={
+              promptsTotal === 0 ? t.pages.promptsEmpty : t.home.allInFeatured
+            }
+          />
+        ) : (
+          <ul>
+            {recentPrompts.slice(0, postsConfig.perIndex).map(entry => (
+              <Card variant="h3" {...entry} />
+            ))}
+          </ul>
+        )
+      }
+    </section>
+
+    {
+      /* ── 【2026-09-21】这里原来是「页尾出口」那一行（`#outro`）：
+       *    免责小字 ＋ 「完整免责声明」链接 ＋ RSS 订阅 ＋ Telegram 频道。
+       *
+       *    整块**挪进了页脚**（`src/components/Footer.astro`），用户要的：
+       *    免责那条链接归到版权那一组（文案同时从「完整免责声明」收成「免责声明」），
+       *    RSS 和频道归到联系方式（`<Socials />`）那一组；
+       *    「本站所有内容都不构成任何投资建议」那句小字**删掉**。
+       *
+       *    ★ 这不是"首页少了点东西"：免责链接原来**只有首页有**，而读者是从
+       *      详情页进站的。挪到页脚之后每一页都带着它。
+       *      别为了让首页"收个尾"再在这里加回一份 —— 那就是同一条链接两处各写一份，
+       *      docs/engineering-notes.md 坑 8 那个形态。 */
+    }
+  </main>
+  <Footer />
+</Layout>
+
+<script>
+  document.addEventListener("astro:page-load", () => {
+    const indexLayout = (document.querySelector("#main-content") as HTMLElement)
+      ?.dataset;
+    const baseRoot = import.meta.env.BASE_URL.replace(/\/?$/, "/");
+    if (indexLayout?.layout) {
+      sessionStorage.setItem("backUrl", indexLayout.homePath ?? baseRoot);
+    }
+  });
+</script>

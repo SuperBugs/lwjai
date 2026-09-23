@@ -1,0 +1,74 @@
+{
+  "symbols": [
+    {
+      "code": "ARM",
+      "name": "Arm",
+      "nameEn": "Arm"
+    },
+    {
+      "code": "CRWV",
+      "name": "CoreWeave",
+      "nameEn": "CoreWeave"
+    },
+    {
+      "code": "DKNG",
+      "name": "DraftKings",
+      "nameEn": "DraftKings"
+    },
+    {
+      "code": "DXYZ",
+      "name": "Destiny Tech100",
+      "nameEn": "Destiny Tech100"
+    },
+    {
+      "code": "HOOD",
+      "name": "Robinhood Markets",
+      "nameEn": "Robinhood Markets"
+    },
+    {
+      "code": "META",
+      "name": "Meta",
+      "nameEn": "Meta"
+    },
+    {
+      "code": "NOK",
+      "name": "诺基亚",
+      "nameEn": "Nokia"
+    },
+    {
+      "code": "ORCL",
+      "name": "甲骨文",
+      "nameEn": "Oracle"
+    },
+    {
+      "code": "QCOM",
+      "name": "高通",
+      "nameEn": "Qualcomm Incorporated"
+    },
+    {
+      "code": "ZM",
+      "name": "Zoom",
+      "nameEn": "Zoom"
+    },
+    {
+      "code": "GRML",
+      "name": "格陵兰矿业",
+      "nameEn": "Greenland Mines"
+    },
+    {
+      "code": "SECZ",
+      "name": "Securitize Corp",
+      "nameEn": "Securitize Corp"
+    },
+    {
+      "code": "MU",
+      "name": "美光科技",
+      "nameEn": "Micron Technology"
+    },
+    {
+      "code": "SNDK",
+      "name": "闪迪",
+      "nameEn": "Sandisk Corporation"
+    }
+  ]
+}

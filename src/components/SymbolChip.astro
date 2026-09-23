@@ -1,0 +1,83 @@
+---
+import { getRelativeLocaleUrl } from "astro:i18n";
+import { symbolSlug } from "@/utils/getUniqueSymbols";
+import { sameName } from "@/config/symbol";
+import { symbolNames } from "@/config/symbols";
+import config from "@/config";
+
+/**
+ * 标的芯片：这一条讲的是哪只票，点进去是这只票的全部研究和问答。
+ *
+ * ★ 代码用等宽字体（`font-mono`，也就是主题自带的 Google Sans Code）。
+ *   这是全站唯一必须对齐的东西：一列 TSLA / ACVA / BRK.B 上下对得齐，
+ *   扫起来快得多；而正文是比例字（见 styles/theme.css 那段）。
+ *
+ * ★【2026-09-22】**名字不再由调用方传进来** —— 它在标的表里（后台「标的」那一页，
+ *   判据 `src/config/symbols.ts`）。条目上只剩代码。
+ *   在这之前是三个 prop（symbol / symbolName / symbolNameEn），每条内容各填一份，
+ *   同一只票在两条里写成两个名字**不会有任何报错**。
+ * ★ 一条内容有几只票就画几张芯片 —— **"一只都没有就什么都不画"这条规矩落在调用方**
+ *   （`symbols.map(...)` 对空数组本来就什么都不渲染）。讲宏观、讲方法论的稿子
+ *   本来就不该有标的，那是完成态，不是缺失。
+ * ★ 表里查不到这个代码时**照画，只是没有名字**：那一档在构建期就红了
+ *   （content.config.ts 的 symbolsField），这里不必再兜一个"未知标的"的空状态。
+ */
+type Props = {
+  /** 标的表里那一行的代码。 */
+  code: string;
+  size?: "sm" | "lg";
+  class?: string;
+};
+
+const { code, size = "sm", class: className = "" } = Astro.props;
+const { name: symbolName, nameEn: symbolNameEn } = symbolNames(code);
+
+/**
+ * 【2026-09-20】公司英文名称只在 `lg`（详情页那张大芯片）上画出来，
+ * 列表卡片上的 `sm` 只留代码 + 中文名。
+ *
+ * ★ 不是"能省则省"：卡片上一行里还并排着智能体、模型、日期几样东西，
+ *   再塞一个 "Oracle Corporation" 会把中文名挤进 truncate 里 ——
+ *   那一档看起来和"没填中文名"一模一样，而这正是这个站不许发生的事。
+ *   hover 的 title 属性**两档都带**，所以信息在哪儿都拿得到。
+ */
+/**
+ * ★【2026-09-21 用户要的】中英文名**一模一样**时只画一个（`ZM Zoom Zoom` 那一档）。
+ *   判据是 `src/config/symbol.ts` 的 `sameName()` —— 发帖文案第一行读的是同一个，
+ *   两处抄成两份的那天就是其中一处悄悄漏掉去重的那天。
+ *   留下的是中文名那一格：它在两种尺寸下都画，而英文名只在 lg 上画。
+ */
+const showEn =
+  size === "lg" && Boolean(symbolNameEn) && !sameName(symbolNameEn, symbolName);
+// 悬停提示里**不去重**：它是"标的表里这一行到底填了什么"的排查线索，
+// 去重会把"两格填了同一个词"和"只填了一格"说成同一件事。
+const hoverTitle = [code, symbolName, symbolNameEn].filter(Boolean).join(" · ");
+const locale = Astro.currentLocale ?? config.site.lang;
+---
+
+<a
+  href={getRelativeLocaleUrl(locale, `s/${symbolSlug(code)}`)}
+  class:list={[
+    // ★ 四张芯片（标的 / 标签 / 出处 / 分享者）共用同一副形状，定义在
+    //   `src/styles/global.css` 的 `app-chip`（【2026-09-22 用户要的】扁平：
+    //   一格淡底 + 6px 方角，**没有边框**）。
+    //   在这之前四处各写一份 class，靠一句"改一张要三张一起改"的注释守着 ——
+    //   那是一条只能靠人记的规矩，而它已经漏掉过一张（早就是四张了）。
+    //   `chips.test.ts` 现在钉着"全站没有第二处手写那副形状"。
+    // ⚠ 这里**不要**再写一个 `gap-*`：代码和公司名之间的间距由 `app-chip` 给
+    //   （原来这儿写着 `gap-1.5`，和另外三张差 2px —— 一排芯片里只有标的那张
+    //   松一点点，看着像没对齐）。
+    "app-chip app-chip-link",
+    size === "lg" ? "text-base" : "text-sm",
+    className,
+  ]}
+  title={hoverTitle}
+>
+  <span class="font-mono font-semibold tracking-wide">{code}</span>
+  {
+    symbolName && (
+      <span class="text-muted-foreground truncate">{symbolName}</span>
+    )
+  }
+  {showEn && <span class="text-muted-foreground truncate">{symbolNameEn}</span>}
+</a>

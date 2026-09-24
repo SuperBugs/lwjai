@@ -1,0 +1,121 @@
+---
+/**
+ * 「关于」页的微信群那一节（【2026-09-24 用户要的】）。页脚那条「微信交流群」指向这里。
+ *
+ * 四档的判据在 `src/config/community.ts`，这里只照着画：
+ *   none    → 整节不画（这个站没有群，完成态）
+ *   active  → 二维码 ＋ 一句怎么加 ＋「X月X日前有效」（个人微信没有日期那一行）
+ *   expired → **不画那张码**，只画过期那句（群二维码扫了只会看到"已过期"）
+ *
+ * ★ 图走 `/wechat-qr.png`（`src/pages/wechat-qr.png.ts`，重新编码过、没有元数据），
+ *   不走 `<Image>` —— 理由写在 `src/utils/wechatQr.ts` 文件头（坑 15）。
+ *   宽高和 `?v=` 取自**同一次**编码，所以页面上这张和那条路由吐的是同一张。
+ * ★ 构建时还有效、读者打开时已经过了失效时刻：底下那段脚本换成过期那一档。
+ *   失效时刻由 community.ts 算好写进 `data-wechat-expires-at`，脚本只比大小 ——
+ *   别在脚本里再按日期推一遍（那就是第二份判据，时区一错两边就对不上）。
+ * ★ 二维码上挂 `data-pagefind-ignore="all"`：Pagefind 会把标题之后的第一张 `<img>`
+ *   记成这一页的搜索缩略图（智能体 logo 那边查实过），「关于」页的缩略图不该是一张二维码。
+ *   必须挂在 `<img>` 本身、必须是 `"all"`（理由同 AgentLogo.astro）。
+ * ★ 码垫白底：深色模式下黑底上的二维码很多扫码器认不出来。
+ * ⚠ `not-prose` 只挡得住 Typography 插件自己的规则，挡不住 typography.css 里站自己写的
+ *   `.app-prose img { mx-auto … }` / `figcaption { opacity-75 }` —— 所以 `mx-0` / `opacity-100`
+ *   是承重的（实测：不写的话码在一整行里居中，和左对齐的标题、说明错开）。
+ */
+import { useTranslations, tplStr } from "@/i18n";
+import config from "@/config";
+import {
+  expiresOnParts,
+  WECHAT_GROUP_ANCHOR,
+  WECHAT_QR_ROUTE,
+} from "@/config/community";
+import { wechatGroupState } from "@/utils/wechatGroup";
+import { renderWechatQr } from "@/utils/wechatQr";
+
+const locale = Astro.currentLocale ?? config.site.lang;
+const t = useTranslations(locale);
+
+const state = wechatGroupState(new Date());
+const img =
+  state.tier === "active" ? await renderWechatQr(state.qr) : undefined;
+const src =
+  img &&
+  `${import.meta.env.BASE_URL.replace(/\/?$/, "/")}${WECHAT_QR_ROUTE.replace(/^\//, "")}?v=${img.version}`;
+
+const dateLabel =
+  state.tier !== "none" && state.qr.kind === "group"
+    ? tplStr(t.wechat.date, expiresOnParts(state.qr.expiresOn))
+    : undefined;
+const expiredText = dateLabel && tplStr(t.wechat.expired, { date: dateLabel });
+const isPersonal = state.tier !== "none" && state.qr.kind === "personal";
+---
+
+{
+  state.tier !== "none" && (
+    <section>
+      <h2 id={WECHAT_GROUP_ANCHOR}>{t.wechat.title}</h2>
+      {state.tier === "expired" && <p>{expiredText}</p>}
+      {state.tier === "active" && img && (
+        <div
+          class="not-prose"
+          data-wechat-group
+          data-wechat-expires-at={state.expiresAt}
+        >
+          <figure data-wechat-live class="flex flex-col items-start gap-3">
+            <img
+              src={src}
+              width={img.width}
+              height={img.height}
+              alt={isPersonal ? t.wechat.altPersonal : t.wechat.altGroup}
+              loading="lazy"
+              decoding="async"
+              data-pagefind-ignore="all"
+              class="border-border rounded-app mx-0 h-auto w-56 border bg-white p-2"
+            />
+            <figcaption class="text-muted-foreground text-sm opacity-100">
+              {isPersonal ? t.wechat.scanPersonal : t.wechat.scanGroup}
+              {dateLabel && (
+                <>
+                  <br />
+                  {tplStr(t.wechat.validUntil, { date: dateLabel })}
+                </>
+              )}
+            </figcaption>
+          </figure>
+          {/* 构建时还没过期、只给脚本备着的那一句：不进搜索索引 —— Pagefind 连 hidden 的也收，
+               不挡的话码还有效的这一周里，搜「过期」搜得到一句「群二维码已在…过期」（实测）。 */}
+          {expiredText && (
+            <p
+              data-wechat-expired
+              hidden
+              data-pagefind-ignore
+              class="text-base"
+            >
+              {expiredText}
+            </p>
+          )}
+        </div>
+      )}
+    </section>
+  )
+}
+
+<script>
+  /**
+   * 构建那一刻还有效、读者打开时已经过了失效时刻：藏起那张码，换成过期那句。
+   * ★ 必须挂 `astro:page-load`：ClientRouter 给脚本去重，站内跳到「关于」页时
+   *   这段不会再执行（CopyLinkButton.astro 同一条理由）。重复调用无害 —— 只改 hidden。
+   */
+  function applyWechatExpiry() {
+    for (const box of document.querySelectorAll<HTMLElement>(
+      "[data-wechat-group][data-wechat-expires-at]"
+    )) {
+      const at = Date.parse(box.dataset.wechatExpiresAt ?? "");
+      if (!Number.isFinite(at) || Date.now() < at) continue;
+      box.querySelector("[data-wechat-live]")?.setAttribute("hidden", "");
+      box.querySelector("[data-wechat-expired]")?.removeAttribute("hidden");
+    }
+  }
+
+  applyWechatExpiry();
+  document.addEventListener("astro:page-load", applyWechatExpiry);
+</script>

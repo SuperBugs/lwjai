@@ -222,6 +222,11 @@ export interface UIStrings {
      *  哪天真换成群（或者给频道开了讨论组），记得这里、`astro-paper.config.ts`
      *  的 `linkTitle`、以及两份语言文件一起改。 */
     joinChannel: string;
+    /** 页脚那条「微信交流群」（【2026-09-24】），指向「关于」页的二维码那一节。
+     *  没配二维码时整条不画（`src/config/community.ts` 的 `none` 档）。
+     *  ★ 这里说「群」是对的（和上面 `joinChannel` 不许说群正相反）：微信群能发言；
+     *    传的是个人微信二维码时，「关于」页那一节会说清楚是"加好友后拉进群"。 */
+    joinWechat: string;
   };
   pages: {
     guidesTitle: string;
@@ -620,5 +625,24 @@ export interface UIStrings {
     title: string;
     message: string;
     goHome: string;
+  };
+  /**
+   * 「关于」页的微信群那一节（`src/components/WechatGroup.astro`，【2026-09-24】）。
+   * 四档的判据在 `src/config/community.ts`；这里只是每一档说的话。
+   */
+  wechat: {
+    title: string;
+    /** 群二维码那一档（会失效）。 */
+    scanGroup: string;
+    /** 个人微信那一档（不失效）：要说清楚是"先加好友、再拉进群"，不是扫了就进群。 */
+    scanPersonal: string;
+    /** `{{date}}` —— 用下面 `date` 拼出来的那一天。措辞跟微信码上印的「X月X日前有效」一致。 */
+    validUntil: string;
+    /** `{{month}}` / `{{day}}`。 */
+    date: string;
+    /** 过期那一档：`{{date}}`。**不画那张码**，只画这句（理由见 community.ts）。 */
+    expired: string;
+    altGroup: string;
+    altPersonal: string;
   };
 }

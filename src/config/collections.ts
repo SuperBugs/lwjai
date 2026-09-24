@@ -243,6 +243,18 @@ export const SYMBOLS_FILE = "src/data/symbols.json";
 export const ANSWER_ORDER_FILE = "src/data/answerOrder.json";
 
 /**
+ * 后台「微信群」那一页写的表（【2026-09-24 加】判据 `src/config/community.ts`）：
+ * 二维码图片的路径、是哪种二维码、失效日期。
+ *
+ * 里面没有自由文本，登记在下面那张表里的理由同 ANSWER_ORDER_FILE：**那张表同时决定
+ * `/_publish` 提交哪些文件**。它引用的那张图落在 `COMMUNITY_ASSETS_DIR`，由那一行的
+ * `assetsDir` 带给 `/_publish` —— 只登记 JSON 的话，后台换了二维码点提交推送，
+ * 推上去的 JSON 指向一张没跟着走的图：本机一切正常，线上构建当场红。
+ */
+export const COMMUNITY_FILE = "src/data/community.json";
+export const COMMUNITY_ASSETS_DIR = "src/assets/community";
+
+/**
  * 上公网、但**不按篇算**的数据文件 —— 三道闸（构建期 / 暂存区 / dev 预览页）都扫它们，
  * `/_publish` 也把它们当"内容"一起提交。
  *
@@ -251,12 +263,19 @@ export const ANSWER_ORDER_FILE = "src/data/answerOrder.json";
  *   而漏掉任何一处的症状是零 —— 那个文件安静地穿过那道闸，屏幕上照常印绿 ✓。
  *   现在加一个数据文件 = 在这里加一行，四处跟着走。
  * ⚠ 顺序就是报表里的顺序。
+ * ★ `assetsDir`：这份表引用的图片落在哪个目录（仓库根相对、不带末尾斜杠）。
+ *   只有 `/_publish` 读它 —— 图不过文字闸，但得跟着 JSON 一起提交。
  */
-export const SCANNED_DATA_FILES: readonly { path: string; label: string }[] = [
+export const SCANNED_DATA_FILES: readonly {
+  path: string;
+  label: string;
+  assetsDir?: string;
+}[] = [
   { path: REGISTRY_FILE, label: "智能体与模型登记表" },
   { path: TAGS_FILE, label: "标签表" },
   { path: SYMBOLS_FILE, label: "标的表" },
   { path: ANSWER_ORDER_FILE, label: "回答排序表" },
+  { path: COMMUNITY_FILE, label: "微信群", assetsDir: COMMUNITY_ASSETS_DIR },
 ];
 
 const BY_KEY = new Map(CONTENT_COLLECTIONS.map(c => [c.key, c]));

@@ -155,6 +155,12 @@ git 型后台是"先落盘、再构建"，内容在提交那一刻就进了仓�
 - `src/styles/global.css` 的 `app-chip*` —— 四张芯片的形状只许有这一处。
 - `src/utils/structuredData.ts` · `src/config/sitemap*.ts` —— SEO 与 sitemap。
 - `src/i18n/` —— 全站时间按北京时间显示，时区名只在鼠标放上去时出现（`site.timezone` ＋ `post.timezoneLabel` 是一对）。
+- `src/config/community.ts` · `src/components/WechatGroup.astro` · `src/pages/wechat-qr.png.ts` —— **微信交流群**：
+  后台「微信群」页上传二维码，「关于」页末尾一节显示、页脚一条链接指过去。四档：没配（不显示，完成态）/ 有效 /
+  群二维码过了失效日期（不显示旧码，改为提示已过期）/ 配置损坏（构建失败）。「是哪种二维码」必须显式选择：
+  群二维码必填失效日期，个人微信没有日期 —— 用"留空 = 不失效"表达的话，忘填日期的群码过期后会一直挂着。
+  图片不走 Astro 的图片管线，由 sharp 重新编码并去掉全部元数据后输出到 `/wechat-qr.png`；
+  过期或未配置时该路由返回无 body 的 404，静态构建不生成文件。`src/data/community.json` 在本仓库中为空表。
 
 **只在 `astro dev` 里存在的东西（`src/dev/`）**
 

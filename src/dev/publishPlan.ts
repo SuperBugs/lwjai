@@ -10,6 +10,7 @@
  *   - 后台粘图落盘的目录（src/assets/<集合>/，见 keystatic.config.ts 的 imageOptions）
  *   - 后台那两页写出来的数据文件（src/data/registry.json 智能体与模型登记表、
  *     src/data/tags.json 标签表）—— 名单在 collections.ts 的 SCANNED_DATA_FILES
+ *   - 那几份表引用的图（同一张表里的 `assetsDir`：后台「微信群」传的二维码）
  * 工作树里别的改动（代码、配置、文档）**一律不碰**，页面上单独列出来说"这些不会随这次
  * 发布提交"。否则一次发稿会把半做完的代码一起推上 Cloudflare 去构建。
  *
@@ -27,10 +28,12 @@ export interface Change {
   from?: string;
 }
 
-const CONTENT_PREFIXES: readonly string[] = CONTENT_COLLECTIONS.flatMap(c => [
-  `${c.dir}/`,
-  `src/assets/${c.key}/`,
-]);
+const CONTENT_PREFIXES: readonly string[] = [
+  ...CONTENT_COLLECTIONS.flatMap(c => [`${c.dir}/`, `src/assets/${c.key}/`]),
+  // 数据文件引用的图（后台「微信群」那一页传的二维码）。不带上它 = JSON 推上去了、
+  // 它指向的那张图没跟着走，线上构建红而本机一切正常。
+  ...SCANNED_DATA_FILES.flatMap(f => (f.assetsDir ? [`${f.assetsDir}/`] : [])),
+];
 
 /** 这条路径是不是"内容"（会随发布一起提交）。 */
 export function isContentPath(path: string): boolean {

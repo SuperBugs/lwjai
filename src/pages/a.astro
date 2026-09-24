@@ -5,6 +5,7 @@ import Header from "@/components/Header.astro";
 import Breadcrumb from "@/components/Breadcrumb.astro";
 import Main from "@/components/Main.astro";
 import Footer from "@/components/Footer.astro";
+import WechatGroup from "@/components/WechatGroup.astro";
 import config from "@/config";
 
 const about = await getEntry("pages", "about");
@@ -36,6 +37,10 @@ const { Content } = await render(about);
   }
   <Main pageTitle={about.data.title} class="app-prose" searchable>
     <Content />
+    {
+      /* 【2026-09-24】微信群那一节，页脚「微信交流群」指向它；没配二维码时整节不画。 */
+    }
+    <WechatGroup />
   </Main>
 
   <Footer />

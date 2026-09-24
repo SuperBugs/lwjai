@@ -18,7 +18,17 @@ import { symbolOptions } from "./src/config/symbols";
 import { SYMBOL_RE } from "./src/config/symbol";
 import { beijingWallToUtc, utcWallToBeijing } from "./src/config/beijingTime";
 import { previewUrlFor } from "./src/dev/previewPlan";
-import { NUMBERED_COLLECTIONS } from "./src/config/collections";
+import {
+  COMMUNITY_ASSETS_DIR,
+  COMMUNITY_FILE,
+  NUMBERED_COLLECTIONS,
+} from "./src/config/collections";
+import {
+  WECHAT_KIND_FIELD,
+  WECHAT_QR_FIELD,
+  WECHAT_QR_FORMATS,
+  WECHAT_QR_PUBLIC_PATH,
+} from "./src/config/community";
 import { idFromEntryPath, nextEntryNo } from "./src/config/entryNo";
 import { ENTRY_ICON_FORMATS } from "./src/config/entryIcon";
 import { sanitizeUploadFilename } from "./src/config/uploadFilename";
@@ -1073,6 +1083,63 @@ export default config({
               agentOptions().find(o => o.value === props.value)?.label ||
               props.value ||
               "（还没选）",
+          }
+        ),
+      },
+    }),
+
+    /**
+     * 【2026-09-24 用户要的】「关于」页的微信群二维码 ＋ 页脚那条「微信交流群」，
+     * 开源仓库的 README 也引用站上那张图（`/wechat-qr.png`）。
+     *
+     * 四档、为什么「是哪种二维码」必须显式选、失效时刻按哪一刻算，都在
+     * `src/config/community.ts` 文件头。字段名、路径全从那里和 collections.ts 拿 ——
+     * 读这份表的 `parseCommunity()` 按同一组常量验路径，两边各写一份就是哪天对不上而后台照常存盘。
+     * ★ 字段名就是盘上的文件名（`wechatQr.png`）。
+     * ★ 图落在 src/assets/community/，**不在 public/ 下**：站上发出去的是重新编码过、
+     *   去掉元数据的那一份（src/utils/wechatQr.ts），原图的字节一个都不出去（坑 15）。
+     * ⚠ 这一页**不 import 读那份 JSON 的模块**（src/utils/wechatGroup.ts）：表坏了的时候，
+     *   能修它的地方就是这一页。
+     */
+    community: singleton({
+      label: "微信群",
+      path: COMMUNITY_FILE.replace(/\.json$/, ""),
+      format: { data: "json" },
+      schema: {
+        [WECHAT_QR_FIELD]: fields.image({
+          label: "二维码",
+          description:
+            "群二维码：在群聊里点右上角「…」→「群二维码」→ 再点右上角 →「保存图片」，把存下来的那张整张传上来，不用裁。" +
+            "也可以传个人微信的二维码（「我」→ 头像 →「我的二维码」），读者加你好友后你再拉他进群。" +
+            `只收 ${WECHAT_QR_FORMATS.join(" / ")}。` +
+            "★ 留空 = 站上不显示微信群（页脚那条和「关于」页那一节都不画），不算缺东西。" +
+            "⚠ 群满 200 人之后群二维码就扫不进去了（微信的限制，只能邀请）—— 到那时换成个人二维码。" +
+            "⚠ 传上去的码是公开的：个人二维码上印着你的微信昵称和头像。",
+          directory: COMMUNITY_ASSETS_DIR,
+          publicPath: WECHAT_QR_PUBLIC_PATH,
+        }),
+        [WECHAT_KIND_FIELD]: fields.conditional(
+          fields.select({
+            label: "这是哪种二维码",
+            description:
+              "群二维码 7 天失效，要填失效日期；个人微信二维码不会失效。" +
+              "★ 这一格没有「不知道」那一档是刻意的：群二维码忘了填日期，过期之后站上会一直挂着一张扫不进去的码。",
+            options: [
+              { label: "微信群二维码（7 天后失效）", value: "group" },
+              { label: "个人微信二维码（不失效，加好友后拉进群）", value: "personal" },
+            ],
+            defaultValue: "group",
+          }),
+          {
+            group: fields.date({
+              label: "失效日期",
+              description:
+                "群二维码下面印着「该二维码7天内(X月X日前)有效」—— 填那一天。" +
+                "从那天北京时间 0 点起，站上不再显示这张码，改成一句「已过期、站长更新后换成新的」；" +
+                "换新码的时候这里跟着改。",
+              validation: { isRequired: true },
+            }),
+            personal: fields.empty(),
           }
         ),
       },

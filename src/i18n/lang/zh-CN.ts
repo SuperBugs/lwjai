@@ -133,6 +133,7 @@ export default {
     // 下面两条【2026-09-21】从 `home` 挪过来：那一行整块进了页脚。
     subscribe: "RSS 订阅",
     joinChannel: "Telegram 频道",
+    joinWechat: "微信交流群",
   },
   pages: {
     guidesTitle: "教程",
@@ -383,5 +384,16 @@ export default {
     title: "404",
     message: "这个地址上没有东西",
     goHome: "回首页",
+  },
+  wechat: {
+    title: "微信交流群",
+    scanGroup: "用微信扫码加入交流群。",
+    scanPersonal: "用微信扫码加站长好友，通过后拉你进群。",
+    validUntil: "{{date}}前有效",
+    date: "{{month}}月{{day}}日",
+    expired:
+      "群二维码已在{{date}}过期，站长更新后这里会换成新的。着急的话可以先通过页面底部的联系方式联系站长。",
+    altGroup: "微信交流群二维码",
+    altPersonal: "站长微信二维码",
   },
 } satisfies UIStrings;

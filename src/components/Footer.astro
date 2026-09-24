@@ -7,6 +7,8 @@ import IconArrowRight from "@/assets/icons/IconArrowRight.svg";
 import Socials from "./Socials.astro";
 import { useTranslations } from "@/i18n";
 import config from "@/config";
+import { WECHAT_GROUP_ANCHOR } from "@/config/community";
+import { wechatGroupState } from "@/utils/wechatGroup";
 
 type Props = {
   noMarginTop?: boolean;
@@ -60,6 +62,13 @@ const telegramChannel = config.socials.find(s => s.name === TELEGRAM)?.url;
  *   JSON-LD 的 `sameAs`，删了它两处一起静默消失（理由写在 Socials.astro 的 Props 上）。
  */
 const NAMED_IN_FOOTER = [TELEGRAM];
+
+/** 【2026-09-24】「微信交流群」→「关于」页的二维码那一节。
+ *  ★ 没配二维码（`none` 档）整条不画；**过期了照样画** —— 群还在，只是码该换了，
+ *    点过去看到的是"已过期、站长会换新的"那句（判据在 src/config/community.ts）。
+ *  ★ 锚点从 community.ts 拿，不在这儿手写：那一节的 id 也是读它的。 */
+const showWechat = wechatGroupState(new Date()).tier !== "none";
+const wechatUrl = `${getRelativeLocaleUrl(locale, ROUTES.about)}#${WECHAT_GROUP_ANCHOR}`;
 ---
 
 <footer
@@ -74,6 +83,7 @@ const NAMED_IN_FOOTER = [TELEGRAM];
        ── 【2026-09-21 用户要的】页脚现在收两样从首页挪下来的东西 ──
        左边（版权那一组）：版权 · 保留所有权利 · **免责声明**
        右边（联系方式那一组）：社交图标 · **RSS 订阅** · **Telegram 频道**
+         （【2026-09-24】末尾多一条「微信交流群」，配了二维码才有）
 
        ⚠ 桌面上是 `sm:flex-row-reverse`，所以**源码里在前的那一组显示在右边**。
          两组各自成块，不许把它们摊平成一排 —— 摊平之后「免责声明」会挨到
@@ -119,6 +129,18 @@ const NAMED_IN_FOOTER = [TELEGRAM];
             class="hover:text-foreground inline-flex items-center gap-x-1.5 underline decoration-1 underline-offset-4 transition-colors"
           >
             {t.footer.joinChannel}
+            <IconArrowRight class="size-4 rtl:-rotate-180" />
+          </a>
+        )
+      }
+
+      {
+        showWechat && (
+          <a
+            href={wechatUrl}
+            class="hover:text-foreground inline-flex items-center gap-x-1.5 underline decoration-1 underline-offset-4 transition-colors"
+          >
+            {t.footer.joinWechat}
             <IconArrowRight class="size-4 rtl:-rotate-180" />
           </a>
         )

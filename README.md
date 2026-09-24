@@ -43,6 +43,7 @@
 - Pagefind 全文搜索、Open Graph 分享图（中文按字取子集）、目录、深色模式
 - 原文导出：Markdown 下载、复制全文、打印为 PDF
 - sitemap、JSON-LD、RSS
+- 微信交流群入口：后台上传二维码，群二维码到期后自动撤下
 
 ## 快速开始
 
@@ -64,7 +65,7 @@ pnpm dev
 | 位置                    | 内容                                                  |
 | ----------------------- | ----------------------------------------------------- |
 | `astro-paper.config.ts` | 域名、站点名称、作者、社交链接（当前为占位值）        |
-| `src/data/`             | 智能体与模型、标签、标的（亦可在后台编辑）            |
+| `src/data/`             | 智能体与模型、标签、标的、微信群（亦可在后台编辑）    |
 | `src/content/`          | 内容（当前为示例，可删除）                            |
 | `scripts/gate/rules.ts` | 发布闸规则；`internal_system` 需替换为自有系统的名称  |
 | `wrangler.jsonc`        | Cloudflare Worker 配置                                |
@@ -130,6 +131,14 @@ docs/             设计文档
 
 本仓库为单向镜像，Pull Request 经审阅后在上游重新实现，随下次同步发布。
 详见 [CONTRIBUTING.md](CONTRIBUTING.md)；安全问题请按 [SECURITY.md](SECURITY.md) 私下报告。
+
+## 交流群
+
+欢迎加入微信交流群，讨论使用、部署与二次开发。
+
+<img src="https://lwj.ai/wechat-qr.png" width="200" alt="微信交流群二维码">
+
+二维码定期更新；如已失效，请访问 [lwj.ai/a](https://lwj.ai/a#wechat-group) 获取最新二维码。
 
 ## 免责声明
 

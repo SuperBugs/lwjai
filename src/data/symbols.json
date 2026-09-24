@@ -82,8 +82,8 @@
     },
     {
       "code": "GOOGL",
-      "name": "谷歌",
-      "nameEn": "Alphabet"
+      "name": "谷歌-A",
+      "nameEn": "Alphabet (Class A)"
     },
     {
       "code": "AMZN",
@@ -904,6 +904,2031 @@
       "code": "MELI",
       "name": "美客多",
       "nameEn": "MercadoLibre"
+    },
+    {
+      "code": "CHTR",
+      "name": "特许通讯",
+      "nameEn": "Charter Communications"
+    },
+    {
+      "code": "CMCSA",
+      "name": "康卡斯特",
+      "nameEn": "Comcast"
+    },
+    {
+      "code": "ECHO",
+      "name": "EchoStar",
+      "nameEn": "EchoStar"
+    },
+    {
+      "code": "FOXA",
+      "name": "福克斯-A",
+      "nameEn": "Fox (Class A)"
+    },
+    {
+      "code": "FOX",
+      "name": "福克斯-B",
+      "nameEn": "Fox (Class B)"
+    },
+    {
+      "code": "GOOG",
+      "name": "谷歌-C",
+      "nameEn": "Alphabet (Class C)"
+    },
+    {
+      "code": "LYV",
+      "name": "Live Nation Entertainment",
+      "nameEn": "Live Nation Entertainment"
+    },
+    {
+      "code": "NWSA",
+      "name": "新闻集团-A",
+      "nameEn": "News Corp (Class A)"
+    },
+    {
+      "code": "NWS",
+      "name": "新闻集团-B",
+      "nameEn": "News Corp (Class B)"
+    },
+    {
+      "code": "OMC",
+      "name": "宏盟集团",
+      "nameEn": "Omnicom Group"
+    },
+    {
+      "code": "PSKY",
+      "name": "Paramount Skydance",
+      "nameEn": "Paramount Skydance"
+    },
+    {
+      "code": "TKO",
+      "name": "TKO Group",
+      "nameEn": "TKO Group"
+    },
+    {
+      "code": "TMUS",
+      "name": "T-Mobile US",
+      "nameEn": "T-Mobile US"
+    },
+    {
+      "code": "TTWO",
+      "name": "Take-Two Interactive",
+      "nameEn": "Take-Two Interactive"
+    },
+    {
+      "code": "WBD",
+      "name": "华纳兄弟探索",
+      "nameEn": "Warner Bros. Discovery"
+    },
+    {
+      "code": "APTV",
+      "name": "安波福",
+      "nameEn": "Aptiv"
+    },
+    {
+      "code": "AZO",
+      "name": "汽车地带",
+      "nameEn": "AutoZone"
+    },
+    {
+      "code": "BBY",
+      "name": "百思买",
+      "nameEn": "Best Buy"
+    },
+    {
+      "code": "BKNG",
+      "name": "Booking Holdings",
+      "nameEn": "Booking Holdings"
+    },
+    {
+      "code": "CCL",
+      "name": "嘉年华邮轮",
+      "nameEn": "Carnival"
+    },
+    {
+      "code": "CMG",
+      "name": "Chipotle Mexican Grill",
+      "nameEn": "Chipotle Mexican Grill"
+    },
+    {
+      "code": "CVNA",
+      "name": "Carvana",
+      "nameEn": "Carvana"
+    },
+    {
+      "code": "DECK",
+      "name": "Deckers Brands",
+      "nameEn": "Deckers Brands"
+    },
+    {
+      "code": "DHI",
+      "name": "霍顿房屋",
+      "nameEn": "D.R. Horton"
+    },
+    {
+      "code": "DPZ",
+      "name": "达美乐",
+      "nameEn": "Domino's Pizza"
+    },
+    {
+      "code": "DRI",
+      "name": "达登饭店",
+      "nameEn": "Darden Restaurants"
+    },
+    {
+      "code": "EBAY",
+      "name": "eBay",
+      "nameEn": "eBay"
+    },
+    {
+      "code": "EXPE",
+      "name": "Expedia Group",
+      "nameEn": "Expedia Group"
+    },
+    {
+      "code": "GPC",
+      "name": "Genuine Parts",
+      "nameEn": "Genuine Parts"
+    },
+    {
+      "code": "GRMN",
+      "name": "佳明",
+      "nameEn": "Garmin"
+    },
+    {
+      "code": "HAS",
+      "name": "孩之宝",
+      "nameEn": "Hasbro"
+    },
+    {
+      "code": "HLT",
+      "name": "希尔顿",
+      "nameEn": "Hilton Worldwide"
+    },
+    {
+      "code": "LEN",
+      "name": "莱纳建筑",
+      "nameEn": "Lennar"
+    },
+    {
+      "code": "LOW",
+      "name": "劳氏",
+      "nameEn": "Lowe's"
+    },
+    {
+      "code": "LVS",
+      "name": "拉斯维加斯金沙",
+      "nameEn": "Las Vegas Sands"
+    },
+    {
+      "code": "MAR",
+      "name": "万豪国际",
+      "nameEn": "Marriott International"
+    },
+    {
+      "code": "MGM",
+      "name": "美高梅",
+      "nameEn": "MGM Resorts"
+    },
+    {
+      "code": "NCLH",
+      "name": "挪威邮轮",
+      "nameEn": "Norwegian Cruise Line Holdings"
+    },
+    {
+      "code": "NVR",
+      "name": "NVR",
+      "nameEn": "NVR"
+    },
+    {
+      "code": "ORLY",
+      "name": "奥莱利汽车",
+      "nameEn": "O'Reilly Automotive"
+    },
+    {
+      "code": "PHM",
+      "name": "PulteGroup",
+      "nameEn": "PulteGroup"
+    },
+    {
+      "code": "RCL",
+      "name": "皇家加勒比",
+      "nameEn": "Royal Caribbean Group"
+    },
+    {
+      "code": "RL",
+      "name": "拉夫劳伦",
+      "nameEn": "Ralph Lauren"
+    },
+    {
+      "code": "ROST",
+      "name": "罗斯百货",
+      "nameEn": "Ross Stores"
+    },
+    {
+      "code": "TJX",
+      "name": "TJX Companies",
+      "nameEn": "TJX Companies"
+    },
+    {
+      "code": "TPR",
+      "name": "泰佩思琦",
+      "nameEn": "Tapestry"
+    },
+    {
+      "code": "TSCO",
+      "name": "Tractor Supply",
+      "nameEn": "Tractor Supply"
+    },
+    {
+      "code": "ULTA",
+      "name": "Ulta Beauty",
+      "nameEn": "Ulta Beauty"
+    },
+    {
+      "code": "WSM",
+      "name": "Williams-Sonoma",
+      "nameEn": "Williams-Sonoma"
+    },
+    {
+      "code": "WYNN",
+      "name": "永利度假村",
+      "nameEn": "Wynn Resorts"
+    },
+    {
+      "code": "YUM",
+      "name": "百胜餐饮",
+      "nameEn": "Yum! Brands"
+    },
+    {
+      "code": "ADM",
+      "name": "阿彻丹尼尔斯米德兰",
+      "nameEn": "Archer-Daniels-Midland"
+    },
+    {
+      "code": "BF.B",
+      "name": "百富门",
+      "nameEn": "Brown-Forman"
+    },
+    {
+      "code": "BG",
+      "name": "邦吉",
+      "nameEn": "Bunge"
+    },
+    {
+      "code": "CASY",
+      "name": "Casey's General Stores",
+      "nameEn": "Casey's General Stores"
+    },
+    {
+      "code": "CHD",
+      "name": "Church & Dwight",
+      "nameEn": "Church & Dwight"
+    },
+    {
+      "code": "CL",
+      "name": "高露洁",
+      "nameEn": "Colgate-Palmolive"
+    },
+    {
+      "code": "CLX",
+      "name": "高乐氏",
+      "nameEn": "Clorox"
+    },
+    {
+      "code": "DG",
+      "name": "达乐",
+      "nameEn": "Dollar General"
+    },
+    {
+      "code": "DLTR",
+      "name": "美元树",
+      "nameEn": "Dollar Tree"
+    },
+    {
+      "code": "EL",
+      "name": "雅诗兰黛",
+      "nameEn": "Estee Lauder"
+    },
+    {
+      "code": "GIS",
+      "name": "通用磨坊",
+      "nameEn": "General Mills"
+    },
+    {
+      "code": "HRL",
+      "name": "荷美尔食品",
+      "nameEn": "Hormel Foods"
+    },
+    {
+      "code": "HSY",
+      "name": "好时",
+      "nameEn": "Hershey"
+    },
+    {
+      "code": "KDP",
+      "name": "Keurig Dr Pepper",
+      "nameEn": "Keurig Dr Pepper"
+    },
+    {
+      "code": "KHC",
+      "name": "卡夫亨氏",
+      "nameEn": "Kraft Heinz"
+    },
+    {
+      "code": "KMB",
+      "name": "金佰利",
+      "nameEn": "Kimberly-Clark"
+    },
+    {
+      "code": "KR",
+      "name": "克罗格",
+      "nameEn": "Kroger"
+    },
+    {
+      "code": "KVUE",
+      "name": "科赴",
+      "nameEn": "Kenvue"
+    },
+    {
+      "code": "MDLZ",
+      "name": "亿滋国际",
+      "nameEn": "Mondelez International"
+    },
+    {
+      "code": "MKC",
+      "name": "味好美",
+      "nameEn": "McCormick"
+    },
+    {
+      "code": "MNST",
+      "name": "怪物饮料",
+      "nameEn": "Monster Beverage"
+    },
+    {
+      "code": "MO",
+      "name": "奥驰亚",
+      "nameEn": "Altria"
+    },
+    {
+      "code": "PM",
+      "name": "菲利普莫里斯国际",
+      "nameEn": "Philip Morris International"
+    },
+    {
+      "code": "SJM",
+      "name": "J.M. Smucker",
+      "nameEn": "J.M. Smucker"
+    },
+    {
+      "code": "STZ",
+      "name": "星座品牌",
+      "nameEn": "Constellation Brands"
+    },
+    {
+      "code": "SYY",
+      "name": "西斯科",
+      "nameEn": "Sysco"
+    },
+    {
+      "code": "TSN",
+      "name": "泰森食品",
+      "nameEn": "Tyson Foods"
+    },
+    {
+      "code": "APA",
+      "name": "APA",
+      "nameEn": "APA"
+    },
+    {
+      "code": "BKR",
+      "name": "贝克休斯",
+      "nameEn": "Baker Hughes"
+    },
+    {
+      "code": "COP",
+      "name": "康菲石油",
+      "nameEn": "ConocoPhillips"
+    },
+    {
+      "code": "DVN",
+      "name": "戴文能源",
+      "nameEn": "Devon Energy"
+    },
+    {
+      "code": "EOG",
+      "name": "EOG Resources",
+      "nameEn": "EOG Resources"
+    },
+    {
+      "code": "EQT",
+      "name": "EQT",
+      "nameEn": "EQT"
+    },
+    {
+      "code": "EXE",
+      "name": "Expand Energy",
+      "nameEn": "Expand Energy"
+    },
+    {
+      "code": "FANG",
+      "name": "响尾蛇能源",
+      "nameEn": "Diamondback Energy"
+    },
+    {
+      "code": "HAL",
+      "name": "哈里伯顿",
+      "nameEn": "Halliburton"
+    },
+    {
+      "code": "KMI",
+      "name": "金德摩根",
+      "nameEn": "Kinder Morgan"
+    },
+    {
+      "code": "MPC",
+      "name": "马拉松原油",
+      "nameEn": "Marathon Petroleum"
+    },
+    {
+      "code": "OKE",
+      "name": "ONEOK",
+      "nameEn": "ONEOK"
+    },
+    {
+      "code": "PSX",
+      "name": "菲利普斯66",
+      "nameEn": "Phillips 66"
+    },
+    {
+      "code": "SLB",
+      "name": "斯伦贝谢",
+      "nameEn": "SLB"
+    },
+    {
+      "code": "TPL",
+      "name": "Texas Pacific Land",
+      "nameEn": "Texas Pacific Land"
+    },
+    {
+      "code": "TRGP",
+      "name": "Targa Resources",
+      "nameEn": "Targa Resources"
+    },
+    {
+      "code": "VLO",
+      "name": "瓦莱罗能源",
+      "nameEn": "Valero Energy"
+    },
+    {
+      "code": "WMB",
+      "name": "Williams Companies",
+      "nameEn": "Williams Companies"
+    },
+    {
+      "code": "ACGL",
+      "name": "Arch Capital Group",
+      "nameEn": "Arch Capital Group"
+    },
+    {
+      "code": "AFL",
+      "name": "美国家庭人寿",
+      "nameEn": "Aflac"
+    },
+    {
+      "code": "AIG",
+      "name": "美国国际集团",
+      "nameEn": "American International Group"
+    },
+    {
+      "code": "AIZ",
+      "name": "Assurant",
+      "nameEn": "Assurant"
+    },
+    {
+      "code": "AJG",
+      "name": "Arthur J. Gallagher",
+      "nameEn": "Arthur J. Gallagher"
+    },
+    {
+      "code": "ALL",
+      "name": "好事达",
+      "nameEn": "Allstate"
+    },
+    {
+      "code": "AMP",
+      "name": "Ameriprise Financial",
+      "nameEn": "Ameriprise Financial"
+    },
+    {
+      "code": "AON",
+      "name": "怡安",
+      "nameEn": "Aon"
+    },
+    {
+      "code": "APO",
+      "name": "阿波罗全球管理",
+      "nameEn": "Apollo Global Management"
+    },
+    {
+      "code": "ARES",
+      "name": "Ares Management",
+      "nameEn": "Ares Management"
+    },
+    {
+      "code": "BEN",
+      "name": "富兰克林邓普顿",
+      "nameEn": "Franklin Templeton"
+    },
+    {
+      "code": "BNY",
+      "name": "纽约梅隆银行",
+      "nameEn": "BNY Mellon"
+    },
+    {
+      "code": "BRO",
+      "name": "Brown & Brown",
+      "nameEn": "Brown & Brown"
+    },
+    {
+      "code": "BX",
+      "name": "黑石",
+      "nameEn": "Blackstone"
+    },
+    {
+      "code": "CB",
+      "name": "安达保险",
+      "nameEn": "Chubb"
+    },
+    {
+      "code": "CBOE",
+      "name": "芝加哥期权交易所",
+      "nameEn": "Cboe Global Markets"
+    },
+    {
+      "code": "CFG",
+      "name": "Citizens Financial Group",
+      "nameEn": "Citizens Financial Group"
+    },
+    {
+      "code": "CINF",
+      "name": "Cincinnati Financial",
+      "nameEn": "Cincinnati Financial"
+    },
+    {
+      "code": "CME",
+      "name": "芝商所",
+      "nameEn": "CME Group"
+    },
+    {
+      "code": "COF",
+      "name": "第一资本",
+      "nameEn": "Capital One"
+    },
+    {
+      "code": "CPAY",
+      "name": "Corpay",
+      "nameEn": "Corpay"
+    },
+    {
+      "code": "EG",
+      "name": "Everest Group",
+      "nameEn": "Everest Group"
+    },
+    {
+      "code": "ERIE",
+      "name": "Erie Indemnity",
+      "nameEn": "Erie Indemnity"
+    },
+    {
+      "code": "FDS",
+      "name": "FactSet",
+      "nameEn": "FactSet"
+    },
+    {
+      "code": "FIS",
+      "name": "Fidelity National Information Services",
+      "nameEn": "Fidelity National Information Services"
+    },
+    {
+      "code": "FISV",
+      "name": "Fiserv",
+      "nameEn": "Fiserv"
+    },
+    {
+      "code": "FITB",
+      "name": "五三银行",
+      "nameEn": "Fifth Third Bancorp"
+    },
+    {
+      "code": "GL",
+      "name": "Globe Life",
+      "nameEn": "Globe Life"
+    },
+    {
+      "code": "GPN",
+      "name": "Global Payments",
+      "nameEn": "Global Payments"
+    },
+    {
+      "code": "HBAN",
+      "name": "亨廷顿银行",
+      "nameEn": "Huntington Bancshares"
+    },
+    {
+      "code": "HIG",
+      "name": "The Hartford",
+      "nameEn": "The Hartford"
+    },
+    {
+      "code": "ICE",
+      "name": "洲际交易所",
+      "nameEn": "Intercontinental Exchange"
+    },
+    {
+      "code": "IVZ",
+      "name": "景顺",
+      "nameEn": "Invesco"
+    },
+    {
+      "code": "JKHY",
+      "name": "Jack Henry & Associates",
+      "nameEn": "Jack Henry & Associates"
+    },
+    {
+      "code": "KEY",
+      "name": "KeyCorp",
+      "nameEn": "KeyCorp"
+    },
+    {
+      "code": "KKR",
+      "name": "KKR",
+      "nameEn": "KKR"
+    },
+    {
+      "code": "L",
+      "name": "Loews",
+      "nameEn": "Loews"
+    },
+    {
+      "code": "MCO",
+      "name": "穆迪",
+      "nameEn": "Moody's"
+    },
+    {
+      "code": "MET",
+      "name": "大都会人寿",
+      "nameEn": "MetLife"
+    },
+    {
+      "code": "MRSH",
+      "name": "威达信",
+      "nameEn": "Marsh McLennan"
+    },
+    {
+      "code": "MSCI",
+      "name": "MSCI",
+      "nameEn": "MSCI"
+    },
+    {
+      "code": "MTB",
+      "name": "M&T Bank",
+      "nameEn": "M&T Bank"
+    },
+    {
+      "code": "NDAQ",
+      "name": "纳斯达克",
+      "nameEn": "Nasdaq"
+    },
+    {
+      "code": "NTRS",
+      "name": "北方信托",
+      "nameEn": "Northern Trust"
+    },
+    {
+      "code": "PFG",
+      "name": "信安金融",
+      "nameEn": "Principal Financial Group"
+    },
+    {
+      "code": "PGR",
+      "name": "前进保险",
+      "nameEn": "Progressive"
+    },
+    {
+      "code": "PNC",
+      "name": "PNC金融",
+      "nameEn": "PNC Financial Services"
+    },
+    {
+      "code": "PRU",
+      "name": "保德信金融",
+      "nameEn": "Prudential Financial"
+    },
+    {
+      "code": "RF",
+      "name": "地区金融",
+      "nameEn": "Regions Financial"
+    },
+    {
+      "code": "RJF",
+      "name": "Raymond James Financial",
+      "nameEn": "Raymond James Financial"
+    },
+    {
+      "code": "SPGI",
+      "name": "标普全球",
+      "nameEn": "S&P Global"
+    },
+    {
+      "code": "STT",
+      "name": "道富",
+      "nameEn": "State Street"
+    },
+    {
+      "code": "SYF",
+      "name": "Synchrony Financial",
+      "nameEn": "Synchrony Financial"
+    },
+    {
+      "code": "TFC",
+      "name": "Truist Financial",
+      "nameEn": "Truist Financial"
+    },
+    {
+      "code": "TROW",
+      "name": "普信",
+      "nameEn": "T. Rowe Price"
+    },
+    {
+      "code": "TRV",
+      "name": "旅行者保险",
+      "nameEn": "Travelers"
+    },
+    {
+      "code": "USB",
+      "name": "美国合众银行",
+      "nameEn": "U.S. Bancorp"
+    },
+    {
+      "code": "WRB",
+      "name": "W. R. Berkley",
+      "nameEn": "W. R. Berkley"
+    },
+    {
+      "code": "WTW",
+      "name": "韦莱韬悦",
+      "nameEn": "Willis Towers Watson"
+    },
+    {
+      "code": "A",
+      "name": "安捷伦",
+      "nameEn": "Agilent Technologies"
+    },
+    {
+      "code": "ABT",
+      "name": "雅培",
+      "nameEn": "Abbott Laboratories"
+    },
+    {
+      "code": "ALGN",
+      "name": "爱齐科技",
+      "nameEn": "Align Technology"
+    },
+    {
+      "code": "BAX",
+      "name": "百特",
+      "nameEn": "Baxter International"
+    },
+    {
+      "code": "BDX",
+      "name": "碧迪医疗",
+      "nameEn": "Becton Dickinson"
+    },
+    {
+      "code": "BIIB",
+      "name": "渤健",
+      "nameEn": "Biogen"
+    },
+    {
+      "code": "BMY",
+      "name": "百时美施贵宝",
+      "nameEn": "Bristol Myers Squibb"
+    },
+    {
+      "code": "BSX",
+      "name": "波士顿科学",
+      "nameEn": "Boston Scientific"
+    },
+    {
+      "code": "CAH",
+      "name": "康德乐",
+      "nameEn": "Cardinal Health"
+    },
+    {
+      "code": "CI",
+      "name": "信诺",
+      "nameEn": "Cigna"
+    },
+    {
+      "code": "CNC",
+      "name": "Centene",
+      "nameEn": "Centene"
+    },
+    {
+      "code": "COO",
+      "name": "Cooper Companies",
+      "nameEn": "Cooper Companies"
+    },
+    {
+      "code": "COR",
+      "name": "Cencora",
+      "nameEn": "Cencora"
+    },
+    {
+      "code": "CRL",
+      "name": "查尔斯河实验室",
+      "nameEn": "Charles River Laboratories"
+    },
+    {
+      "code": "CVS",
+      "name": "CVS健康",
+      "nameEn": "CVS Health"
+    },
+    {
+      "code": "DGX",
+      "name": "奎斯特诊断",
+      "nameEn": "Quest Diagnostics"
+    },
+    {
+      "code": "DHR",
+      "name": "丹纳赫",
+      "nameEn": "Danaher"
+    },
+    {
+      "code": "DVA",
+      "name": "DaVita",
+      "nameEn": "DaVita"
+    },
+    {
+      "code": "DXCM",
+      "name": "德康医疗",
+      "nameEn": "Dexcom"
+    },
+    {
+      "code": "ELV",
+      "name": "Elevance Health",
+      "nameEn": "Elevance Health"
+    },
+    {
+      "code": "EW",
+      "name": "爱德华兹生命科学",
+      "nameEn": "Edwards Lifesciences"
+    },
+    {
+      "code": "GEHC",
+      "name": "GE医疗",
+      "nameEn": "GE HealthCare"
+    },
+    {
+      "code": "GILD",
+      "name": "吉利德科学",
+      "nameEn": "Gilead Sciences"
+    },
+    {
+      "code": "HCA",
+      "name": "HCA Healthcare",
+      "nameEn": "HCA Healthcare"
+    },
+    {
+      "code": "HSIC",
+      "name": "汉瑞祥",
+      "nameEn": "Henry Schein"
+    },
+    {
+      "code": "HUM",
+      "name": "哈门那",
+      "nameEn": "Humana"
+    },
+    {
+      "code": "IDXX",
+      "name": "爱德士",
+      "nameEn": "IDEXX Laboratories"
+    },
+    {
+      "code": "ILMN",
+      "name": "因美纳",
+      "nameEn": "Illumina"
+    },
+    {
+      "code": "INCY",
+      "name": "Incyte",
+      "nameEn": "Incyte"
+    },
+    {
+      "code": "IQV",
+      "name": "艾昆纬",
+      "nameEn": "IQVIA"
+    },
+    {
+      "code": "LH",
+      "name": "Labcorp",
+      "nameEn": "Labcorp"
+    },
+    {
+      "code": "MCK",
+      "name": "麦克森",
+      "nameEn": "McKesson"
+    },
+    {
+      "code": "MDT",
+      "name": "美敦力",
+      "nameEn": "Medtronic"
+    },
+    {
+      "code": "MTD",
+      "name": "梅特勒-托利多",
+      "nameEn": "Mettler-Toledo"
+    },
+    {
+      "code": "PODD",
+      "name": "Insulet",
+      "nameEn": "Insulet"
+    },
+    {
+      "code": "REGN",
+      "name": "再生元",
+      "nameEn": "Regeneron Pharmaceuticals"
+    },
+    {
+      "code": "RMD",
+      "name": "瑞思迈",
+      "nameEn": "ResMed"
+    },
+    {
+      "code": "RVTY",
+      "name": "Revvity",
+      "nameEn": "Revvity"
+    },
+    {
+      "code": "SOLV",
+      "name": "Solventum",
+      "nameEn": "Solventum"
+    },
+    {
+      "code": "STE",
+      "name": "Steris",
+      "nameEn": "Steris"
+    },
+    {
+      "code": "SYK",
+      "name": "史赛克",
+      "nameEn": "Stryker"
+    },
+    {
+      "code": "TECH",
+      "name": "Bio-Techne",
+      "nameEn": "Bio-Techne"
+    },
+    {
+      "code": "TMO",
+      "name": "赛默飞",
+      "nameEn": "Thermo Fisher Scientific"
+    },
+    {
+      "code": "UHS",
+      "name": "Universal Health Services",
+      "nameEn": "Universal Health Services"
+    },
+    {
+      "code": "VEEV",
+      "name": "Veeva Systems",
+      "nameEn": "Veeva Systems"
+    },
+    {
+      "code": "VRTX",
+      "name": "福泰制药",
+      "nameEn": "Vertex Pharmaceuticals"
+    },
+    {
+      "code": "VTRS",
+      "name": "晖致",
+      "nameEn": "Viatris"
+    },
+    {
+      "code": "WAT",
+      "name": "沃特世",
+      "nameEn": "Waters"
+    },
+    {
+      "code": "WST",
+      "name": "West Pharmaceutical Services",
+      "nameEn": "West Pharmaceutical Services"
+    },
+    {
+      "code": "ZBH",
+      "name": "捷迈邦美",
+      "nameEn": "Zimmer Biomet"
+    },
+    {
+      "code": "ZTS",
+      "name": "硕腾",
+      "nameEn": "Zoetis"
+    },
+    {
+      "code": "ADP",
+      "name": "自动数据处理",
+      "nameEn": "Automatic Data Processing"
+    },
+    {
+      "code": "ALLE",
+      "name": "安朗杰",
+      "nameEn": "Allegion"
+    },
+    {
+      "code": "AME",
+      "name": "阿美特克",
+      "nameEn": "Ametek"
+    },
+    {
+      "code": "AOS",
+      "name": "A.O.史密斯",
+      "nameEn": "A.O. Smith"
+    },
+    {
+      "code": "AXON",
+      "name": "Axon Enterprise",
+      "nameEn": "Axon Enterprise"
+    },
+    {
+      "code": "BE",
+      "name": "Bloom Energy",
+      "nameEn": "Bloom Energy"
+    },
+    {
+      "code": "BR",
+      "name": "Broadridge Financial Solutions",
+      "nameEn": "Broadridge Financial Solutions"
+    },
+    {
+      "code": "CARR",
+      "name": "开利",
+      "nameEn": "Carrier Global"
+    },
+    {
+      "code": "CHRW",
+      "name": "C.H. Robinson",
+      "nameEn": "C.H. Robinson"
+    },
+    {
+      "code": "CMI",
+      "name": "康明斯",
+      "nameEn": "Cummins"
+    },
+    {
+      "code": "CPRT",
+      "name": "Copart",
+      "nameEn": "Copart"
+    },
+    {
+      "code": "CSX",
+      "name": "CSX",
+      "nameEn": "CSX"
+    },
+    {
+      "code": "CTAS",
+      "name": "Cintas",
+      "nameEn": "Cintas"
+    },
+    {
+      "code": "DAL",
+      "name": "达美航空",
+      "nameEn": "Delta Air Lines"
+    },
+    {
+      "code": "DD",
+      "name": "杜邦",
+      "nameEn": "DuPont"
+    },
+    {
+      "code": "DE",
+      "name": "迪尔",
+      "nameEn": "Deere"
+    },
+    {
+      "code": "DOV",
+      "name": "Dover",
+      "nameEn": "Dover"
+    },
+    {
+      "code": "EFX",
+      "name": "艾可飞",
+      "nameEn": "Equifax"
+    },
+    {
+      "code": "EME",
+      "name": "EMCOR Group",
+      "nameEn": "EMCOR Group"
+    },
+    {
+      "code": "EMR",
+      "name": "艾默生电气",
+      "nameEn": "Emerson Electric"
+    },
+    {
+      "code": "ETN",
+      "name": "伊顿",
+      "nameEn": "Eaton"
+    },
+    {
+      "code": "EXPD",
+      "name": "Expeditors International",
+      "nameEn": "Expeditors International"
+    },
+    {
+      "code": "FAST",
+      "name": "Fastenal",
+      "nameEn": "Fastenal"
+    },
+    {
+      "code": "FDX",
+      "name": "联邦快递",
+      "nameEn": "FedEx"
+    },
+    {
+      "code": "FDXF",
+      "name": "FedEx Freight",
+      "nameEn": "FedEx Freight"
+    },
+    {
+      "code": "FERG",
+      "name": "Ferguson Enterprises",
+      "nameEn": "Ferguson Enterprises"
+    },
+    {
+      "code": "FIX",
+      "name": "Comfort Systems USA",
+      "nameEn": "Comfort Systems USA"
+    },
+    {
+      "code": "FTV",
+      "name": "福迪威",
+      "nameEn": "Fortive"
+    },
+    {
+      "code": "GD",
+      "name": "通用动力",
+      "nameEn": "General Dynamics"
+    },
+    {
+      "code": "GNRC",
+      "name": "Generac",
+      "nameEn": "Generac"
+    },
+    {
+      "code": "GWW",
+      "name": "固安捷",
+      "nameEn": "W.W. Grainger"
+    },
+    {
+      "code": "HII",
+      "name": "Huntington Ingalls Industries",
+      "nameEn": "Huntington Ingalls Industries"
+    },
+    {
+      "code": "HON",
+      "name": "霍尼韦尔",
+      "nameEn": "Honeywell"
+    },
+    {
+      "code": "HONA",
+      "name": "Honeywell Aerospace",
+      "nameEn": "Honeywell Aerospace"
+    },
+    {
+      "code": "HUBB",
+      "name": "Hubbell",
+      "nameEn": "Hubbell"
+    },
+    {
+      "code": "HWM",
+      "name": "Howmet Aerospace",
+      "nameEn": "Howmet Aerospace"
+    },
+    {
+      "code": "IEX",
+      "name": "IDEX",
+      "nameEn": "IDEX"
+    },
+    {
+      "code": "IR",
+      "name": "英格索兰",
+      "nameEn": "Ingersoll Rand"
+    },
+    {
+      "code": "ITW",
+      "name": "伊利诺伊工具",
+      "nameEn": "Illinois Tool Works"
+    },
+    {
+      "code": "J",
+      "name": "Jacobs Solutions",
+      "nameEn": "Jacobs Solutions"
+    },
+    {
+      "code": "JBHT",
+      "name": "J.B. Hunt",
+      "nameEn": "J.B. Hunt"
+    },
+    {
+      "code": "JCI",
+      "name": "江森自控",
+      "nameEn": "Johnson Controls"
+    },
+    {
+      "code": "LDOS",
+      "name": "Leidos",
+      "nameEn": "Leidos"
+    },
+    {
+      "code": "LHX",
+      "name": "L3哈里斯",
+      "nameEn": "L3Harris"
+    },
+    {
+      "code": "LII",
+      "name": "雷诺士",
+      "nameEn": "Lennox International"
+    },
+    {
+      "code": "LUV",
+      "name": "西南航空",
+      "nameEn": "Southwest Airlines"
+    },
+    {
+      "code": "MAS",
+      "name": "Masco",
+      "nameEn": "Masco"
+    },
+    {
+      "code": "MMM",
+      "name": "3M",
+      "nameEn": "3M"
+    },
+    {
+      "code": "NDSN",
+      "name": "诺信",
+      "nameEn": "Nordson"
+    },
+    {
+      "code": "NOC",
+      "name": "诺斯罗普·格鲁曼",
+      "nameEn": "Northrop Grumman"
+    },
+    {
+      "code": "NSC",
+      "name": "诺福克南方",
+      "nameEn": "Norfolk Southern"
+    },
+    {
+      "code": "ODFL",
+      "name": "Old Dominion Freight Line",
+      "nameEn": "Old Dominion Freight Line"
+    },
+    {
+      "code": "OTIS",
+      "name": "奥的斯",
+      "nameEn": "Otis Worldwide"
+    },
+    {
+      "code": "PAYX",
+      "name": "Paychex",
+      "nameEn": "Paychex"
+    },
+    {
+      "code": "PCAR",
+      "name": "帕卡",
+      "nameEn": "Paccar"
+    },
+    {
+      "code": "PH",
+      "name": "派克汉尼汾",
+      "nameEn": "Parker-Hannifin"
+    },
+    {
+      "code": "PNR",
+      "name": "滨特尔",
+      "nameEn": "Pentair"
+    },
+    {
+      "code": "PWR",
+      "name": "Quanta Services",
+      "nameEn": "Quanta Services"
+    },
+    {
+      "code": "ROK",
+      "name": "罗克韦尔自动化",
+      "nameEn": "Rockwell Automation"
+    },
+    {
+      "code": "ROL",
+      "name": "Rollins",
+      "nameEn": "Rollins"
+    },
+    {
+      "code": "RSG",
+      "name": "Republic Services",
+      "nameEn": "Republic Services"
+    },
+    {
+      "code": "SNA",
+      "name": "实耐宝",
+      "nameEn": "Snap-on"
+    },
+    {
+      "code": "SWK",
+      "name": "史丹利百得",
+      "nameEn": "Stanley Black & Decker"
+    },
+    {
+      "code": "TDG",
+      "name": "TransDigm",
+      "nameEn": "TransDigm"
+    },
+    {
+      "code": "TT",
+      "name": "特灵科技",
+      "nameEn": "Trane Technologies"
+    },
+    {
+      "code": "TXT",
+      "name": "德事隆",
+      "nameEn": "Textron"
+    },
+    {
+      "code": "UAL",
+      "name": "联合航空",
+      "nameEn": "United Airlines"
+    },
+    {
+      "code": "UNP",
+      "name": "联合太平洋",
+      "nameEn": "Union Pacific"
+    },
+    {
+      "code": "UPS",
+      "name": "联合包裹",
+      "nameEn": "UPS"
+    },
+    {
+      "code": "URI",
+      "name": "联合租赁",
+      "nameEn": "United Rentals"
+    },
+    {
+      "code": "VLTO",
+      "name": "Veralto",
+      "nameEn": "Veralto"
+    },
+    {
+      "code": "VRSK",
+      "name": "Verisk Analytics",
+      "nameEn": "Verisk Analytics"
+    },
+    {
+      "code": "WAB",
+      "name": "西屋制动",
+      "nameEn": "Wabtec"
+    },
+    {
+      "code": "WM",
+      "name": "废物管理",
+      "nameEn": "Waste Management"
+    },
+    {
+      "code": "XYL",
+      "name": "赛莱默",
+      "nameEn": "Xylem"
+    },
+    {
+      "code": "ACN",
+      "name": "埃森哲",
+      "nameEn": "Accenture"
+    },
+    {
+      "code": "ADSK",
+      "name": "欧特克",
+      "nameEn": "Autodesk"
+    },
+    {
+      "code": "AKAM",
+      "name": "阿卡迈",
+      "nameEn": "Akamai Technologies"
+    },
+    {
+      "code": "APH",
+      "name": "安费诺",
+      "nameEn": "Amphenol"
+    },
+    {
+      "code": "CDW",
+      "name": "CDW",
+      "nameEn": "CDW"
+    },
+    {
+      "code": "CIEN",
+      "name": "Ciena",
+      "nameEn": "Ciena"
+    },
+    {
+      "code": "CTSH",
+      "name": "高知特",
+      "nameEn": "Cognizant"
+    },
+    {
+      "code": "FFIV",
+      "name": "F5",
+      "nameEn": "F5"
+    },
+    {
+      "code": "FICO",
+      "name": "Fair Isaac",
+      "nameEn": "Fair Isaac"
+    },
+    {
+      "code": "FLEX",
+      "name": "伟创力",
+      "nameEn": "Flex"
+    },
+    {
+      "code": "FTNT",
+      "name": "飞塔",
+      "nameEn": "Fortinet"
+    },
+    {
+      "code": "GDDY",
+      "name": "GoDaddy",
+      "nameEn": "GoDaddy"
+    },
+    {
+      "code": "GEN",
+      "name": "Gen Digital",
+      "nameEn": "Gen Digital"
+    },
+    {
+      "code": "GLW",
+      "name": "康宁",
+      "nameEn": "Corning"
+    },
+    {
+      "code": "IT",
+      "name": "高德纳",
+      "nameEn": "Gartner"
+    },
+    {
+      "code": "JBL",
+      "name": "捷普",
+      "nameEn": "Jabil"
+    },
+    {
+      "code": "KEYS",
+      "name": "是德科技",
+      "nameEn": "Keysight Technologies"
+    },
+    {
+      "code": "MPWR",
+      "name": "芯源系统",
+      "nameEn": "Monolithic Power Systems"
+    },
+    {
+      "code": "MSI",
+      "name": "摩托罗拉系统",
+      "nameEn": "Motorola Solutions"
+    },
+    {
+      "code": "NTAP",
+      "name": "NetApp",
+      "nameEn": "NetApp"
+    },
+    {
+      "code": "P",
+      "name": "Everpure",
+      "nameEn": "Everpure"
+    },
+    {
+      "code": "PTC",
+      "name": "PTC",
+      "nameEn": "PTC"
+    },
+    {
+      "code": "Q",
+      "name": "Qnity Electronics",
+      "nameEn": "Qnity Electronics"
+    },
+    {
+      "code": "ROP",
+      "name": "Roper Technologies",
+      "nameEn": "Roper Technologies"
+    },
+    {
+      "code": "SWKS",
+      "name": "思佳讯",
+      "nameEn": "Skyworks Solutions"
+    },
+    {
+      "code": "TDY",
+      "name": "特励达",
+      "nameEn": "Teledyne Technologies"
+    },
+    {
+      "code": "TEL",
+      "name": "泰科电子",
+      "nameEn": "TE Connectivity"
+    },
+    {
+      "code": "TER",
+      "name": "泰瑞达",
+      "nameEn": "Teradyne"
+    },
+    {
+      "code": "TRMB",
+      "name": "天宝",
+      "nameEn": "Trimble"
+    },
+    {
+      "code": "TYL",
+      "name": "Tyler Technologies",
+      "nameEn": "Tyler Technologies"
+    },
+    {
+      "code": "VRSN",
+      "name": "威瑞信",
+      "nameEn": "Verisign"
+    },
+    {
+      "code": "WDAY",
+      "name": "Workday",
+      "nameEn": "Workday"
+    },
+    {
+      "code": "ZBRA",
+      "name": "斑马技术",
+      "nameEn": "Zebra Technologies"
+    },
+    {
+      "code": "ALB",
+      "name": "雅保",
+      "nameEn": "Albemarle"
+    },
+    {
+      "code": "AMCR",
+      "name": "安姆科",
+      "nameEn": "Amcor"
+    },
+    {
+      "code": "APD",
+      "name": "空气化工",
+      "nameEn": "Air Products"
+    },
+    {
+      "code": "AVY",
+      "name": "艾利丹尼森",
+      "nameEn": "Avery Dennison"
+    },
+    {
+      "code": "BALL",
+      "name": "波尔",
+      "nameEn": "Ball"
+    },
+    {
+      "code": "CF",
+      "name": "CF工业",
+      "nameEn": "CF Industries"
+    },
+    {
+      "code": "CRH",
+      "name": "CRH",
+      "nameEn": "CRH"
+    },
+    {
+      "code": "CTVA",
+      "name": "科迪华",
+      "nameEn": "Corteva"
+    },
+    {
+      "code": "DOW",
+      "name": "陶氏",
+      "nameEn": "Dow"
+    },
+    {
+      "code": "ECL",
+      "name": "艺康",
+      "nameEn": "Ecolab"
+    },
+    {
+      "code": "FCX",
+      "name": "自由港麦克莫兰",
+      "nameEn": "Freeport-McMoRan"
+    },
+    {
+      "code": "IFF",
+      "name": "国际香料香精",
+      "nameEn": "International Flavors & Fragrances"
+    },
+    {
+      "code": "IP",
+      "name": "国际纸业",
+      "nameEn": "International Paper"
+    },
+    {
+      "code": "LIN",
+      "name": "林德",
+      "nameEn": "Linde"
+    },
+    {
+      "code": "LYB",
+      "name": "利安德巴赛尔",
+      "nameEn": "LyondellBasell"
+    },
+    {
+      "code": "MLM",
+      "name": "Martin Marietta Materials",
+      "nameEn": "Martin Marietta Materials"
+    },
+    {
+      "code": "MOS",
+      "name": "美盛",
+      "nameEn": "Mosaic"
+    },
+    {
+      "code": "NEM",
+      "name": "纽蒙特",
+      "nameEn": "Newmont"
+    },
+    {
+      "code": "NUE",
+      "name": "纽柯钢铁",
+      "nameEn": "Nucor"
+    },
+    {
+      "code": "PKG",
+      "name": "Packaging Corporation of America",
+      "nameEn": "Packaging Corporation of America"
+    },
+    {
+      "code": "PPG",
+      "name": "PPG Industries",
+      "nameEn": "PPG Industries"
+    },
+    {
+      "code": "SHW",
+      "name": "宣伟",
+      "nameEn": "Sherwin-Williams"
+    },
+    {
+      "code": "STLD",
+      "name": "钢动力",
+      "nameEn": "Steel Dynamics"
+    },
+    {
+      "code": "SW",
+      "name": "Smurfit Westrock",
+      "nameEn": "Smurfit Westrock"
+    },
+    {
+      "code": "VMC",
+      "name": "火神材料",
+      "nameEn": "Vulcan Materials"
+    },
+    {
+      "code": "AMT",
+      "name": "美国电塔",
+      "nameEn": "American Tower"
+    },
+    {
+      "code": "ARE",
+      "name": "Alexandria Real Estate Equities",
+      "nameEn": "Alexandria Real Estate Equities"
+    },
+    {
+      "code": "BXP",
+      "name": "BXP",
+      "nameEn": "BXP"
+    },
+    {
+      "code": "CBRE",
+      "name": "世邦魏理仕",
+      "nameEn": "CBRE Group"
+    },
+    {
+      "code": "CCI",
+      "name": "冠城国际",
+      "nameEn": "Crown Castle"
+    },
+    {
+      "code": "CPT",
+      "name": "Camden Property Trust",
+      "nameEn": "Camden Property Trust"
+    },
+    {
+      "code": "CSGP",
+      "name": "CoStar Group",
+      "nameEn": "CoStar Group"
+    },
+    {
+      "code": "DLR",
+      "name": "数字房地产",
+      "nameEn": "Digital Realty"
+    },
+    {
+      "code": "DOC",
+      "name": "Healthpeak Properties",
+      "nameEn": "Healthpeak Properties"
+    },
+    {
+      "code": "EQIX",
+      "name": "易昆尼克斯",
+      "nameEn": "Equinix"
+    },
+    {
+      "code": "ESS",
+      "name": "Essex Property Trust",
+      "nameEn": "Essex Property Trust"
+    },
+    {
+      "code": "EXR",
+      "name": "Extra Space Storage",
+      "nameEn": "Extra Space Storage"
+    },
+    {
+      "code": "FRT",
+      "name": "Federal Realty Investment Trust",
+      "nameEn": "Federal Realty Investment Trust"
+    },
+    {
+      "code": "HST",
+      "name": "Host Hotels & Resorts",
+      "nameEn": "Host Hotels & Resorts"
+    },
+    {
+      "code": "INVH",
+      "name": "Invitation Homes",
+      "nameEn": "Invitation Homes"
+    },
+    {
+      "code": "IRM",
+      "name": "铁山",
+      "nameEn": "Iron Mountain"
+    },
+    {
+      "code": "KIM",
+      "name": "Kimco Realty",
+      "nameEn": "Kimco Realty"
+    },
+    {
+      "code": "MAA",
+      "name": "Mid-America Apartment Communities",
+      "nameEn": "Mid-America Apartment Communities"
+    },
+    {
+      "code": "O",
+      "name": "Realty Income",
+      "nameEn": "Realty Income"
+    },
+    {
+      "code": "PLD",
+      "name": "Prologis",
+      "nameEn": "Prologis"
+    },
+    {
+      "code": "PSA",
+      "name": "Public Storage",
+      "nameEn": "Public Storage"
+    },
+    {
+      "code": "REG",
+      "name": "Regency Centers",
+      "nameEn": "Regency Centers"
+    },
+    {
+      "code": "SBAC",
+      "name": "SBA Communications",
+      "nameEn": "SBA Communications"
+    },
+    {
+      "code": "SPG",
+      "name": "西蒙地产",
+      "nameEn": "Simon Property Group"
+    },
+    {
+      "code": "UDR",
+      "name": "UDR",
+      "nameEn": "UDR"
+    },
+    {
+      "code": "VICI",
+      "name": "VICI Properties",
+      "nameEn": "VICI Properties"
+    },
+    {
+      "code": "VMRK",
+      "name": "Vivmark Residential",
+      "nameEn": "Vivmark Residential"
+    },
+    {
+      "code": "VTR",
+      "name": "Ventas",
+      "nameEn": "Ventas"
+    },
+    {
+      "code": "WELL",
+      "name": "Welltower",
+      "nameEn": "Welltower"
+    },
+    {
+      "code": "WY",
+      "name": "惠好",
+      "nameEn": "Weyerhaeuser"
+    },
+    {
+      "code": "AEE",
+      "name": "Ameren",
+      "nameEn": "Ameren"
+    },
+    {
+      "code": "AEP",
+      "name": "美国电力",
+      "nameEn": "American Electric Power"
+    },
+    {
+      "code": "AES",
+      "name": "AES",
+      "nameEn": "AES"
+    },
+    {
+      "code": "ATO",
+      "name": "Atmos Energy",
+      "nameEn": "Atmos Energy"
+    },
+    {
+      "code": "AWK",
+      "name": "美国水务",
+      "nameEn": "American Water Works"
+    },
+    {
+      "code": "CMS",
+      "name": "CMS Energy",
+      "nameEn": "CMS Energy"
+    },
+    {
+      "code": "CNP",
+      "name": "CenterPoint Energy",
+      "nameEn": "CenterPoint Energy"
+    },
+    {
+      "code": "D",
+      "name": "道明尼能源",
+      "nameEn": "Dominion Energy"
+    },
+    {
+      "code": "DTE",
+      "name": "DTE Energy",
+      "nameEn": "DTE Energy"
+    },
+    {
+      "code": "DUK",
+      "name": "杜克能源",
+      "nameEn": "Duke Energy"
+    },
+    {
+      "code": "ED",
+      "name": "联合爱迪生",
+      "nameEn": "Consolidated Edison"
+    },
+    {
+      "code": "EIX",
+      "name": "爱迪生国际",
+      "nameEn": "Edison International"
+    },
+    {
+      "code": "ES",
+      "name": "Eversource Energy",
+      "nameEn": "Eversource Energy"
+    },
+    {
+      "code": "ETR",
+      "name": "Entergy",
+      "nameEn": "Entergy"
+    },
+    {
+      "code": "EVRG",
+      "name": "Evergy",
+      "nameEn": "Evergy"
+    },
+    {
+      "code": "EXC",
+      "name": "爱克斯龙",
+      "nameEn": "Exelon"
+    },
+    {
+      "code": "FE",
+      "name": "第一能源",
+      "nameEn": "FirstEnergy"
+    },
+    {
+      "code": "LNT",
+      "name": "Alliant Energy",
+      "nameEn": "Alliant Energy"
+    },
+    {
+      "code": "NEE",
+      "name": "新纪元能源",
+      "nameEn": "NextEra Energy"
+    },
+    {
+      "code": "NI",
+      "name": "NiSource",
+      "nameEn": "NiSource"
+    },
+    {
+      "code": "NRG",
+      "name": "NRG Energy",
+      "nameEn": "NRG Energy"
+    },
+    {
+      "code": "PCG",
+      "name": "太平洋煤电",
+      "nameEn": "PG&E"
+    },
+    {
+      "code": "PEG",
+      "name": "Public Service Enterprise Group",
+      "nameEn": "Public Service Enterprise Group"
+    },
+    {
+      "code": "PNW",
+      "name": "Pinnacle West Capital",
+      "nameEn": "Pinnacle West Capital"
+    },
+    {
+      "code": "PPL",
+      "name": "PPL",
+      "nameEn": "PPL"
+    },
+    {
+      "code": "SO",
+      "name": "南方公司",
+      "nameEn": "Southern Company"
+    },
+    {
+      "code": "SRE",
+      "name": "桑普拉能源",
+      "nameEn": "Sempra"
+    },
+    {
+      "code": "WEC",
+      "name": "WEC Energy Group",
+      "nameEn": "WEC Energy Group"
+    },
+    {
+      "code": "XEL",
+      "name": "Xcel Energy",
+      "nameEn": "Xcel Energy"
+    },
+    {
+      "code": "ALNY",
+      "name": "Alnylam Pharmaceuticals",
+      "nameEn": "Alnylam Pharmaceuticals"
+    },
+    {
+      "code": "CCEP",
+      "name": "Coca-Cola Europacific Partners",
+      "nameEn": "Coca-Cola Europacific Partners"
+    },
+    {
+      "code": "FER",
+      "name": "Ferrovial",
+      "nameEn": "Ferrovial"
+    },
+    {
+      "code": "SPCX",
+      "name": "SpaceX",
+      "nameEn": "SpaceX"
+    },
+    {
+      "code": "TRI",
+      "name": "汤森路透",
+      "nameEn": "Thomson Reuters"
+    },
+    {
+      "code": "ASPI",
+      "name": "ASP Isotopes",
+      "nameEn": "ASP Isotopes"
+    },
+    {
+      "code": "TEM",
+      "name": "Tempus AI",
+      "nameEn": "Tempus AI"
     }
   ]
 }

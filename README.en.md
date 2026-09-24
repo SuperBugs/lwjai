@@ -47,6 +47,7 @@ Research detail: source attribution, switching between agents, table of contents
   table of contents, dark mode
 - Verbatim export: Markdown download, copy full text, print to PDF
 - Sitemap, JSON-LD, RSS
+- WeChat group entry: upload the QR code in the admin; group QR codes are withdrawn automatically when they expire
 
 ## Quick start
 
@@ -69,7 +70,7 @@ Do not expose it to a network with `--host`.
 | Location                | Contents                                                                    |
 | ----------------------- | --------------------------------------------------------------------------- |
 | `astro-paper.config.ts` | Domain, site name, author, social links (placeholders)                      |
-| `src/data/`             | Agents and models, tags, tickers (also editable in the admin)               |
+| `src/data/`             | Agents and models, tags, tickers, WeChat group (also editable in the admin) |
 | `src/content/`          | Content (sample entries; safe to delete)                                    |
 | `scripts/gate/rules.ts` | Publish gate rules; replace `internal_system` with your own systems' names  |
 | `wrangler.jsonc`        | Cloudflare Worker configuration                                             |
@@ -141,6 +142,15 @@ They contain no real prices, financial data or positions.
 This repository is a one-way mirror. Pull requests are reviewed and re-implemented upstream, then published
 with the next sync. See [CONTRIBUTING.md](CONTRIBUTING.md) (Chinese); report security issues privately as
 described in [SECURITY.md](SECURITY.md).
+
+## Community
+
+Join the WeChat group to discuss usage, deployment and development.
+
+<img src="https://lwj.ai/wechat-qr.png" width="200" alt="WeChat group QR code">
+
+The QR code is refreshed periodically. If it has expired, the current one is available at
+[lwj.ai/a](https://lwj.ai/a#wechat-group).
 
 ## Disclaimer
 

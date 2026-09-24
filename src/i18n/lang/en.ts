@@ -85,6 +85,7 @@ export default {
     // 下面两条【2026-09-21】从 `home` 挪过来：那一行整块进了页脚。
     subscribe: "Subscribe via RSS",
     joinChannel: "Follow the Telegram channel",
+    joinWechat: "WeChat group",
   },
   pages: {
     guidesTitle: "Guides",
@@ -285,5 +286,17 @@ export default {
     title: "404 Not Found",
     message: "Page Not Found",
     goHome: "Go back home",
+  },
+  wechat: {
+    title: "WeChat group",
+    scanGroup: "Scan with WeChat to join the group.",
+    scanPersonal:
+      "Scan with WeChat to add the site owner; you will be invited to the group once accepted.",
+    validUntil: "Expires on {{date}}",
+    date: "{{month}}/{{day}}",
+    expired:
+      "The group QR code expired on {{date}} and will be replaced soon. In the meantime, use the contact links at the bottom of the page.",
+    altGroup: "WeChat group QR code",
+    altPersonal: "Site owner's WeChat QR code",
   },
 } satisfies UIStrings;

@@ -63,6 +63,9 @@ test("★ 反过来：src/pages 下的每条顶层路由都要在判据里有主
     // feed 在浏览器里渲染那一页用的样式表。它是 /rss.xml 的附属品、没有导航入口，
     // 所以不进 ROUTES；接没接上由 feed.test.ts 钉着。
     "rss.xsl.ts",
+    // 微信群二维码（「关于」页和开源仓库 README 引用它）。地址在 community.ts 的
+    // WECHAT_QR_ROUTE，和这个文件名对不对得上由 community.test.ts 钉着。
+    "wechat-qr.png.ts",
   ]);
   const known = new Set(declared());
   for (const entry of readdirSync(PAGES, { withFileTypes: true })) {

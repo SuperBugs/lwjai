@@ -26,6 +26,7 @@ import {
   SYMBOLS_FILE,
   TAGS_FILE,
 } from "./inspect";
+import { COMMUNITY_FILE } from "../../src/config/collections";
 
 const read = (p: string) => readFileSync(p, "utf8");
 const stripComments = (src: string) =>
@@ -131,9 +132,10 @@ test("名单里几份都在，路径只在 collections.ts 写一份", () => {
   assert.equal(TAGS_FILE, "src/data/tags.json");
   assert.equal(SYMBOLS_FILE, "src/data/symbols.json");
   assert.equal(ANSWER_ORDER_FILE, "src/data/answerOrder.json");
+  assert.equal(COMMUNITY_FILE, "src/data/community.json");
   assert.deepEqual(
     SCANNED_DATA_FILES.map(f => f.path),
-    [REGISTRY_FILE, TAGS_FILE, SYMBOLS_FILE, ANSWER_ORDER_FILE],
+    [REGISTRY_FILE, TAGS_FILE, SYMBOLS_FILE, ANSWER_ORDER_FILE, COMMUNITY_FILE],
     "数据文件名单变了 —— 加了一份就得确认三道闸都跟着扫（下面那条会查引用，但查不出你少登记了一份）"
   );
   for (const f of SCANNED_DATA_FILES) {

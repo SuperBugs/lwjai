@@ -178,28 +178,20 @@ const devGate: AstroIntegration = {
         pattern: "/_tidy/run",
         entrypoint: new URL("./src/dev/tidy-run.ts", import.meta.url),
       });
-      // 【2026-09-22】小红书封面图 /_xhs（src/dev/xhs.astro）和出图那条接口
-      // /_xhs/card.png（xhs-card.ts）：每条已发布的内容各生成一张 1080×1440（3:4）
-      // 的封面卡，点一下下载，直接发小红书。判据在 src/utils/xhsCardPlan.ts
-      // （纯函数、有单测），satori 那一半在 src/utils/xhsCard.ts。同样只在 dev 里存在。
+      // 【2026-09-22 起，2026-09-23 改名】图片卡片 /_cards（src/dev/cards.astro）和出图那条接口
+      // /_cards/card.png（cards-png.ts）：每条已发布的内容各生成一张 1080×1440（3:4）
+      // 的竖版卡，点一下下载，发雪球 / 富途时配图用（`?p=` 选平台 —— 决定卡上印不印网址）。
+      // 判据在 src/utils/xhsCardPlan.ts（纯函数、有单测），satori 那一半在 src/utils/xhsCard.ts
+      // —— 文件名是历史原因：这张卡最早是给小红书做的，小红书那一整套 2026-09-23 按用户要求删了。
       // ★ 和分享卡（/r/<号>/index.png）刻意不一样的一处：这张画不出来**不回落**到
-      //   默认图，直接回 500 —— 理由写在 xhs-card.ts 文件头（图自己就是全部内容）。
+      //   默认图，直接回 500 —— 理由写在 cards-png.ts 文件头（图自己就是全部内容）。
       injectRoute({
-        pattern: "/_xhs",
-        entrypoint: new URL("./src/dev/xhs.astro", import.meta.url),
+        pattern: "/_cards",
+        entrypoint: new URL("./src/dev/cards.astro", import.meta.url),
       });
       injectRoute({
-        pattern: "/_xhs/card.png",
-        entrypoint: new URL("./src/dev/xhs-card.ts", import.meta.url),
-      });
-      // 【2026-09-22】发帖接口 /_xhs/publish（xhs-publish.ts）：出图 ＋ 生成文案 ＋
-      // 调 xiaohongshu-mcp（默认 http://localhost:18060/mcp）直接发。
-      // ★ 结果**四档**（published / unconfirmed / failed / offline）——
-      //   那个接口没有公开的响应 schema，"看不懂"必须是独立一档，
-      //   理由写在 src/dev/xhsPublishPlan.ts 文件头。
-      injectRoute({
-        pattern: "/_xhs/publish",
-        entrypoint: new URL("./src/dev/xhs-publish.ts", import.meta.url),
+        pattern: "/_cards/card.png",
+        entrypoint: new URL("./src/dev/cards-png.ts", import.meta.url),
       });
       // 【2026-09-23】推长文到雪球草稿箱：/_xueqiu/status（页面一打开就起桥、报状态）＋
       // /_xueqiu/draft（推一篇）。走「文章同步助手」（Wechatsync）扩展 —— **我们开 WebSocket、

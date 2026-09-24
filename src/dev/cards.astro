@@ -1,0 +1,440 @@
+---
+import { getCollection } from "astro:content";
+import Layout from "@/layouts/Layout.astro";
+import Header from "@/components/Header.astro";
+import Main from "@/components/Main.astro";
+import Footer from "@/components/Footer.astro";
+import { getSortedPosts } from "@/utils/getSortedPosts";
+import { foldQaGroups } from "@/utils/qaGroups";
+import { entrySlug, entryUrl } from "@/utils/getPostPaths";
+import {
+  CONTENT_COLLECTIONS,
+  requireCollectionSpec,
+} from "@/config/collections";
+import { XHS_HEIGHT, XHS_WIDTH } from "@/utils/xhsCardPlan";
+import { ACTIVE_PLATFORMS, DEFAULT_PLATFORM } from "@/config/socialPlatforms";
+import { bylineOf } from "./xhsEntry";
+import {
+  CARDS_ROUTE,
+  cardFileName,
+  cardPngUrl,
+  pickCardPlatform,
+} from "./cardsPlan";
+import { useTranslations } from "@/i18n";
+import config from "@/config";
+
+/**
+ * 图片卡片 —— `/_cards`，**只在 `pnpm dev` 里存在**（和 /_gate、/_share 同一条路：
+ * astro.config.ts 里按 isDev 用 injectRoute 挂上，文件不在 src/pages 下，
+ * 生产构建里没有这条路由）。
+ *
+ * 【2026-09-23 用户要的】「小红书不要了，但是之前的图片生成逻辑还是要的，发到富途
+ * 有时候我要发图片卡片」。这一页原来是 `/_xhs`（小红书封面图 ＋ 发小红书 ＋ 批量队列），
+ * 发小红书那一整套删了，**卡一个像素没改**：每条已发布的内容一张 1080×1440（3:4）的
+ * 竖版卡，点一下下载。卡怎么画在 `src/utils/xhsCard.ts`，每一格印什么在
+ * `src/utils/xhsCardPlan.ts`（文件名是历史原因），出图那条接口是 `/_cards/card.png`。
+ * `/_share` 上雪球 / 富途那两块也各有一个「图片卡片」链接，指向的是同一条接口。
+ *
+ * ## 给哪个平台出（`?p=`）
+ *
+ * 卡上唯一跟着平台走的一格是**左下角印不印完整网址**（平台表的 `urlOnCard`）——
+ * 小红书那条导流细则（「图片里含站外链接」违规）针对的就是这一格。所以这一页顶上是一排平台，
+ * 选哪家就按哪家的规矩出；
+ * 不认识的 `?p=` 画一句话、**不回落到默认平台**（理由见 `cardsPlan.ts`）。
+ *
+ * ## 和 `/_share` 是一对，而且**一样折叠**
+ *
+ * 同一个问题 / 同一个选题的几份折成**一张**卡，图上一行一个智能体 —— 钥匙是
+ * `foldQaGroups()`，和列表卡片、详情页那排切换、`/_share` **同一把**。
+ * ★ 这推翻过第一版"一条内容一张图"，理由在 `planXhsCard()` 那边：每一行自己带着名字，
+ *   页脚那行落款在几份时强制不画 —— 别把"不折"改回来当成修 bug。
+ *
+ * ## 三档，不压
+ *
+ *   - 已发布：有公开地址，出图。
+ *   - 草稿：**没有**公开地址（postFilter 不放行、页面不生成），单独列出来说明，
+ *     不出图 —— 一张印着草稿内容的卡发出去，站上找不到对应的页面。
+ *   - 一条都没有：说出来，别留一个空页面。
+ *
+ * 图本身还有第四档，在浏览器里：**画不出来**（中文字形取不到）那一格是红框 ＋
+ * 一条能点开看原因的链接，不是一张兜底图。理由写在 `cards-png.ts` 文件头 ——
+ * 一张"看起来能发"的图会被真的发出去，而发出去收不回来。
+ */
+
+/**
+ * ★ 必须显式关掉预渲染：没有它 `Astro.url.searchParams` 是空的，`?p=` 永远读不到
+ *   （同 `src/dev/preview.astro` 那条）。
+ * ⚠ `astro/no-prerender-export-outside-pages` 对这一行报的是**误报**：那条规则按路径判断，
+ *   而这一页是 astro.config.ts 用 `injectRoute` 挂成的真路由（同 preview.astro，一行显式 disable）。
+ */
+// eslint-disable-next-line astro/no-prerender-export-outside-pages
+export const prerender = false;
+
+const locale = config.site.lang;
+const t = useTranslations(locale);
+
+const askedFor = Astro.url.searchParams.get("p");
+const platform = pickCardPlatform(askedFor, ACTIVE_PLATFORMS, DEFAULT_PLATFORM);
+
+/**
+ * ⚠ `getCollection()` 要的是**字面量**集合名，所以这四行没法从登记表推 ——
+ *   和 `/_share`、`/_cards/card.png` 同一个限制、同一个补法：写出来，然后反过来对账。
+ */
+const posts = await getCollection("posts");
+const qa = await getCollection("qa");
+const guides = await getCollection("guides");
+const prompts = await getCollection("prompts");
+
+const BY_KEY: Record<string, { collection: string }[]> = {
+  posts,
+  qa,
+  guides,
+  prompts,
+};
+
+{
+  const routed = CONTENT_COLLECTIONS.filter(c => c.urlPrefix !== null).map(
+    c => c.key
+  );
+  const missing = routed.filter(k => !(k in BY_KEY));
+  if (missing.length > 0) {
+    throw new Error(
+      `/_cards 漏了集合：${missing.join(" / ")}。\n` +
+        `上面补一行 getCollection("<集合>") 并加进 BY_KEY —— ` +
+        `漏掉的那个集合在这一页上根本不出现，而页面照常渲染、一句话都不说。`
+    );
+  }
+}
+
+type Entry =
+  | (typeof posts)[number]
+  | (typeof qa)[number]
+  | (typeof guides)[number]
+  | (typeof prompts)[number];
+
+const all: Entry[] = [...posts, ...qa, ...guides, ...prompts];
+// getSortedPosts = postFilter：草稿不进来；dev 里未到时间的进来（docs/engineering-notes.md 坑 1）。
+const published: Entry[] = getSortedPosts(all);
+const drafts: Entry[] = all.filter(e => e.data.draft === true);
+
+const slugOf = (e: Entry) =>
+  entrySlug(e.collection, e.id, e.filePath).replace(/^\/+/, "");
+
+/**
+ * 卡片底下那行落款 —— 和图上印的**是同一句**：两边读的是同一个 `bylineOf()`
+ * （`xhsEntry.ts`，判据是 `findAgent()` / `modelSlot()`，和站上那张芯片同一份）。
+ * 人要能不下载就分清挨着的几张同题卡是谁答的。
+ */
+const byline = (e: Entry) =>
+  bylineOf(e.collection, e.data as Record<string, unknown>, t);
+
+/**
+ * 同一个问题 / 同一个选题**折成一张卡**。钥匙是 `foldQaGroups()` —— 和列表卡片、
+ * 详情页那排切换、`/_share` **同一把**（`related.ts` 的 `qaGroupKey()`）。
+ */
+const groups = foldQaGroups(published);
+
+const items = platform
+  ? groups.map(({ entry, answers }) => {
+      const slug = slugOf(entry);
+      const spec = requireCollectionSpec(entry.collection);
+      return {
+        key: `${entry.collection}/${slug}`,
+        /**
+         * ★ 组里**每一条**的 key 都要留在卡上。带 `#<集合>/<号>` 过来的地址可能指的是
+         *   组里任何一条，而折叠之后它可能不是代表 —— 只认代表的话，
+         *   从那几条过来会落在页面顶上什么都不发生，而且零报错
+         *   （`/_share` 2026-09-21 踩过同一个形态）。
+         */
+        keys: answers.map(a => `${a.collection}/${slugOf(a)}`).join(" "),
+        label: spec.label,
+        title: entry.data.title,
+        /** 只有一份时印落款；几份时印「几份、分别是谁」——和图上那几行对得上。 */
+        byline: answers.length === 1 ? byline(entry) : undefined,
+        count: answers.length,
+        countLabel: `${answers.length} ${entry.collection === "qa" ? "个回答" : "份报告"}`,
+        who: answers.map(a => byline(a) ?? t.qa.unspecifiedAgent).join(" · "),
+        href: entryUrl(entry.collection, entry.id, entry.filePath, locale),
+        png: cardPngUrl(entry.collection, slug, platform.id),
+        filename: cardFileName(config.site.title, spec.urlPrefix, slug),
+      };
+    })
+  : [];
+
+/** 顶上那一排平台用的样式（和卡片上那两个按钮是同一副形状）。 */
+const PICK_BTN =
+  "border-border bg-surface hover:border-border-strong inline-flex items-center rounded-md border px-3 py-1.5 text-sm font-medium no-underline transition-colors";
+---
+
+<Layout title="图片卡片（仅 dev）">
+  <Header />
+  <Main
+    pageTitle="图片卡片"
+    pageDesc={`每条已发布的内容生成一张 ${XHS_WIDTH}×${XHS_HEIGHT}（3:4）的竖版图片卡片，点「下载 PNG」拿走，发雪球 / 富途牛牛时配图用。同一个问题 / 同一个选题的几份折成一张，图上一行一个智能体。配套的那段字在「发帖文案」页。只在 pnpm dev 里存在。`}
+  >
+    {
+      /* ★ 给哪个平台出。卡上跟着平台走的只有「左下角印不印完整网址」那一格，
+           所以每一家后面把这件事写出来 —— 选之前就知道拿到的卡上有没有链接。 */
+    }
+    <div class="border-border bg-surface mt-2 rounded-md border p-3">
+      <p class="flex flex-wrap items-center gap-2">
+        <span class="text-muted-foreground text-sm">给哪儿发</span>
+        {
+          ACTIVE_PLATFORMS.map(p => (
+            <a
+              href={`${CARDS_ROUTE}?p=${encodeURIComponent(p.id)}`}
+              data-card-platform={p.id}
+              aria-current={platform?.id === p.id ? "true" : undefined}
+              class={PICK_BTN}
+              style={
+                platform?.id === p.id
+                  ? "border-color:currentColor;font-weight:700"
+                  : undefined
+              }
+            >
+              {p.name}
+            </a>
+          ))
+        }
+      </p>
+      {
+        platform && (
+          <p class="text-muted-foreground mt-2 text-xs leading-relaxed">
+            按「{platform.name}」的规矩出：
+            {platform.urlOnCard
+              ? "左下角印这一篇的完整地址（这个平台允许图里带链接）。"
+              : "左下角不印网址（这个平台不许图里带链接）。"}
+          </p>
+        )
+      }
+      {
+        !platform && (
+          <p class="mt-2 text-sm" style="color:#dc2626" data-card-unknown>
+            不认识的平台「{askedFor}」（或者它已经停用了）—— 在上面选一个。
+            这里不回落到默认平台：默认平台允许图里带链接，回落就可能给一个不许带链接的平台出一张印着网址的卡。
+          </p>
+        )
+      }
+    </div>
+
+    {
+      /* 两个数都报：「发了几条内容」和「要出几张图」是两件事。
+         压成一个数的话，"同一个问题折成了一张"这件事在屏幕上完全看不出来
+         （和 /_share 那一页同一条规矩）。 */
+    }
+    <p class="text-muted-foreground mt-4 font-mono text-sm">
+      已发布 {published.length} 条 · 合并成 {groups.length} 张图 · 草稿 {
+        drafts.length
+      } 条
+    </p>
+
+    {
+      /* 第一次打开要等：每张卡的中文字形是按**这张卡上的字**去 Google Fonts
+         取子集的（docs/engineering-notes.md 坑 6 的解法），一张卡一次往返，之后就命中缓存了。
+         不说这句的话，人会以为页面卡死了。 */
+    }
+    <p class="text-muted-foreground mt-2 text-sm">
+      第一次打开每张图要现取一次中文字形（按这张卡上出现的字去取子集），会慢几秒；
+      之后命中缓存就快了。图是滚到哪张才画哪张。
+    </p>
+
+    {
+      published.length === 0 && (
+        <div class="app-callout mt-4">
+          <p class="font-semibold">还没有已发布的内容。</p>
+          <p class="mt-1">
+            草稿没有公开地址，所以也不出图片卡片 —— 先在后台取消草稿。
+          </p>
+        </div>
+      )
+    }
+
+    <ul class="mt-6 grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
+      {
+        items.map(item => (
+          <li>
+            <article
+              id={item.key}
+              data-card-keys={item.keys}
+              data-card-item
+              class="app-card flex h-full flex-col p-4"
+            >
+              {/* 预览。3:4 的位子先占好（aspect-[3/4]），图没到的时候版面不跳。
+                  ★ onerror 那一档由下面的脚本接管：红框 + 一条能看原因的链接，
+                    **不是**一张兜底图 —— 理由在 cards-png.ts 文件头。 */}
+              <div
+                class="border-border bg-muted relative aspect-[3/4] w-full overflow-hidden rounded-md border"
+                data-card-slot
+              >
+                <img
+                  src={item.png}
+                  alt={`${item.label}「${item.title}」的图片卡片`}
+                  width={XHS_WIDTH}
+                  height={XHS_HEIGHT}
+                  loading="lazy"
+                  decoding="async"
+                  data-card-img
+                  data-card-href={item.png}
+                  class="h-full w-full object-cover"
+                />
+              </div>
+
+              <p class="mt-3 flex flex-wrap items-baseline gap-x-2 gap-y-1">
+                <span class="text-muted-foreground text-xs">{item.label}</span>
+                <a
+                  href={item.href}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  class="text-sm font-semibold underline decoration-1 underline-offset-4"
+                >
+                  {item.title}
+                </a>
+                {/* 折了才挂角标。只有一份时挂一个「1 份报告」是噪音 —— 那是完成态。 */}
+                {item.count > 1 && (
+                  <span class="border-border text-muted-foreground rounded-md border px-2 py-0.5 text-xs">
+                    {item.countLabel}
+                  </span>
+                )}
+              </p>
+
+              {/* ★ 这一行印的东西和图上**对得上**，两档：
+                  一份 → 完整落款「某某（模型）」，和图的页脚是同一句；
+                  几份 → 每一份是谁，和图上那几行一一对应。
+                  没有这一维的集合（教程 / 提示词）整行不画 —— 印一句
+                  「来源未标注」是在说"这里本该填而没填"，而它们压根没有这一格。 */}
+              {(item.byline ?? (item.count > 1 ? item.who : undefined)) && (
+                <p class="text-muted-foreground mt-1 text-xs">
+                  {item.byline ?? item.who}
+                </p>
+              )}
+
+              <p class="mt-3 flex flex-wrap items-center gap-2">
+                <a href={item.png} download={item.filename} class={PICK_BTN}>
+                  下载 PNG
+                </a>
+                <a
+                  href={item.png}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  class="text-muted-foreground text-sm underline decoration-1 underline-offset-4"
+                >
+                  原图 ↗
+                </a>
+              </p>
+            </article>
+          </li>
+        ))
+      }
+    </ul>
+
+    {
+      drafts.length > 0 && (
+        <section class="mt-10">
+          <h2 class="mb-2 text-lg font-semibold">
+            草稿（没有公开地址，不出图）
+          </h2>
+          <ul class="text-muted-foreground space-y-1 font-mono text-sm">
+            {drafts.map(d => (
+              <li>{d.data.title}</li>
+            ))}
+          </ul>
+        </section>
+      )
+    }
+  </Main>
+  <Footer />
+</Layout>
+
+<script>
+  /**
+   * 画不出来的那一格：红框 ＋ 一条「看看为什么」。
+   *
+   * ★ 三档在屏幕上长得不一样：**图出来了** / **还在转**（浏览器自己的占位）/
+   *   **出不来**（红框）。第三档绝不许退化成"一张看起来能发的图" ——
+   *   端点那边也刻意不回落（见 src/dev/cards-png.ts 文件头）。
+   * ⚠ `<img>` 的 error 事件**不冒泡**，所以只能逐个挂，不能在 document 上代理。
+   */
+  function markBroken(img: HTMLImageElement) {
+    const slot = img.closest<HTMLElement>("[data-card-slot]");
+    if (!slot || slot.dataset.cardBroken === "1") return;
+    slot.dataset.cardBroken = "1";
+    slot.style.borderColor = "#dc2626";
+    slot.style.borderStyle = "dashed";
+
+    const box = document.createElement("div");
+    box.className =
+      "absolute inset-0 flex flex-col items-center justify-center gap-2 p-4 text-center text-sm";
+    box.style.color = "#dc2626";
+
+    const line = document.createElement("p");
+    line.textContent = "这张图没画出来";
+    line.style.fontWeight = "600";
+
+    const why = document.createElement("a");
+    why.href = img.dataset.cardHref ?? img.src;
+    why.target = "_blank";
+    why.rel = "noopener noreferrer";
+    why.textContent = "看看为什么 ↗";
+    why.style.textDecoration = "underline";
+
+    box.append(line, why);
+    img.remove();
+    slot.append(box);
+  }
+
+  function bind() {
+    document
+      .querySelectorAll<HTMLImageElement>("[data-card-img]")
+      .forEach(img => {
+        if (img.dataset.bound === "1") return;
+        img.dataset.bound = "1";
+        img.addEventListener("error", () => markBroken(img));
+        /**
+         * ⚠ 懒加载的图在绑监听之前就可能已经失败了（`complete` 为真而
+         *   `naturalWidth` 是 0）—— 那时 error 事件早就过去了，只挂监听
+         *   会让那一格永远停在空白占位上，零报错。
+         */
+        if (img.complete && img.naturalWidth === 0) markBroken(img);
+      });
+  }
+
+  /** 从后台带 `#posts/<slug>` 过来：滚到那一条并框一下。和 /_share 同一套。 */
+  function focusHash() {
+    const key = decodeURIComponent(location.hash.slice(1));
+    if (!key) return;
+    const cards = [
+      ...document.querySelectorAll<HTMLElement>("[data-card-item]"),
+    ];
+    /**
+     * ★ 认的是 `data-card-keys`（**组里每一条**的 key，空格分隔），不是元素 id。
+     *   折叠之后非代表那几条的 slug 不再是任何元素的 id —— 只查 id 的话，
+     *   从那几条点过来会落在页面顶上、什么都不发生，而按钮照常能点、
+     *   一句报错都没有（`/_share` 2026-09-21 实测踩过这个形态）。
+     * ⚠ 用 JS 比对而不是拼 `[data-card-keys~="…"]` 选择器：key 里有斜杠、
+     *   而且是从地址栏来的，拼进选择器就得考虑转义；比字符串没有这回事。
+     */
+    const el = cards.find(c =>
+      (c.dataset.cardKeys ?? "").split(" ").includes(key)
+    );
+    if (!el) return;
+    // 先把上一次那个框擦掉 —— hashchange 能反复触发，不擦的话屏幕上会有好几个框，
+    // 而"当前是哪一条"正是这个框存在的理由。
+    for (const c of cards) c.style.outline = "";
+    el.scrollIntoView({ block: "center" });
+    el.style.outline = "2px solid currentColor";
+    el.style.outlineOffset = "4px";
+  }
+
+  bind();
+  focusHash();
+  document.addEventListener("astro:page-load", () => {
+    bind();
+    focusHash();
+  });
+  /**
+   * ★ `hashchange` 是**必须的**（和 /_share 同一条，那边实测过）：这一页已经开着的时候
+   *   再从后台点另一条，地址只有 `#` 后面变了，**页面不重新加载、astro:page-load
+   *   也不触发**，症状是点了毫无反应、零报错。
+   */
+  window.addEventListener("hashchange", focusHash);
+</script>

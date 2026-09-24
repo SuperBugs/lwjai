@@ -27,7 +27,7 @@ import {
 
 /**
  * ★ 必须显式关掉预渲染：预渲染路由拿到的 `request.headers` 是空的，
- *   下面那条同源检查永远过不了（同 `xhs-publish.ts`）。
+ *   下面那条同源检查永远过不了（同 `/_publish` 那条接口）。
  */
 export const prerender = false;
 

@@ -1,9 +1,5 @@
 import type { SocialPlatform } from "@/config/socialPlatforms";
-import {
-  cashtagLine,
-  communityFooter,
-  communityTitle,
-} from "@/utils/communityPost";
+import { cashtagLine, communityFooter } from "@/utils/communityPost";
 import { fencedLines } from "../../scripts/content/formatRules";
 
 /**
@@ -21,6 +17,17 @@ import { fencedLines } from "../../scripts/content/formatRules";
  * 和「复制全文」同一个办法（docs/gate.md 7.5）。截断**只在整节的边界上**，
  * 放进来的那一段仍然是导出件的**逐字节前缀**，一个字不改。
  *
+ * ## ★ 标题 = 站上那条的标题，原样（`fitTitle()`）
+ *
+ * 【2026-09-23 用户定的】「标题就用系统标题」。在这之前是短帖那一份 `communityTitle()`
+ * 拼出来的「苹果（AAPL）：<摘要>」，分开推时再缀「 · <谁写的>」—— 第二次真推（AAPL
+ * 那一组）三篇全被雪球退回：「输入标题太长，请确认不超过50个字」。
+ * ★ 上限跟着平台表（`titleMax`，雪球那一格就是那句原话量出来的 50）。站上最长的标题
+ *   今天是 24 个字；那一刀留着是为了**保证存得上**：超了截到上限、末尾一个「…」，
+ *   结果那一行会说出来（`titleCut`）。
+ * ⚠ 同一组分开推的几篇**标题相同**（都是 `AAPL`）—— 用户要的就是这样；
+ *   是谁写的印在每篇页脚第一行，`/_share` 的结果行和账本那一行也各带着名字。
+ *
  * ## ★ 雪球单篇上限 2 万字，而且数的是 HTML 全长（2026-09-23 真撞上的）
  *
  * 第一次真推（MU 那一组，两份研究报告合成一篇）雪球回的是
@@ -32,11 +39,14 @@ import { fencedLines } from "../../scripts/content/formatRules";
  *   1. 合成一篇放得下 → 一篇；
  *   2. 放不下、而且是几份一组 → **每份各推一篇**（合在一起再截，第二个 AI 的那份
  *      会整篇被截掉 —— 那是替它抹掉了出处）。每篇用**它自己的**地址 / 日期 / 标的
- *      （`memberSource()`），标题后面带上是谁写的（`withAuthorInTitle()`）；
+ *      （`memberSource()`）；
  *   3. 单份还放不下 → **从头按整节放，放到放不下为止**，末尾写明截掉了哪几节 ＋ 全文链接。
- *      ★ 报告都是「## 一、结论速览」打头，所以从头截结论一定在；实测平均放得下 60%。
+ *      ★ 报告都是「## 一、结论速览」打头，所以从头截结论一定在。
  *   ⚠ **不许截在一节中间**（表格截一半比整节不放更糟），也**不许悄悄截** ——
  *     被截过的和完整的在雪球上必须长得不一样，截掉了什么要说出来（docs/engineering-notes.md 第二节）。
+ *   4. 【用户定的第二轮】「正文少很多都行，要保证能上传」：
+ *      预算压到 `XUEQIU_BUDGET`，而且雪球**明确说正文太长**时，按更小的预算重排
+ *      那一篇再推（`shouldShrink()` / `replan()`）—— 那不是重试，理由在 `shouldShrink()` 上面。
  *
  * ## 形状
  *
@@ -70,12 +80,16 @@ export const XUEQIU_TEXT_MAX = 20_000;
  * 我们自己的预算，按**我们的渲染器**量 HTML 全长（`Measure`）。
  *
  * ★ 实测（2026-09-23，8 篇）：扩展按它适配器的规则渲染出来的，是我们这一份的
- *   0.87～0.97 —— 我们这一份是**上界**。再留 1000 给它那一侧多出来的几步
- *   （它自己的 md→HTML、预处理、turndown），那几步没法在这边复现。
- * ⚠ **这个数是估的，不是对过的**（同 `SUCCESS_SIGNALS` 那条纪律）。哪天按它截过
- *   还被雪球说太长，端点会把这件事单独说出来（`isTooLongError()`），把这个数往下调。
+ *   0.87～0.97 —— 我们这一份是**上界**。
+ * ★【用户定的】「正文少很多都行，要保证能上传」：从 19000 压到 15000 —— 我们的尺子和
+ *   它的差到 1.33 倍都还放得下。剩下那点不确定由 `replan()` 兜：雪球真说太长，
+ *   就按更小的预算重排那一篇再推。
+ * ⚠ **这个数是估的，不是对过的**（同 `SUCCESS_SIGNALS` 那条纪律）。
  */
-export const XUEQIU_BUDGET = 19_000;
+export const XUEQIU_BUDGET = 15_000;
+
+/** 雪球明确说正文太长之后，同一篇最多再截短几次（每次预算至少降两成）。 */
+export const XUEQIU_MAX_SHRINKS = 3;
 
 /** 量一段 markdown 渲染成 HTML 之后有多长。端点传站点那台渲染器，测试传假的。 */
 export type Measure = (markdown: string) => Promise<number>;
@@ -83,8 +97,6 @@ export type Measure = (markdown: string) => Promise<number>;
 export interface XueqiuSection {
   /** 「OpenAI ChatGPT（GPT-6-Pro）」。教程 / 提示词没有这一维，undefined。 */
   label?: string;
-  /** 那一份的一句话摘要 —— 标题回落要用（标题就是票代码的时候）。 */
-  description: string;
   /** 那一份的全文，**导出端点原样吐的那一份**。 */
   body: string;
   /** 这一份在站上的 key（`posts/1037`）—— 分开推的时候记账用。 */
@@ -104,6 +116,7 @@ export interface XueqiuSection {
 
 export interface XueqiuArticleSource {
   kindLabel: string;
+  /** 站上那条的标题（frontmatter 的 `title`）。同一组里是同一个。 */
   title: string;
   symbols?: readonly { code: string; name?: string }[];
   date: string;
@@ -116,6 +129,8 @@ export interface XueqiuArticleSource {
 export interface XueqiuArticle {
   title: string;
   markdown: string;
+  /** 标题超过平台上限、被截短了才有。 */
+  titleCut?: true;
 }
 
 /** 截过的话截掉了什么。数的是 `## ` 那一级的节（开头那段引言不算一节）。 */
@@ -135,6 +150,11 @@ export interface XueqiuDraftPlan {
   truncated?: Truncation;
   /** 按我们的渲染器量出来的长度（HTML 全长）。 */
   estimate: number;
+  /** 这一篇是从哪份输入、按多少预算排出来的 —— 雪球说太长时 `replan()` 拿它重排。 */
+  source: XueqiuArticleSource;
+  budget: number;
+  /** 雪球说太长、截短重排过几次。没有过就没有这一格。 */
+  shrinks?: number;
 }
 
 /**
@@ -177,6 +197,21 @@ export function truncationNote(t: Truncation, url: string): string[] {
   return lines;
 }
 
+/**
+ * 标题：站上那条的标题原样；超过平台上限才截（按码点数，和平台表 `titleMax` 同一个单位）。
+ * ★ 截了要说出来（`cut`），不许悄悄截。
+ */
+function fitTitle(
+  raw: string,
+  max: number | undefined
+): { title: string; cut: boolean } {
+  const chars = [...raw.trim()];
+  if (max === undefined || chars.length <= max) {
+    return { title: chars.join(""), cut: false };
+  }
+  return { title: `${chars.slice(0, max - 1).join("")}…`, cut: true };
+}
+
 export function xueqiuArticle(
   src: XueqiuArticleSource,
   platform: SocialPlatform,
@@ -205,18 +240,13 @@ export function xueqiuArticle(
         `多半是导出端点没取到东西，不推一篇空壳上去。`
     );
   }
-
-  const title = communityTitle({
-    kindLabel: src.kindLabel,
-    title: src.title,
-    symbols: src.symbols,
-    voices: src.sections.map(s => ({
-      label: s.label,
-      description: s.description,
-    })),
-    date: src.date,
-    url: src.url,
-  });
+  // 标题是用户定的唯一来源；空着就没有东西可用 —— 同空正文，红，不去编一个。
+  if (src.title.trim() === "") {
+    throw new Error(
+      `xueqiuArticle: 标题是空的（${src.kindLabel} / ${src.url}）—— 先去后台把标题填上。`
+    );
+  }
+  const { title, cut: titleCut } = fitTitle(src.title, platform.titleMax);
 
   const blocks: string[] = [];
   const cash = cashtagLine(src.symbols, platform);
@@ -242,6 +272,7 @@ export function xueqiuArticle(
    * ★ 只有一份时把「是谁写的」印进第一行：站上每一条都有那张「智能体（模型）」芯片，
    *   雪球上没有 —— 不印的话读者只看得到一句「AI 生成」，不知道是哪个、什么模型。
    *   【2026-09-23 第一次真推时发现的】几份时每份的小标题已经带着，不重复。
+   *   （标题换成站上的标题之后，分开推的几篇只剩这一行分得出是谁写的。）
    * ★ 截过的话，全文链接由截断那几行带（写明含哪几节），页脚里就不再印一遍。
    *   ⚠ 那个地址同样是正文里的外链，**跟着平台表的 `urlInBody` 走**，和页脚那一行同一格 ——
    *   平台不许正文带链接的话，截断那几行只说截掉了什么、不印地址。
@@ -261,7 +292,11 @@ export function xueqiuArticle(
   ];
   blocks.push(`——\n\n${footer.join("\n\n")}`);
 
-  return { title, markdown: `${blocks.join("\n\n")}\n` };
+  return {
+    title,
+    markdown: `${blocks.join("\n\n")}\n`,
+    ...(titleCut ? { titleCut: true as const } : {}),
+  };
 }
 
 /**
@@ -271,14 +306,15 @@ export function xueqiuArticle(
 async function fitOne(
   src: XueqiuArticleSource,
   platform: SocialPlatform,
-  measure: Measure
+  measure: Measure,
+  budget: number
 ): Promise<XueqiuDraftPlan> {
   const section = src.sections[0]!;
   const keys = section.key ? [section.key] : [];
   const whole = xueqiuArticle(src, platform);
   const wholeLen = await measure(whole.markdown);
-  if (wholeLen <= XUEQIU_BUDGET) {
-    return { article: whole, keys, estimate: wholeLen };
+  if (wholeLen <= budget) {
+    return { article: whole, keys, estimate: wholeLen, source: src, budget };
   }
 
   const parts = splitSections(section.body);
@@ -305,12 +341,12 @@ async function fitOne(
       { truncated }
     );
     const len = await measure(article.markdown);
-    if (len > XUEQIU_BUDGET) break;
-    best = { article, keys, truncated, estimate: len };
+    if (len > budget) break;
+    best = { article, keys, truncated, estimate: len, source: src, budget };
   }
   if (!best) {
     throw new Error(
-      `「${src.title}」连开头加第一节都放不下雪球的 ${XUEQIU_TEXT_MAX} 字 —— ` +
+      `「${src.title}」连开头加第一节都放不下（按我们的尺子预算 ${budget}）—— ` +
         `一个字都没推。这一篇要人来看（多半是第一节里有一张特别大的表）。`
     );
   }
@@ -332,50 +368,76 @@ export function memberSource(
 }
 
 /**
- * 分开推的几篇，标题后面带上是谁写的。
- *
- * ★ 同一组的标题本来就是**同一个**（后台「补一份研究」是照着根那条抄的，groupFill 那条），
- *   不带的话草稿箱里是几篇一模一样的标题、分不出哪篇是哪篇，
- *   发出去在雪球上就像同一篇发了几遍。
- * ★ 只改标题：标题不在 2 万字里（它是单独一格），量过的长度不受影响。
- */
-function withAuthorInTitle(
-  plan: XueqiuDraftPlan,
-  label: string | undefined
-): XueqiuDraftPlan {
-  const who = label?.trim();
-  if (!who) return plan;
-  const title = `${plan.article.title.replace(/。$/, "")} · ${who}`;
-  return { ...plan, article: { ...plan.article, title } };
-}
-
-/**
  * 这一组要推成**几篇、每篇装什么**。顺序和理由见文件头「雪球单篇上限」那一节。
+ * `budget` 平时就是 `XUEQIU_BUDGET`；雪球说太长之后 `replan()` 传更小的。
  */
 export async function planDrafts(
   src: XueqiuArticleSource,
   platform: SocialPlatform,
-  measure: Measure
+  measure: Measure,
+  budget: number = XUEQIU_BUDGET
 ): Promise<XueqiuDraftPlan[]> {
   const keys = src.sections.map(s => s.key).filter((k): k is string => !!k);
   const full = xueqiuArticle(src, platform);
   const fullLen = await measure(full.markdown);
-  if (fullLen <= XUEQIU_BUDGET) {
-    return [{ article: full, keys, estimate: fullLen }];
+  if (fullLen <= budget) {
+    return [{ article: full, keys, estimate: fullLen, source: src, budget }];
   }
-  const split = src.sections.length >= 2;
   const plans: XueqiuDraftPlan[] = [];
   for (const s of src.sections) {
-    const plan = await fitOne(memberSource(src, s), platform, measure);
-    plans.push(split ? withAuthorInTitle(plan, s.label) : plan);
+    plans.push(await fitOne(memberSource(src, s), platform, measure, budget));
   }
   return plans;
 }
 
 /**
- * 雪球那句「太长」—— 说明我们的预算估少了（`XUEQIU_BUDGET` 上面那句 ⚠）。
- * 端点认出它之后要**单独说**，不能和别的"没存上"混成一句。
+ * 雪球退回来的那句话说的是**哪一格太长**。两句真回话（2026-09-23，原样）：
+ *   「输入标题太长，请确认不超过50个字」 / 「输入文字太长，请确认不超过20000个字」。
+ *
+ * ⚠【当天踩到的】第一版只认「太长」两个字（`isTooLongError()`），测试里只喂过正文那一句 ——
+ *   结果 AAPL 那三篇明明是**标题**太长，页面上印的却是「正文预算估少了、把
+ *   XUEQIU_BUDGET 往下调」，把人往错的方向带。认不出是哪一格就返回 undefined，**不猜**。
  */
-export function isTooLongError(text: string): boolean {
-  return /太长|不超过\s*\d+\s*个?字/.test(text);
+export function lengthRejection(text: string): "title" | "body" | undefined {
+  if (!/太长|不超过\s*\d+\s*个?字/.test(text)) return undefined;
+  if (/标题/.test(text)) return "title";
+  if (/文字|正文|内容/.test(text)) return "body";
+  return undefined;
+}
+
+/**
+ * 这一篇被退回来之后，要不要**截短一点再推一次**。
+ *
+ * ★ 这**不是重试**。端点不重试的理由是"超时的那一次可能已经存上了"；而这里只认一种回话：
+ *   `failed` ＋ 雪球那句「文字太长」—— 雪球**拒收**了，一次 `draft/save.json` 被拒就是
+ *   什么都没存，再推的是**更短的另一篇**，草稿箱里不会多出一份。
+ *   超时 / 看不懂 / 别的失败 / 标题太长一律不重推。
+ * ★ 同一篇最多截 `XUEQIU_MAX_SHRINKS` 次：雪球连着几次都说太长，说明我们的尺子和它的
+ *   差得比预想的多，接着一轮一轮地推只是在它门口转悠 —— 停下来让人看。
+ */
+export function shouldShrink(
+  result: { tier: string; detail: string; raw?: string },
+  plan: XueqiuDraftPlan
+): boolean {
+  return (
+    result.tier === "failed" &&
+    lengthRejection(`${result.detail} ${result.raw ?? ""}`) === "body" &&
+    (plan.shrinks ?? 0) < XUEQIU_MAX_SHRINKS
+  );
+}
+
+/**
+ * 雪球说这一篇正文太长之后，按更小的预算把它重排。
+ * ★ 新预算**至少降两成，而且一定小于被拒那一篇的长度** —— 所以重排出来的一定更短
+ *   （整节整节地少），不会原样再推一遍。合成的那一篇会拆成每份各一篇（同 `planDrafts()` 第 2 步）。
+ * @throws 再小就连第一节都放不下了（`fitOne()` 那一句）
+ */
+export async function replan(
+  plan: XueqiuDraftPlan,
+  platform: SocialPlatform,
+  measure: Measure
+): Promise<XueqiuDraftPlan[]> {
+  const budget = Math.min(Math.floor(plan.budget * 0.8), plan.estimate - 1);
+  const next = await planDrafts(plan.source, platform, measure, budget);
+  return next.map(p => ({ ...p, shrinks: (plan.shrinks ?? 0) + 1 }));
 }

@@ -1,5 +1,6 @@
 /**
- * 小红书封面图的测试。
+ * 图片卡片的测试（`/_cards`，原来是小红书封面图 `/_xhs`；小红书那一套 2026-09-23
+ * 按用户要求删了，卡留着 —— 「发到富途有时候我要发图片卡片」）。
  *
  * 画出来好不好看测不了（那要人眼）。能钉住的是**判据**和**接线**，
  * 而这个功能里真正会安静出错的正是后两者：
@@ -9,7 +10,7 @@
  *   B 组 字号   —— 四档界值是从版面宽度算出来的，不是拍脑袋；改尺寸忘了改这里会红
  *   C 组 标的   —— 公司名印不印，用例全部来自 `src/data/symbols.json` 里**真实的行**
  *   D 组 主标题 —— 标题就是代码那一档（站上真有），摘要上位；没摘要时不许留空
- *   E 组 接线   —— 草稿不出图、画不出来不回落、路由注了、入口在菜单里
+ *   E 组 接线   —— 草稿不出图、画不出来不回落、路由注了、给哪个平台出（`?p=` 认不出不回落）
  *
  * ★ C / D 两组的用例**不是照着实现反推的**，是从站上真实的内容和标的表里抄的
  *   （docs/engineering-notes.md 第三节那条 `SC 13D`：照正则反推的用例只能证明正则等于它自己）。
@@ -52,6 +53,18 @@ import {
   XHS_WIDTH,
   type XhsCardSource,
 } from "../../src/utils/xhsCardPlan";
+import {
+  CARDS_ROUTE,
+  CARD_PNG_ROUTE,
+  cardFileName,
+  cardPngUrl,
+  pickCardPlatform,
+} from "../../src/dev/cardsPlan";
+import {
+  ACTIVE_PLATFORMS,
+  DEFAULT_PLATFORM,
+  findPlatform,
+} from "../../src/config/socialPlatforms";
 
 const ROOT = join(import.meta.dirname, "..", "..");
 const read = (p: string) => readFileSync(join(ROOT, p), "utf8");
@@ -80,7 +93,7 @@ const base: XhsCardSource = {
   tags: ["财报", "估值"],
   byline: "Anthropic Claude（Opus-5）",
   date: "2026-09-22",
-  fullTextLabel: "报告全文：",
+  fullTextLabel: "免费全文报告：",
   url: "https://lwj.ai/r/1002",
 };
 
@@ -166,7 +179,7 @@ test("A3 plan 的每一格都在 xhsCardText() 里表过态（加一格必须红
     "授权模式还能撑多久",
     "一句话摘要。",
     "#财报",
-    "报告全文：",
+    "免费全文报告：",
     "Anthropic Claude（Opus-5）",
   ]) {
     assert.ok(text.includes(seg), `取字清单里漏了「${seg}」—— 它会印成豆腐块`);
@@ -551,10 +564,12 @@ test("D6 标签最多几个", () => {
  *   **就是用户写的那四个字**。
  */
 test("G1 左下角那行按集合分词 —— 问答卡上不许出现「报告」", () => {
-  assert.equal(fullTextLabelFor("posts"), "报告全文：");
-  assert.equal(fullTextLabelFor("qa"), "回答全文：");
-  assert.equal(fullTextLabelFor("guides"), "教程全文：");
-  assert.equal(fullTextLabelFor("prompts"), "提示词全文：");
+  // 【2026-09-23 用户要的】「图片上的全文报告加个免费，免费全文报告」—— 研究报告那一档
+  // 就是用户写的那几个字；另外三档照同一个语序换词。
+  assert.equal(fullTextLabelFor("posts"), "免费全文报告：");
+  assert.equal(fullTextLabelFor("qa"), "免费全文回答：");
+  assert.equal(fullTextLabelFor("guides"), "免费全文教程：");
+  assert.equal(fullTextLabelFor("prompts"), "免费全文提示词：");
 
   // 这一条是上面那段 ⚠ 的钉子：照字面套的那版会在这里红。
   for (const c of ["qa", "guides", "prompts"]) {
@@ -565,18 +580,22 @@ test("G1 左下角那行按集合分词 —— 问答卡上不许出现「报告
   }
 });
 
-test("G2 表外的集合回落到「全文：」—— 这一档是安全的，不是在猜", () => {
+test("G2 表外的集合回落到「免费全文：」—— 这一档是安全的，不是在猜", () => {
   // 「全文」对任何一种内容都成立（sharePost 全站就用这一个词），所以回落
   // 不会说出任何一句假话。⚠ 别学 provenance 那种"不知道就得红"：
   // 那里回落是**替内容认领出身**，这里只是少了一个更贴切的词。
-  assert.equal(fullTextLabelFor("somethingNew"), "全文：");
+  assert.equal(fullTextLabelFor("somethingNew"), "免费全文：");
   assert.ok(fullTextLabelFor("somethingNew").trim() !== "", "不许回落成空串");
+  // 「免费」每一档都带着（加第五个集合时照样有），而且在最前面 —— 用户要的语序。
+  for (const c of ["posts", "qa", "guides", "prompts", "somethingNew"]) {
+    assert.ok(fullTextLabelFor(c).startsWith("免费全文"), `${c} 那一档没带「免费」`);
+  }
 });
 
 test("G3 地址进 plan 且原样不动（它不是自由文本，是拼出来的）", () => {
   const plan = planXhsCard(base);
   assert.equal(plan.url, "https://lwj.ai/r/1002");
-  assert.equal(plan.fullTextLabel, "报告全文：");
+  assert.equal(plan.fullTextLabel, "免费全文报告：");
   // ⚠ 站点是 trailingSlash: "never"，地址不许带末尾斜杠 —— 带了的话读者
   //   照着敲进去在 dev 里是 404（线上靠 Cloudflare 301 兜，但那是多一跳）。
   assert.ok(!plan.url.endsWith("/"), "落地页地址不该带末尾斜杠");
@@ -748,7 +767,7 @@ test("F8 渲染画的字和取字清单取的字是同一批", () => {
 test("E1 草稿不出图 —— 端点和页面都必须走 getSortedPosts", () => {
   // docs/gate.md 7.5「前提一」：闸门对草稿网开一面（block 档也退出码 0）的**全部依据**
   // 就是"草稿不生成页面"。少这一句，草稿就变成一张能发到公开平台的图。
-  for (const f of ["src/dev/xhsEntry.ts", "src/dev/xhs.astro"]) {
+  for (const f of ["src/dev/xhsEntry.ts", "src/dev/cards.astro"]) {
     assert.match(
       read(f),
       /getSortedPosts\(/,
@@ -758,11 +777,11 @@ test("E1 草稿不出图 —— 端点和页面都必须走 getSortedPosts", () 
 });
 
 test("E2 画不出来**不许**回落到默认图", () => {
-  const src = read("src/dev/xhs-card.ts");
+  const src = read("src/dev/cards-png.ts");
   assert.doesNotMatch(
     src,
     /fallbackOgPng|ogImage/,
-    "小红书封面回落到 default-og.jpg 就是给了一张「看起来能发」的图 —— " +
+    "图片卡片回落到 default-og.jpg 就是给了一张「看起来能发」的图 —— " +
       "而这张卡自己就是全部内容，发出去收不回来。分享卡那边回落是对的，别抄过来。"
   );
   assert.match(src, /\b500\b/, "画不出来那一档要回 500，让页面画成红框");
@@ -770,7 +789,7 @@ test("E2 画不出来**不许**回落到默认图", () => {
 
 test("E3 两条路由都注进 astro.config.ts 了", () => {
   const astro = read("astro.config.ts");
-  for (const pattern of ["/_xhs", "/_xhs/card.png"]) {
+  for (const pattern of [CARDS_ROUTE, CARD_PNG_ROUTE]) {
     assert.ok(
       astro.includes(`pattern: "${pattern}"`),
       `astro.config.ts 里没有 injectRoute ${pattern}`
@@ -778,6 +797,83 @@ test("E3 两条路由都注进 astro.config.ts 了", () => {
   }
   // 只在 dev 里挂：devGate 整个集成只在 isDev 时进 integrations（同 /_share、/_tidy）。
   assert.match(astro, /isDev \? \[react\(\), keystatic\(\), devGate\]/);
+  // 【2026-09-23】/_xhs 改名成 /_cards。页面上那两个常量和 injectRoute 的字面量对账：
+  // 一边改了另一边没改，链接指向的就是 404，而构建、类型检查四处全绿。
+  assert.equal(CARDS_ROUTE, "/_cards");
+  assert.equal(CARD_PNG_ROUTE, "/_cards/card.png");
+  assert.ok(!astro.includes('pattern: "/_xhs'), "astro.config.ts 里还挂着 /_xhs 那几条");
+});
+
+test("E7 给哪个平台出（`?p=`）：没给用默认，认得的用它，**认不出不回落**", () => {
+  const futu = findPlatform("futu")!;
+  assert.equal(pickCardPlatform(null, ACTIVE_PLATFORMS, DEFAULT_PLATFORM), DEFAULT_PLATFORM);
+  assert.equal(pickCardPlatform("  ", ACTIVE_PLATFORMS, DEFAULT_PLATFORM), DEFAULT_PLATFORM);
+  assert.equal(pickCardPlatform("futu", ACTIVE_PLATFORMS, DEFAULT_PLATFORM), futu);
+  /**
+   * ⚠ 认不出的（包括已经删掉的小红书）**不许**回落到默认平台：默认平台允许图里带链接，
+   *   回落就是给一个不许带链接的平台出一张印着网址的卡 —— 小红书那次的形状，而屏幕上一切正常。
+   */
+  assert.equal(pickCardPlatform("xhs", ACTIVE_PLATFORMS, DEFAULT_PLATFORM), undefined);
+  assert.equal(pickCardPlatform("nope", ACTIVE_PLATFORMS, DEFAULT_PLATFORM), undefined);
+  // 停用的平台认不认得出，取决于调用方给的是不是「还在发」那张表 —— E8 钉着两处都传 ACTIVE_PLATFORMS。
+
+  // 地址一定带平台；文件名带站名前缀、不带平台（同一组两家的卡下载下来叫同一个名字是对的）。
+  const png = cardPngUrl("posts", "1039", "futu");
+  assert.ok(png.startsWith(`${CARD_PNG_ROUTE}?`));
+  const q = new URL(png, "http://x").searchParams;
+  assert.deepEqual([q.get("c"), q.get("s"), q.get("p")], ["posts", "1039", "futu"]);
+  assert.equal(cardFileName("牢玩家", "r", "1039"), "牢玩家-r1039.png");
+});
+
+test("E8 出图接口和那一页都按 `?p=` 选平台，认不出就说出来", () => {
+  const png = codeOnly(read("src/dev/cards-png.ts"));
+  assert.match(
+    png,
+    /const platform = pickCardPlatform\(p, ACTIVE_PLATFORMS, DEFAULT_PLATFORM\);/,
+    "接口不是按 ?p= 选的平台"
+  );
+  assert.match(png, /if \(!platform\) \{[\s\S]{0,300}?400/, "认不出的平台没回 400");
+  // ★ 选出来的平台真的传进了 cardSourceOf（它决定印不印网址）—— 漏传就静默退回默认平台。
+  assert.match(
+    png,
+    /cardSourceOf\(\s*group,\s*collection,\s*useTranslations\(currentLocale\),\s*currentLocale,\s*platform\s*\)/,
+    "选好的平台没传给 cardSourceOf"
+  );
+  // 走那份按内容的缓存：`/_cards` 页上那张和 `/_share` 上下载的那张才是同一张（xhsCache.ts 文件头）。
+  assert.match(png, /await renderCached\(\s*source,/, "出图没走 renderCached —— 两处可能各画各的");
+  assert.doesNotMatch(png, /renderXhsCard\(/, "接口绕过缓存直接画了");
+
+  const page = read("src/dev/cards.astro");
+  const head = codeOnly(page.slice(0, page.indexOf("\n---", 10)));
+  // 没有它 Astro.url.searchParams 是空的，?p= 永远读不到（同 preview.astro）。
+  assert.match(head, /export const prerender = false;/);
+  assert.match(
+    head,
+    /pickCardPlatform\(askedFor, ACTIVE_PLATFORMS, DEFAULT_PLATFORM\)/,
+    "那一页不是按 ?p= 选的平台"
+  );
+  assert.match(head, /png: cardPngUrl\(entry\.collection, slug, platform\.id\)/);
+  const markup = page.slice(page.indexOf("\n---", 10));
+  assert.match(markup, /data-card-unknown/, "认不出的平台那一档页面上一个字都没说");
+  assert.match(markup, /ACTIVE_PLATFORMS\.map\(p =>/, "顶上那一排平台不是从平台表来的");
+});
+
+test("E9 那一页：画不出来是红框（不是空白占位）；带锚点过来能落到组里任何一条", () => {
+  const page = read("src/dev/cards.astro");
+  const script = codeOnly(page.slice(page.indexOf("<script>")));
+  assert.match(script, /img\.addEventListener\("error", \(\) => markBroken\(img\)\)/);
+  // 懒加载的图在绑监听之前就可能已经失败了 —— 只挂监听那一格会永远停在空白占位上。
+  assert.match(script, /img\.complete && img\.naturalWidth === 0/);
+  assert.match(script, /看看为什么/);
+  // 认组里每一条的 key，不是只认代表那条的 id。
+  assert.match(script, /dataset\.cardKeys/);
+  assert.match(script, /window\.addEventListener\("hashchange", focusHash\)/);
+  // 发小红书那一套整个删了 —— 页面上不许再有发帖入口或者 /_xhs 的地址。
+  // ⚠ 剥了注释再查：文件头那段历史里正写着「原来是 /_xhs」（写这条时当场踩到）。
+  assert.doesNotMatch(
+    codeOnly(page),
+    /\/_xhs|data-xhs-publish|xhsQueuePlan|xhsPublished/
+  );
 });
 
 test("E4 端点的落款读的是全站那两个判据，不是自己判一遍", () => {
@@ -793,7 +889,7 @@ test("E4 端点的落款读的是全站那两个判据，不是自己判一遍",
   assert.match(src, /provenance !== "by-agent"/);
 });
 
-test("E5 尺寸就是 3:4（小红书信息流里占竖向面积最大的那一档）", () => {
+test("E5 尺寸就是 3:4（最早按小红书信息流定的；雪球 / 富途照样收竖图）", () => {
   assert.equal(XHS_WIDTH, 1080);
   assert.equal(XHS_HEIGHT, 1440);
   assert.equal(XHS_HEIGHT / XHS_WIDTH, 4 / 3);
@@ -805,6 +901,6 @@ test("E6 两张卡共用一套色值（改主题不许只改一处）", () => {
   assert.match(
     read("src/utils/xhsCard.ts"),
     /import \{[^}]*COLORS[^}]*\} from "\.\/ogCard"/,
-    "小红书卡自己写了一套色值 —— 改了主题两种分享图会变成两个色调，四处全绿"
+    "图片卡片自己写了一套色值 —— 改了主题两种分享图会变成两个色调，四处全绿"
   );
 });

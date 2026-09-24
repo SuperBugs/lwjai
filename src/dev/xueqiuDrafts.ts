@@ -5,7 +5,7 @@ import type { DraftTier } from "./wechatsyncPlan";
 /**
  * 「哪几篇已经推到雪球草稿箱了」—— `/_share` 雪球那一块上那一行。
  *
- * 【2026-09-23】和 `xhsPublished.ts`（小红书那本）同一个理由：页面对"推过什么"
+ * 【2026-09-23】和原来小红书那本流水账同一个理由（那一套当天按用户要求删了）：页面对"推过什么"
  * **没有记忆**的话，刷新一下就分不出哪篇推过了，于是同一篇推两遍、草稿箱里两份。
  * 小红书那一套里，"页面没记性"是能让人发重的那一环。
  *
@@ -16,8 +16,7 @@ import type { DraftTier } from "./wechatsyncPlan";
  *   `failed`       试过没成
  *
  * ★ 另外四档（没配 token / 扩展没连上 / 雪球没登录 / 端口被占）**不记**：
- *   那是还没轮到推，一个字都没出去，记一笔只会让流水账里多一条什么都没发生的事
- *   （同 `recordPublish()` 不记 `offline`）。
+ *   那是还没轮到推，一个字都没出去，记一笔只会让流水账里多一条什么都没发生的事。
  * ⚠ 它记的是「**我们推过草稿**」，不是「雪球上现在有」—— 你在雪球里删了草稿、
  *   或者已经点了发布，这本账都不知道。
  *
@@ -25,7 +24,8 @@ import type { DraftTier } from "./wechatsyncPlan";
  *
  * 仓库根的 `.xueqiu-drafts.json`，**在 .gitignore 里**（这台机器的备忘，不是内容），
  * **不放 `node_modules` 下**（`pnpm install --force` 会一声不吭地清掉它）——
- * 两条理由都和 `.xhs-published.json` 逐字相同，见那个文件头。
+ * 前一条：提交它会让两台机器互相覆盖；后一条：它丢了会让人把推过的再推一遍，
+ * 而 `node_modules` 下的东西随时会被一声不吭地清掉（和能自己画回来的图片卡片缓存正好相反）。
  */
 
 export const DRAFTS_FILE = ".xueqiu-drafts.json";
@@ -51,6 +51,12 @@ export interface DraftRecord {
    * ★ 卡片上要说出来 —— 截过的和完整的在账上长得一样，人就不知道雪球上那篇缺了东西。
    */
   truncated?: { kept: number; total: number };
+  /**
+   * 这一篇是谁写的（「Anthropic Claude（Opus-5-5）」）—— 只有一份的那种篇才有。
+   * ★ 标题改成站上的标题之后，同一组分开推的几篇**标题一模一样**（都是 `AAPL`），
+   *   卡片上那几行不带名字就分不出哪行是哪篇。
+   */
+  who?: string;
 }
 
 export type DraftLog = Record<string, DraftRecord>;
@@ -65,7 +71,7 @@ export function recordedDraftTier(
 }
 
 /**
- * 读那本账。**读不出来当成空的，不抛**（同 `readPublished()`）——
+ * 读那本账。**读不出来当成空的，不抛** ——
  * 但坏掉的那天屏幕上会显示"一篇都没推过"，所以终端里必须留一行。
  */
 export function readDrafts(): DraftLog {
@@ -84,6 +90,32 @@ export function readDrafts(): DraftLog {
 }
 
 /**
+ * 账上那一笔长什么样 —— 纯函数（测试直接调它，不碰那本真账）；`recordDraft()` 只管读写盘。
+ * 不该记的那几档返回 undefined。
+ */
+export function draftRecord(
+  tier: DraftTier,
+  title: string,
+  draftUrl?: string,
+  extra: Pick<DraftRecord, "combined" | "truncated" | "who"> = {},
+  at: Date = new Date()
+): DraftRecord | undefined {
+  const kept = recordedDraftTier(tier);
+  if (!kept) return undefined;
+  return {
+    tier: kept,
+    at: at.toISOString(),
+    title,
+    ...(draftUrl ? { draftUrl } : {}),
+    ...(extra.combined && extra.combined >= 2
+      ? { combined: extra.combined }
+      : {}),
+    ...(extra.truncated ? { truncated: extra.truncated } : {}),
+    ...(extra.who ? { who: extra.who } : {}),
+  };
+}
+
+/**
  * 记一笔。不该记的那几档直接返回。
  * ★ 写盘失败**不让推这件事失败** —— 草稿已经存上了，这时候报错只会让人再推一遍。
  */
@@ -92,22 +124,13 @@ export function recordDraft(
   tier: DraftTier,
   title: string,
   draftUrl?: string,
-  extra: Pick<DraftRecord, "combined" | "truncated"> = {}
+  extra: Pick<DraftRecord, "combined" | "truncated" | "who"> = {}
 ): void {
-  const kept = recordedDraftTier(tier);
-  if (!kept) return;
+  const rec = draftRecord(tier, title, draftUrl, extra);
+  if (!rec) return;
   try {
     const log = readDrafts();
-    log[key] = {
-      tier: kept,
-      at: new Date().toISOString(),
-      title,
-      ...(draftUrl ? { draftUrl } : {}),
-      ...(extra.combined && extra.combined >= 2
-        ? { combined: extra.combined }
-        : {}),
-      ...(extra.truncated ? { truncated: extra.truncated } : {}),
-    };
+    log[key] = rec;
     writeFileSync(FILE, `${JSON.stringify(log, null, 2)}\n`, "utf8");
   } catch (err) {
     // eslint-disable-next-line no-console -- 草稿已经存上了，不能因为记账失败就报没推成
@@ -122,7 +145,6 @@ export function recordDraft(
  *
  * ⚠ **不许直接 `rec.at.slice(0, 16)`**：账里存的是 UTC，截出来的读数比北京时间慢 8 小时，
  *   而全站其余地方印的都是北京时间 —— 「刚推的」会显示成上午。
- *   （`xhsPublished.ts` 那本就是这么截的；小红书已停用，那一处没回头改。）
  * ★ 时区**由调用方传**（`config.site.timezone`），不在这儿写死：站点时区是一对判据
  *   （docs/engineering-notes.md「全站时间按北京时间显示」那条），写死一份就是第三处。
  */
@@ -154,6 +176,8 @@ export function draftLabel(
 ): string | undefined {
   if (!rec) return undefined;
   const when = draftWhen(rec.at, timeZone);
+  // 谁写的放在最前面：同一组分开推的几行只有这一格不一样（标题都是站上那个）。
+  const who = rec.who ? `${rec.who}：` : "";
   /** 这一篇是什么形状：合成的 / 截过的 / 完整一篇（完整的不说，那是完成态）。 */
   const shape = rec.combined
     ? `（${rec.combined} 份合成一篇）`
@@ -162,12 +186,12 @@ export function draftLabel(
       : "";
   switch (rec.tier) {
     case "drafted":
-      return `已推到雪球草稿箱 ✓ ${when}${shape} —— 发布那一下还没点的话，去草稿里点`;
+      return `${who}已推到雪球草稿箱 ✓ ${when}${shape} —— 发布那一下还没点的话，去草稿里点`;
     case "unconfirmed":
       // ⚠ 这一档的措辞要让人**去查**，不是让人放心。
-      return `推过，结果不确定 · ${when} —— 先去雪球草稿箱看一眼再决定要不要再推`;
+      return `${who}推过，结果不确定 · ${when} —— 先去雪球草稿箱看一眼再决定要不要再推`;
     case "failed":
-      return `试过没成 · ${when}`;
+      return `${who}试过没成 · ${when}`;
   }
 }
 

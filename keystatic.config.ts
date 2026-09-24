@@ -8,7 +8,12 @@ import {
 import { agentOptions, DEFAULT_AGENT } from "./src/config/agents";
 import { AGENT_ICON_UNSET, agentIconOptions } from "./src/config/agentIcons";
 import { modelOptions, DEFAULT_MODEL } from "./src/config/models";
-import { tagOptions } from "./src/config/tags";
+import {
+  defaultTagsNote,
+  POSTS_DEFAULT_TAGS,
+  resolveDefaultTags,
+  tagOptions,
+} from "./src/config/tags";
 import { symbolOptions } from "./src/config/symbols";
 import { SYMBOL_RE } from "./src/config/symbol";
 import { beijingWallToUtc, utcWallToBeijing } from "./src/config/beijingTime";
@@ -368,19 +373,31 @@ mountModTime({ label: MOD_DATETIME_LABEL });
  *   **打不开并说明原因**（`fields.multiselect` 的 parse 对不在选项里的值直接抛），
  *   构建也会红（content.config.ts 的 tagsField）。这是对的那一头 —— 比静默把那几个
  *   标签丢掉强得多，后者等于悄悄把一条内容从它所属的分类里摘出去。要改就先改内容。
+ *
+ * ## 新建时预先勾上哪几个（第二个参数）【2026-09-23 用户要的】
+ *
+ * 只有研究稿传（`POSTS_DEFAULT_TAGS`，「个股研究」），另外三格不传 = 照旧一个都不勾。
+ * ★ 喂给 Keystatic 的是**对着表滤过的那一份**（`resolveDefaultTags()`），不是原样那一份：
+ *   多选不核对默认值在不在选项里，表里没有的默认值会勾不出来、却原样存进新稿子。
+ *   滤掉的那几个由说明里那一句讲出来（`defaultTagsNote()`，三档）。理由都在 tags.ts。
  */
-const tagsField = (hint: string) =>
-  fields.multiselect({
+const tagsField = (hint: string, defaults: readonly string[] = []) => {
+  const resolved = resolveDefaultTags(defaults);
+  return fields.multiselect({
     label: "标签",
     // ⚠ 说明里**不许举具体标签当例子**（「财报 / 做空 / 宏观 …」）：表是后台管的，
     //   人删掉一行之后那句例子就在替一个不存在的标签打广告，而下面勾选框里根本没有它。
     //   要看有哪些标签，勾选框本身就是那张表。
+    //   （默认值那一句不算例子：它是对着表算出来的，表里没有了它会改口。）
     description:
       `${hint}` +
+      defaultTagsNote(resolved) +
       "★ 只能从表里勾：想要一个新标签，先去左侧「标签」那一页加一行，" +
       "再回来刷新这一页。⚠ 标的代码不用写进来，它有自己的字段。",
     options: tagOptions(),
+    defaultValue: resolved.applied,
   });
+};
 
 /**
  * 那一格叫什么。**只写一处** —— 它同时是字段的 label 和文档 / 说明里提到的名字。
@@ -1231,7 +1248,8 @@ export default config({
         }),
 
         // ── 分类与状态 ──────────────────────────────────────────────
-        tags: tagsField("这一篇的策略类别、主题。"),
+        // 【2026-09-23 用户要的】新建时默认勾上「个股研究」—— 只有研究稿有，理由在 tags.ts。
+        tags: tagsField("这一篇的策略类别、主题。", POSTS_DEFAULT_TAGS),
 
         // ── 时间 ────────────────────────────────────────────────────
         // 【2026-09-21 用户要的】这两格排在**标签后面**，理由见文件头「字段顺序」。

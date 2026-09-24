@@ -113,7 +113,8 @@ test("「发帖文案」常驻菜单 —— 三条入口都在 NAV_LINKS 里", (
     "NAV_LINKS 里没有 /_share —— 「发帖文案」又变回只在编辑页出现了"
   );
   assert.equal(share!.text, "发帖文案");
-  // 【2026-09-22】加了第四条「清理特殊字符」→ /_tidy、第五条「封面图」→ /_xhs。
+  // 【2026-09-22】加了第四条「清理特殊字符」→ /_tidy、第五条「封面图」→ /_xhs；
+  // 【2026-09-23】小红书删了、卡留着，第五条改叫「图片卡片」→ /_cards。
   // 数字钉在这儿是为了让"顺手挪走一条"这件事红一次 —— 屏幕上少一行是没有任何报错的。
   assert.equal(NAV_LINKS.length, 5, "菜单里应该是五条入口");
   assert.ok(
@@ -121,8 +122,12 @@ test("「发帖文案」常驻菜单 —— 三条入口都在 NAV_LINKS 里", (
     "NAV_LINKS 里没有 /_tidy —— 清理特殊字符那一页在后台里就没有入口了"
   );
   assert.ok(
-    NAV_LINKS.some(l => l.href === "/_xhs" && l.text === "封面图"),
-    "NAV_LINKS 里没有 /_xhs —— 小红书封面图那一页在后台里就没有入口了"
+    NAV_LINKS.some(l => l.href === "/_cards" && l.text === "图片卡片"),
+    "NAV_LINKS 里没有 /_cards —— 图片卡片那一页在后台里就没有入口了"
+  );
+  assert.ok(
+    !NAV_LINKS.some(l => l.href === "/_xhs"),
+    "菜单还指着 /_xhs —— 那条路由 2026-09-23 改成了 /_cards，指过去是 404"
   );
 });
 

@@ -2,7 +2,7 @@
  * 后台 logo 预览的**判据**（纯函数，零 DOM、零 `import.meta.glob`）——
  * 「这个下拉是不是我们认得的那种」「这个选项该画哪个 logo」「那张样式表长什么样」。
  *
- * 【2026-09-23 加】和 adminPlan.ts / publishPlan.ts / xhsQueuePlan.ts 同一个分法：
+ * 【2026-09-23 加】和 adminPlan.ts / publishPlan.ts / cardsPlan.ts 同一个分法：
  * 判据在 `*Plan.ts`，I/O（去认 DOM、贴属性、挂样式表）在 `keystaticIconPreview.ts`。
  * 拆开不是为了整洁：那一半 import 了 `src/utils/agentLogoUrls.ts`（`import.meta.glob`，
  * 只有 Vite 认），裸 tsx 加载不了 —— 不拆的话下面这几条只能靠 grep 源码去"测"，

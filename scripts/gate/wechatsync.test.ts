@@ -53,9 +53,13 @@ import {
 } from "../../src/dev/wechatsyncBridge";
 import {
   XUEQIU_BUDGET,
-  isTooLongError,
+  XUEQIU_MAX_SHRINKS,
+  XUEQIU_TEXT_MAX,
+  lengthRejection,
   planDrafts,
+  replan,
   sectionTitle,
+  shouldShrink,
   splitSections,
   truncationNote,
   xueqiuArticle,
@@ -65,6 +69,7 @@ import { communityFooter } from "../../src/utils/communityPost";
 import { findPlatform } from "../../src/config/socialPlatforms";
 import {
   draftLabel,
+  draftRecord,
   draftRecordsFor,
   draftWhen,
   recordedDraftTier,
@@ -427,7 +432,6 @@ const ZM = [{ code: "ZM", name: "Zoom" }];
 /** 组里两份各有**自己的**地址和日期 —— 分开推时要用的正是这两格（C11）。 */
 const SECTION_A = {
   label: "OpenAI ChatGPT（GPT-6-Pro）",
-  description: "有现金流，但主营低增长。",
   body: "# Zoom 研究\n\n| 指标 | 数值 |\n|---|---|\n| 市盈率 | 示例 |\n\n- 一\n- 二\n",
   key: "posts/1009",
   url: "https://lwj.ai/r/1009",
@@ -436,7 +440,6 @@ const SECTION_A = {
 };
 const SECTION_B = {
   label: "Google Spark（Gemini-3.1-Pro）",
-  description: "动能衰减，短线破位。",
   body: "## 结论\n\n短线破位。",
   key: "posts/1010",
   url: "https://lwj.ai/r/1010",
@@ -503,9 +506,10 @@ test("C4 空的不推：没有一份、或者某一份正文是空的，都要�
 });
 
 test("C5 停用的平台走不到这儿", () => {
-  const xhs = findPlatform("xhs");
-  assert.ok(xhs && xhs.mode === "retired");
-  assert.throws(() => xueqiuArticle(SRC, xhs), /停用/);
+  // 原来拿小红书那一行当例子；那一行 2026-09-23 按用户要求删了，换成一个编的停用平台 ——
+  // 钉的是判据（retired 就抛），不是小红书。
+  const gone = { ...xueqiu(), id: "gone", name: "某个停用的平台", mode: "retired" as const };
+  assert.throws(() => xueqiuArticle(SRC, gone), /停用/);
 });
 
 test("C6 页脚和短帖**同一个** communityFooter()", () => {
@@ -522,9 +526,28 @@ test("C6 页脚和短帖**同一个** communityFooter()", () => {
   assert.ok(/communityFooter\(src, platform\)/.test(post), "短帖没走 communityFooter");
 });
 
-test("C7 标题就是票代码 → 换成带票名的摘要（和短帖同一条判据）", () => {
-  const a = xueqiuArticle({ ...SRC, title: "ZM" }, xueqiu());
-  assert.equal(a.title, "Zoom（ZM）：有现金流，但主营低增长。");
+test("C7 标题就是站上的标题，原样；超过雪球的 50 字才截，截了要说", () => {
+  /**
+   * 【2026-09-23 用户定的】「标题就用系统标题」。在这之前是「Zoom（ZM）：<摘要>」再缀
+   * 「 · <谁写的>」，AAPL 那一组三篇全被雪球退回：「输入标题太长，请确认不超过50个字」。
+   * ★ 标题就是票代码也原样（站上 AAPL 那三篇的标题就是 `AAPL`）—— 不再换成摘要。
+   */
+  const code = xueqiuArticle({ ...SRC, title: "ZM" }, xueqiu());
+  assert.equal(code.title, "ZM", "标题不是站上那个");
+  assert.equal(code.titleCut, undefined);
+
+  // 上限跟着平台表（雪球那一格就是那句原话量出来的 50），按码点数。
+  assert.equal(xueqiu().titleMax, 50);
+  const fits = xueqiuArticle({ ...SRC, title: "字".repeat(50) }, xueqiu());
+  assert.equal([...fits.title].length, 50);
+  assert.equal(fits.titleCut, undefined, "正好 50 字不该截");
+  const long = xueqiuArticle({ ...SRC, title: "字".repeat(51) }, xueqiu());
+  assert.equal([...long.title].length, 50, "超了没截到 50 —— 那一篇会被雪球整篇退回");
+  assert.ok(long.title.endsWith("…"), "截了却看不出来");
+  assert.equal(long.titleCut, true, "截了没说");
+
+  // 标题空着没有东西可用 —— 红，不去编一个。
+  assert.throws(() => xueqiuArticle({ ...SRC, title: "  " }, xueqiu()), /标题是空的/);
 });
 
 /* ── C 组续：雪球单篇 2 万字，放不下怎么分 ─────────────────────────────── */
@@ -595,7 +618,7 @@ test("C10 放得下：合成一篇，装着整组，不截", async () => {
   assert.equal(plans[0]!.estimate, plans[0]!.article.markdown.length);
 });
 
-test("C11 合起来放不下：每份各推一篇 —— 地址、日期是它自己的，标题带着是谁写的", async () => {
+test("C11 合起来放不下：每份各推一篇 —— 地址、日期是它自己的，是谁写的在页脚", async () => {
   const A = { ...SECTION_A, body: sec("一、结论速览", 10_000).replace("字", "甲") };
   const B = { ...SECTION_B, body: sec("一、结论速览", 10_000).replace("字", "乙") };
   const plans = await planDrafts({ ...SRC, sections: [A, B] }, xueqiu(), byLength);
@@ -615,10 +638,15 @@ test("C11 合起来放不下：每份各推一篇 —— 地址、日期是它�
   assert.ok(pb.markdown.includes(SECTION_B.date), "第二份印的是整组那个日期");
   // 分开推的每一篇自己就是一整篇：不挂【】小标题，是谁写的印在页脚。
   assert.ok(!pb.markdown.includes(`【${B.label}】`));
-  // ★ 同一组的标题本来就相同 —— 不带上是谁写的，草稿箱里就是两篇一模一样的标题。
-  assert.notEqual(pa.title, pb.title, "分开推的两篇标题一模一样");
-  assert.equal(pa.title, `${SRC.title} · ${SECTION_A.label}`);
-  assert.equal(pb.title, `${SRC.title} · ${SECTION_B.label}`);
+  /**
+   * ★ 标题就是站上的标题（用户定的）—— 分开推的几篇标题一样，
+   *   这时**只有页脚第一行**分得出是谁写的，那一行少了就是替它抹掉出处。
+   */
+  assert.equal(pa.title, SRC.title);
+  assert.equal(pb.title, SRC.title);
+  const footB = pb.markdown.slice(pb.markdown.lastIndexOf("——"));
+  assert.ok(footB.includes(SECTION_B.label), "分开推的那篇页脚没说是谁写的");
+  assert.ok(!footB.includes(SECTION_A.label), "第二篇页脚印的是第一份的作者");
 });
 
 test("C12 单份放不下：从头按整节放到放不下为止，截掉什么说出来", async () => {
@@ -630,16 +658,18 @@ test("C12 单份放不下：从头按整节放到放不下为止，截掉什么�
     sec("四、风险", 5000),
     sec("五、附录", 5000),
   ].join("\n");
+  // 预算显式给 19000：这一条钉的是"怎么截"，不跟着 XUEQIU_BUDGET 那个数走（C16 钉那个数）。
   const plans = await planDrafts(
     { ...SRC, sections: [{ ...SECTION_A, body }] },
     xueqiu(),
-    byLength
+    byLength,
+    19_000
   );
   assert.equal(plans.length, 1);
   const p = plans[0]!;
   // 放得下三节（1.5 万），放不下四节（2 万）—— 要的是**最多的那个**，不是第一个放得下的。
   assert.deepEqual(p.truncated, { kept: 3, total: 5, cut: ["四、风险", "五、附录"] });
-  assert.ok(p.estimate <= XUEQIU_BUDGET, `截完还是超：${p.estimate}`);
+  assert.ok(p.estimate <= 19_000, `截完还是超：${p.estimate}`);
 
   const md = p.article.markdown;
   // ★ 放进去的是原文的逐字节前缀，截在整节的边界上（不截在一节中间）。
@@ -682,11 +712,100 @@ test("C14 截断那几行的链接也跟着平台表的 urlInBody 走", async ()
   );
 });
 
-test("C15 认得出雪球那句「太长」（真回话原样），别的失败不算", () => {
-  // 2026-09-23 真推 MU 那一组时雪球回的原话。
-  assert.ok(isTooLongError("输入文字太长，请确认不超过20000个字"));
-  assert.ok(!isTooLongError("请先登录雪球"));
-  assert.ok(!isTooLongError("保存失败"));
+/**
+ * 雪球的两句真回话，**原样**（扩展交回来的整段 JSON）。
+ * 正文那句：2026-09-23 第一次推 MU 那一组；标题那句：同日推 AAPL 那一组，三篇都是这一句。
+ */
+const REAL_BODY_REPLY =
+  '{"results":[{"platform":"xueqiu","success":false,"timestamp":1790153853560,"error":"输入文字太长，请确认不超过20000个字","platformName":"雪球"}],"syncId":"sync_1790153852674_8aamn1cr4"}';
+const REAL_TITLE_REPLY =
+  '{"results":[{"platform":"xueqiu","success":false,"timestamp":1790157595346,"error":"输入标题太长，请确认不超过50个字","platformName":"雪球"}],"syncId":"sync_1790157595066_84hg3fl12"}';
+/** 端点拿去判的就是这一串：分档之后的 detail ＋ 原话。 */
+const said = (reply: string) => {
+  const r = classifySync(JSON.parse(reply));
+  return { ...r, text: `${r.detail} ${r.raw ?? ""}` };
+};
+
+test("C15 分得清是**哪一格**太长（两句真回话原样），别的失败不算", () => {
+  /**
+   * ⚠【2026-09-23 踩到】第一版只认「太长」两个字、测试里只喂过正文那一句 ——
+   *   AAPL 那三篇明明是标题太长，页面上印的却是"正文预算估少了、把 XUEQIU_BUDGET 往下调"。
+   *   和 docs/gate.md 第 7 节那个 `SC 13D` 同一个形态：测试自己喂的语料不全。
+   */
+  const body = said(REAL_BODY_REPLY);
+  const title = said(REAL_TITLE_REPLY);
+  assert.equal(body.tier, "failed");
+  assert.equal(title.tier, "failed");
+  assert.equal(lengthRejection(body.text), "body");
+  assert.equal(lengthRejection(title.text), "title", "标题太长被认成了正文太长");
+  // 别的失败、以及认不出是哪一格的，都不猜。
+  assert.equal(lengthRejection("雪球那边说：请先登录雪球"), undefined);
+  assert.equal(lengthRejection("雪球那边说：保存失败"), undefined);
+  assert.equal(lengthRejection("雪球那边说：太长了"), undefined, "认不出是哪一格却猜了一个");
+});
+
+test("C16 预算：比雪球的上限留足余量（用户定的「正文少很多都行，要保证能上传」）", async () => {
+  // 我们的尺子和它的差到 1.33 倍都还放得下（实测它是我们的 0.87～0.97）。
+  assert.ok(XUEQIU_BUDGET * 4 <= XUEQIU_TEXT_MAX * 3, `预算 ${XUEQIU_BUDGET} 离上限太近`);
+  // 不给预算时用的就是它。
+  const body = [sec("一、结论速览", XUEQIU_BUDGET - 2000), sec("二、估值", 3000)].join("\n");
+  const [p] = await planDrafts({ ...SRC, sections: [{ ...SECTION_A, body }] }, xueqiu(), byLength);
+  assert.equal(p!.budget, XUEQIU_BUDGET);
+  assert.ok(p!.truncated, "超了默认预算却没截");
+  assert.ok(p!.estimate <= XUEQIU_BUDGET);
+});
+
+test("C17 只有雪球**明确说正文太长**才截短重推 —— 别的一律不重推", async () => {
+  const [plan] = await planDrafts(SRC, xueqiu(), byLength);
+  const p = plan!;
+  assert.equal(shouldShrink(said(REAL_BODY_REPLY), p), true);
+  // 标题太长：截正文没用，而且标题是按上限截过的 —— 再推一遍还是同一句。
+  assert.equal(shouldShrink(said(REAL_TITLE_REPLY), p), false, "标题太长也去截正文了");
+  // ⚠ 交出去了没回话：可能已经存上了，重推就是两份（端点「不重试」那条）。
+  const text = said(REAL_BODY_REPLY).text;
+  assert.equal(shouldShrink({ tier: "unconfirmed", detail: text }, p), false, "没等到回话也重推了");
+  assert.equal(shouldShrink({ tier: "drafted", detail: text }, p), false);
+  assert.equal(
+    shouldShrink({ tier: "failed", detail: "雪球那边说：保存失败" }, p),
+    false,
+    "别的失败也重推了"
+  );
+  // 有上限：同一篇截到第 XUEQIU_MAX_SHRINKS 次就停（接着推只是在雪球门口转悠）。
+  assert.equal(shouldShrink(said(REAL_BODY_REPLY), { ...p, shrinks: XUEQIU_MAX_SHRINKS - 1 }), true);
+  assert.equal(shouldShrink(said(REAL_BODY_REPLY), { ...p, shrinks: XUEQIU_MAX_SHRINKS }), false);
+});
+
+test("C18 截短重排：一定比被拒那一篇短、预算至少降两成；合成的拆开；截到头就抛", async () => {
+  const body = [
+    sec("一、结论速览", 3000),
+    sec("二、估值", 3000),
+    sec("三、催化剂", 3000),
+    sec("四、风险", 3000),
+  ].join("\n");
+  const [p0] = await planDrafts({ ...SRC, sections: [{ ...SECTION_A, body }] }, xueqiu(), byLength);
+  assert.equal(p0!.truncated, undefined, "前提：原来整篇放得下");
+  const [p1] = await replan(p0!, xueqiu(), byLength);
+  assert.ok(p1!.estimate < p0!.estimate, "重排出来的没变短 —— 那就是原样再推一遍");
+  assert.ok(p1!.budget <= Math.floor(p0!.budget * 0.8), "预算没降够两成");
+  assert.ok(p1!.truncated, "变短了却没说截掉了什么");
+  assert.equal(p1!.shrinks, 1);
+  const [p2] = await replan(p1!, xueqiu(), byLength);
+  assert.ok(p2!.estimate < p1!.estimate, "第二次重排没再变短");
+  assert.equal(p2!.shrinks, 2);
+
+  // 合成的那一篇被拒 → 拆成每份各一篇（同 planDrafts 第 2 步），每篇都记着截过一次。
+  const [comb] = await planDrafts({ ...SRC, sections: [SECTION_A, SECTION_B] }, xueqiu(), byLength);
+  assert.equal(comb!.keys.length, 2, "前提：原来是合成的一篇");
+  const split = await replan(comb!, xueqiu(), byLength);
+  assert.deepEqual(split.map(p => p.keys), [["posts/1009"], ["posts/1010"]]);
+  assert.ok(split.every(p => p.shrinks === 1));
+
+  // 截到只剩第一节还被拒 → 抛（端点据此停下，不会一直推下去）。
+  const two = [sec("一、结论速览", 3000), sec("二、估值", 3000)].join("\n");
+  const [q0] = await planDrafts({ ...SRC, sections: [{ ...SECTION_A, body: two }] }, xueqiu(), byLength);
+  const [q1] = await replan(q0!, xueqiu(), byLength);
+  assert.deepEqual(q1!.truncated?.cut, ["二、估值"]);
+  await assert.rejects(replan(q1!, xueqiu(), byLength), /连开头加第一节都放不下/);
 });
 
 /* ── D 组：接线 ─────────────────────────────────────────────────────── */
@@ -724,9 +843,21 @@ test("D3 只存草稿：端点向扩展要的方法只有 checkAuth / syncArticl
   assert.deepEqual([...new Set(sm)], ["checkAuth"]);
 });
 
-test("D4 不重试：每一篇的 syncArticle 只发一次", () => {
+test("D4 不重试：syncArticle 只有一处；回到队列只有「雪球明确说正文太长」那一条路", () => {
   const n = (DRAFT.match(/request\(\s*"syncArticle"/g) ?? []).length;
   assert.equal(n, 1, "syncArticle 出现了不止一次 —— 超时那次可能已经存上了，重试就是两份");
+  /**
+   * ★ 截短重推不是重试：排回队头的是 `replan()` 排出来的**更短的另一篇**，
+   *   而且只在 `shouldShrink()` 为真时（= 雪球拒收了，什么都没存）。
+   *   别的路径往队列里塞东西 = 把同一篇原样再推一遍。
+   */
+  assert.ok(
+    /if \(shouldShrink\(result, plan\)\) \{\s*try \{\s*queue\.unshift\(\.\.\.\(await replan\(plan, platform, measure\)\)\);\s*continue;/.test(
+      DRAFT
+    ),
+    "截短重推没接在 shouldShrink 后面"
+  );
+  assert.equal((DRAFT.match(/queue\.(unshift|push)\(/g) ?? []).length, 1, "队列有第二个入口");
 });
 
 test("D5 渲染时套站上那份消毒 schema（导出件是原文，裸 HTML 还在里面）", () => {
@@ -822,22 +953,34 @@ test("D12 端点走 planDrafts；量长度和推之前渲染是同一台；一�
     "端点没走 planDrafts —— 超长的整篇会被原样推过去，雪球拒"
   );
   // ★ 尺子就是推之前渲染 HTML 的那一台：换一台量，估的数和推过去的就对不上。
-  assert.ok(/async md => \(await renderHtml\(md\)\)\.length/.test(DRAFT), "量长度用的不是 renderHtml");
+  assert.ok(
+    /const measure: Measure = async md => \(await renderHtml\(md\)\)\.length/.test(DRAFT),
+    "量长度用的不是 renderHtml"
+  );
+  assert.ok(/planDrafts\([\s\S]{0,200}?platform,\s*measure\s*\)/.test(DRAFT), "排版没用那把尺子");
   assert.ok(
     /const html = await renderHtml\(plan\.article\.markdown\)/.test(DRAFT),
     "推过去的 HTML 不是按计划里那一篇渲染的"
   );
-  assert.ok(/for \(const \[i, plan\] of plans\.entries\(\)\)/.test(DRAFT), "不是一篇一篇推的");
+  assert.ok(
+    /while \(queue\.length > 0\) \{\s*const plan = queue\.shift\(\)!;/.test(DRAFT),
+    "不是一篇一篇推的"
+  );
   assert.ok(!/Promise\.all/.test(DRAFT), "并发推了 —— 撞了分不出是哪篇");
   // 停不停只读 stopsDraftBatch 一处；停下时没推的那几篇要列出来（不许悄悄不推）。
   assert.ok(
-    /if \(stopsDraftBatch\(result\.tier\)\) \{[\s\S]{0,200}?notPushed\.push[\s\S]{0,80}?break;/.test(DRAFT),
+    /if \(stopsDraftBatch\(result\.tier\)\) \{\s*notPushed = queue\.map\([\s\S]{0,80}?\);\s*break;/.test(DRAFT),
     "停下来的时候没把没推的列出来"
   );
-  // 一篇里装了几份，账就记几笔（卡片按组里每一份的 key 去查）。
+  // 一篇里装了几份，账就记几笔（卡片按组里每一份的 key 去查），而且记着是谁写的。
   assert.ok(/for \(const key of plan\.keys\) \{\s*recordDraft\(\s*key,/.test(DRAFT), "没按份记账");
-  // 雪球说太长要单独说（去调预算），不和别的"没存上"混成一句。
-  assert.ok(/isTooLongError\(/.test(DRAFT) && /XUEQIU_BUDGET/.test(DRAFT));
+  assert.ok(/who: whoOf\(plan\),\s*\}\);/.test(DRAFT), "账上没记是谁写的");
+  // 退回来的是哪一格太长，各说各的（第一版把标题太长说成了正文预算估少了）。
+  assert.ok(/if \(rejected === "title"\)/.test(DRAFT), "标题太长没单独说");
+  assert.ok(
+    /rejected === "body" &&\s*\(plan\.shrinks \?\? 0\) >= XUEQIU_MAX_SHRINKS/.test(DRAFT),
+    "截到上限还被说太长的那一次没单独说"
+  );
 });
 
 test("D13 每一份的地址 / 日期 / 标的取它**自己的**，不是整组代表那一条的", () => {
@@ -897,6 +1040,30 @@ test("D14 账本：合成一篇的那条卡片上只印一行；分开推的各�
   const cut = draftLabel({ ...older, truncated: { kept: 3, total: 5 } }, tz)!;
   assert.equal(new Set([whole, comb, cut]).size, 3, "合成的 / 截过的 / 完整的说了同一句话");
   assert.match(cut, /3\/5/, "截过的没说截到哪");
+
+  /**
+   * ★ 分开推的几篇标题一样（站上的标题），卡片上那几行靠「谁写的」分 —— 放在最前面。
+   *   从**记账那一步**起走一遍（`draftRecord()` 是 `recordDraft()` 写进账里的那一笔）：
+   *   只测 `draftLabel()` 的话，记账时把名字丢了照样绿（同 D10 那条"判据算好了不等于有人读它"）。
+   */
+  const AT = new Date("2026-09-23T10:05:00.000Z");
+  const recOf = (who: string) =>
+    draftRecord("drafted", "AAPL", "https://mp.xueqiu.com/write/draft/9", { who }, AT)!;
+  const claude = draftLabel(recOf("Anthropic Claude（Opus-5-5）"), tz)!;
+  const gemini = draftLabel(recOf("Google Spark（Gemini-3.1-Pro）"), tz)!;
+  assert.ok(claude.startsWith("Anthropic Claude（Opus-5-5）："), `没说是谁写的：${claude}`);
+  assert.notEqual(claude, gemini, "两个作者的两篇在卡片上长得一样");
+  // 还没轮到推的不记；「合成」只在两份以上才记。
+  assert.equal(draftRecord("no_extension", "AAPL"), undefined);
+  assert.equal(draftRecord("drafted", "AAPL", undefined, { combined: 1 })!.combined, undefined);
+  assert.equal(draftRecord("drafted", "AAPL", undefined, { combined: 3 })!.combined, 3);
+  // 端点记账走的就是这一笔（不是另拼一份）。
+  assert.ok(
+    /const rec = draftRecord\(tier, title, draftUrl, extra\);/.test(
+      codeOnly(read("src/dev/xueqiuDrafts.ts"))
+    ),
+    "recordDraft 没走 draftRecord"
+  );
 });
 
 test("D15 页面：一次点击出几篇就印几篇、各有各的「打开草稿」；没轮到推的也列出来", () => {
@@ -909,4 +1076,9 @@ test("D15 页面：一次点击出几篇就印几篇、各有各的「打开草�
   assert.ok(/results\.forEach\(/.test(script), "只报了第一篇");
   assert.ok(/for \(const np of notPushed\)/.test(script), "没轮到推的没列出来 —— 和推过了长得一样");
   assert.ok(/results\.map\(r => r\.draftUrl\)/.test(script), "只给了第一篇的草稿链接");
+  // 分开推的几篇标题一样：结果行和"没轮到推"那几行都要带上是谁写的。
+  assert.ok(/r\.who \? ` · \$\{r\.who\}` : ""/.test(script), "结果行没说是谁写的");
+  assert.ok(/np\.who \? ` · \$\{np\.who\}` : ""/.test(script), "没轮到推的那几行没说是谁写的");
+  // 被雪球退回来、截短重推过的要说出来（草稿里那篇比打算推的短）。
+  assert.ok(/if \(r\.shrinks\)/.test(script), "截短重推过的没说");
 });

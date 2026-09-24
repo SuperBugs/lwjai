@@ -44,6 +44,23 @@ const need = (id: string): SocialPlatform => {
   return p;
 };
 
+/**
+ * 一个**编的**平台：没有 cashtag 约定、不许图里带链接、已经停用。
+ * 【2026-09-23】这几条原来拿小红书那一行当例子，那一行按用户要求整行删了（「小红书不要了」）。
+ * 它们钉的是**判据本身**（没有 cashtag 约定就不印代码那一行、停用的平台走到这儿要抛），
+ * 不是小红书 —— 所以换成一个编的，而不是跟着删掉。
+ */
+const GONE: SocialPlatform = {
+  id: "gone",
+  name: "某个停用的平台",
+  mode: "retired",
+  modeWhy: "测试用：一个说得出原因的停用平台。",
+  urlOnCard: false,
+  urlInBody: false,
+  siteUrl: "https://example.com/",
+  calibrated: true,
+};
+
 const SRC: CommunityPostSource = {
   kindLabel: "研究报告",
   title: "Zoom 还有没有戏",
@@ -58,26 +75,34 @@ const SRC: CommunityPostSource = {
 
 /* ── A 组：平台表 ───────────────────────────────────────────────────── */
 
-test("A1 停用的平台留在表里，而且说得出为什么", () => {
-  // ⚠ 从表里删掉的话，「这个站不发小红书了」和「小红书那块坏了」长得一模一样，
-  //   半年后没人记得起为什么没有它。
-  assert.ok(RETIRED_PLATFORMS.length > 0, "小红书被整个删掉了");
+test("A1 停用那一档：有的话必须说得出为什么，而且不混进页面要列的那张表", () => {
+  /**
+   * 【2026-09-23 用户要的】小红书那一行（原来唯一一条 retired）整行删了 —— 原话「小红书不要了」。
+   *   这里原来钉的是 `RETIRED_PLATFORMS.length > 0`（「小红书被整个删掉了」）：那条存在就是为了
+   *   逼着"从表里删掉"变成一个**有人表态**的决定。用户表态了，钉子跟着撤，原因转记在 docs/engineering-notes.md。
+   */
   for (const p of RETIRED_PLATFORMS) {
     assert.ok(p.modeWhy && p.modeWhy.length > 10, `${p.name} 没说为什么停用`);
   }
   // 停用的不许混进页面要列的那张表。
   assert.ok(!ACTIVE_PLATFORMS.some(p => p.mode === "retired"));
+  assert.ok(ACTIVE_PLATFORMS.length > 0, "一个还在发的平台都没有");
 });
 
-test("A2 小红书那一档 urlOnCard 必须是 false —— 那正是导流细则针对的东西", () => {
-  // 细则：「发布其他平台的链接…以及包含上述信息（直接、变形或植入）的图文」，
-  // 平台有 OCR。哪天真重开，默认就得是不印。
-  assert.equal(need("xhs").urlOnCard, false);
-  assert.equal(need("xhs").urlInBody, false);
-
-  // 而明确允许外链的那两家照印 —— 这一格分档才是这张表存在的理由。
+test("A2 卡上印不印网址跟着平台走；小红书要是回来，那一格必须是 false（那正是导流细则针对的东西）", () => {
+  // 明确允许外链的那两家照印 —— 这一格分档才是这张表存在的理由。
   assert.equal(need("xueqiu").urlOnCard, true);
   assert.equal(need("futu").urlOnCard, true);
+
+  /**
+   * 小红书那一行 2026-09-23 按用户要求删了。它的细则：「发布其他平台的链接…以及包含上述信息
+   * （直接、变形或植入）的图文」，平台有 OCR。这一段是给**有人把它加回来**的那一天留的。
+   */
+  const xhs = findPlatform("xhs");
+  if (xhs) {
+    assert.equal(xhs.urlOnCard, false, "小红书加回来了，卡上还印着网址");
+    assert.equal(xhs.urlInBody, false);
+  }
 });
 
 test("A3 没核过的数必须自报家门，不许和已知事实长得一样", () => {
@@ -125,7 +150,8 @@ test("A5 就是这四档 —— 再加一档（比如「替人按发布」）会
   // draft 那一档成立的三个前提，文件头里一个都不许少（少一个就是"替人按发布"）。
   assert.match(src, /结构上只能存草稿/);
   assert.match(src, /你真的浏览器/);
-  assert.match(src, /一次一篇、人来点/);
+  assert.match(src, /一次点一组、人来点/);
+  assert.match(src, /不跨组排队/);
 
   // 表里每一行也得落在这三档里（类型之外再拦一道，表是手写的）。
   for (const p of SOCIAL_PLATFORMS) {
@@ -159,9 +185,6 @@ test("A7 两家的代码写法就是它们自己的写法", () => {
   // 没填公司名时只放代码 —— 编不出一个名字来。
   assert.equal(need("xueqiu").cashtag!("ZM"), "$ZM$");
   assert.equal(need("futu").cashtag!("ZM"), "$ZM.US$");
-
-  // 小红书没有这种约定，undefined 不是漏填（硬加一个 $ZM 在那边是乱码）。
-  assert.equal(need("xhs").cashtag, undefined);
 });
 
 /* ── B 组：文案 ─────────────────────────────────────────────────────── */
@@ -185,8 +208,8 @@ test("B1 代码那一行走平台表；不知道上限就不截", () => {
   const ft = cashtagLine(three, need("futu"));
   assert.equal(ft.match(/\$/g)!.length / 2, 4, "富途那档不该截");
 
-  // 没有 cashtag 约定的平台整行不出现。
-  assert.equal(cashtagLine(three, need("xhs")), "");
+  // 没有 cashtag 约定的平台整行不出现（原来拿小红书当例子，那一行删了，换成编的）。
+  assert.equal(cashtagLine(three, GONE), "");
 });
 
 test("B2 标题就是票代码时换成摘要 —— 理由是信息量，不是预算", () => {
@@ -260,7 +283,7 @@ test("B5 一组里一份都没有要抛，不许兜一个没出处的单条", ()
 
 test("B6 停用的平台走到这儿要抛 —— 它根本不该有入口", () => {
   // 兜过去的症状是：照常生成一篇，发到一个已经停用的平台。
-  assert.throws(() => communityPost(SRC, need("xhs")), /停用/);
+  assert.throws(() => communityPost(SRC, GONE), /停用/);
 });
 
 test("B7 标题超了只报，不拿一个没核过的数去截真标题", () => {
@@ -278,12 +301,15 @@ test("B7 标题超了只报，不拿一个没核过的数去截真标题", () =>
     "标题被截了 —— 那个 80 是猜的，拿推测去改内容不行"
   );
 
-  // 雪球没有已知上限，那一档永远不报。
-  assert.equal(
-    communityPost({ ...SRC, title: "字".repeat(300) }, need("xueqiu"))
-      .titleOver,
-    undefined
-  );
+  /**
+   * 雪球的上限是 50 —— 2026-09-23 雪球服务端的原话「输入标题太长，请确认不超过50个字」
+   * （这里原来钉的是「雪球没有已知上限，永远不报」，照的是帮助页，被服务端推翻了）。
+   * 手动粘的这一段照样**只报不截**：人粘之前自己改。
+   */
+  assert.equal(need("xueqiu").titleMax, 50);
+  const xq = communityPost({ ...SRC, title: "字".repeat(60) }, need("xueqiu"));
+  assert.equal(xq.titleOver, 10, "超了雪球的 50 字没报");
+  assert.equal([...xq.title].length, 60, "手动粘的那段被截了 —— 这一处只报");
 });
 
 /* ── C 组：/_share 上的接线（没接上全是零症状的）────────────────────── */
@@ -372,14 +398,14 @@ test("C5 两种「去发帖」措辞不许统一 —— 只有 X 能预填", () 
 /* ── D 组：`urlOnCard` 真的接上了封面卡（不接上就是个假开关）────────── */
 
 test("D1 不印地址那一档：整块不画，也不占中文字形", () => {
-  // 左下角那两行是**一对**：地址不画了，「报告全文：」也不该单独留着。
+  // 左下角那两行是**一对**：地址不画了，「免费全文报告：」也不该单独留着。
   const base = {
     kindLabel: "研究报告",
     title: "测一测",
     voices: [{ description: "一句话。" }],
     tags: ["财报"],
     date: "2026-09-23",
-    fullTextLabel: "报告全文：",
+    fullTextLabel: "免费全文报告：",
   };
   const on = planXhsCard({ ...base, url: "https://lwj.ai/r/1002" });
   const off = planXhsCard({ ...base, url: undefined });
@@ -387,9 +413,9 @@ test("D1 不印地址那一档：整块不画，也不占中文字形", () => {
   assert.equal(on.url, "https://lwj.ai/r/1002");
   assert.equal(off.url, undefined);
 
-  assert.ok(xhsCardText(on).includes("报告全文："), "印地址那档得取这几个字");
+  assert.ok(xhsCardText(on).includes("免费全文报告："), "印地址那档得取这几个字");
   assert.ok(
-    !xhsCardText(off).includes("报告全文："),
+    !xhsCardText(off).includes("免费全文报告："),
     "不画了还在取字形 —— 多一次往返，而且缓存键对不上"
   );
 });
@@ -397,7 +423,7 @@ test("D1 不印地址那一档：整块不画，也不占中文字形", () => {
 test("D2 渲染那边真的读 plan.url —— 判据算好了不等于有人读它", () => {
   /**
    * 同 `xhsCard.test.ts` 的 B7：一条"判据只写一处"的纪律，没有东西钉着
-   * 消费方真去读它，就只活在注释里。写死一个地址的话这张卡在小红书那档
+   * 消费方真去读它，就只活在注释里。写死一个地址的话这张卡在不许带链接的那档
    * 照样印网址，而四处全绿。
    */
   const card = readFileSync(join(ROOT, "src/utils/xhsCard.ts"), "utf8").replace(
@@ -427,50 +453,46 @@ test("D3 出图那一路真的按平台决定印不印", () => {
   );
 });
 
-test("D4 /_xhs 上「替你按发送」的入口跟着平台表走，不是写死关掉", () => {
+test("D4 /_share 上雪球 / 富途那两块的图片卡片，按**那一块的平台**出", () => {
   /**
-   * 【2026-09-23】停用，「发小红书」按钮和批量队列一起收起来了。
-   * ★ 判据必须是**平台表里那一行的 mode**：写成一个永远 false 的常量的话，
-   *   那张表就成了一句没人读的注释，而重新开张那天没有任何一处会跟着变
-   *   （docs/engineering-notes.md 第一节那个 `scan.length === 1` 的形态）。
+   * 【2026-09-23 用户要的】「发到富途有时候我要发图片卡片」。
+   * ★ 卡上印不印网址跟着平台表走（`urlOnCard`），所以那条链接必须带**这一块自己的**平台 id ——
+   *   写死一个、或者不带（接口就回落到默认平台）的话，富途那块给的是雪球的卡，
+   *   两家规矩一样的今天看不出来，不一样的那天就是一张不该印网址的卡印着网址。
+   * ★ 地址和文件名只许从 `cardsPlan.ts` 来（`/_cards` 那一页读的也是它）。
+   * （原来这里的 D4 / D5 钉的是 /_xhs 上「发小红书」那几个入口的门控 —— 那一套删了。）
    */
-  const page = readFileSync(join(ROOT, "src/dev/xhs.astro"), "utf8");
-  const head = page.slice(0, page.indexOf("\n---", 10)).replace(
+  const head = PAGE.slice(0, PAGE.indexOf("\n---", 10)).replace(
     /\/\*[\s\S]*?\*\//g,
     ""
   );
+  // ⚠ 从 `blocks: [` 往后找：文件前面排按钮那一排（TABS）也有一句 `...ACTIVE_PLATFORMS.map(p =>`，
+  //   从那儿切的话 X 那一段切出来的是按钮，不是那一块（写这条时当场切错过一次）。
+  const blocks = head.slice(head.indexOf("blocks: ["));
+  const at = blocks.indexOf("...ACTIVE_PLATFORMS.map(p =>");
+  assert.ok(at > 0, "blocks 里找不到社区那几块");
+  const map = blocks.slice(at);
   assert.ok(
-    /findPlatform\(\s*["']xhs["']\s*\)/.test(head),
-    "没去平台表里查那一行"
+    /card: \{\s*png: cardPngUrl\(entry\.collection, slug, p\.id\),/.test(map),
+    "社区那一块的卡没带自己的平台 id"
+  );
+  assert.ok(/filename: cardFileName\(/.test(map), "文件名不是 cardFileName() 给的");
+  assert.ok(/urlOnCard: p\.urlOnCard/.test(map), "那一行说明不是按平台表的 urlOnCard 印的");
+  // X 那一块不给（X 不在平台表里，没有它的 urlOnCard）。
+  const xBlock = blocks.slice(0, at);
+  assert.ok(/id: "x"/.test(xBlock), "blocks 里第一块不是 X 了");
+  assert.ok(/card: undefined/.test(xBlock), "X 那一块也给了卡 —— 它没有印不印网址的规矩");
+
+  const markup = PAGE.slice(PAGE.indexOf("\n---", 10)).replace(
+    /\{\s*\/\*[\s\S]*?\*\/\s*\}/g,
+    ""
   );
   assert.ok(
-    /canAutoPublish\s*=\s*\w+\?\.mode === ["']official["']/.test(head),
-    "门控不是按 mode 判的 —— 写死的开关不会跟着平台表变"
+    /<a\s+href=\{block\.card\.png\}\s+download=\{block\.card\.filename\}/.test(markup),
+    "下载那个链接没接上"
   );
-
-  // 三处入口都得跟着它：工具栏、勾选框、那个按钮。
-  const markup = page.slice(page.indexOf("\n---", 10));
-  for (const [what, re] of [
-    ["批量工具栏", /canAutoPublish && \(\s*<div\s+data-xhs-bar/],
-    ["勾选框", /canAutoPublish && \(\s*<label[^>]*>\s*<input\s+type="checkbox"/],
-    ["发小红书按钮", /canAutoPublish && \(\s*<button[\s\S]{0,200}data-xhs-publish/],
-  ] as const) {
-    assert.ok(re.test(markup), `${what}没跟着门控 —— 它还会渲染出来`);
-  }
-});
-
-test("D5 撤掉之后必须说一句为什么，并指出现在该去哪儿", () => {
-  /**
-   * 按钮静默消失的话，「不发小红书了」和「那个按钮坏了」字节级相同，
-   * 而后者没有任何人会发现。光说"没了"也不行 —— 那是把人晾在半路上。
-   */
-  const page = readFileSync(join(ROOT, "src/dev/xhs.astro"), "utf8");
-  const markup = page
-    .slice(page.indexOf("\n---", 10))
-    .replace(/\{\s*\/\*[\s\S]*?\*\/\s*\}/g, "");
-  assert.ok(/data-xhs-retired/.test(markup), "撤掉了但页面上一个字都没说");
-  assert.ok(/modeWhy/.test(markup), "说了没了，但没印为什么");
-  assert.ok(/\/_share/.test(markup), "没告诉人现在该去哪儿出文案");
+  // 印不印网址要在点之前就说出来。
+  assert.ok(/block\.card\.urlOnCard\s*\?/.test(markup), "没说这张卡上有没有网址");
 });
 
 test("C6 社区那两家的落款用整串，不许抄 X 的产品名", () => {

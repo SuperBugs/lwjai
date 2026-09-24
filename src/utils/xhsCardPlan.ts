@@ -162,7 +162,7 @@ export const XHS_DESC_MAX = 88;
  * ★ 这**推翻了这张卡最初「刻意不折叠」的设计**，而且推翻得有道理：当初不折的
  *   理由是"一张卡只能印代表那条的落款，等于替另外两个智能体认领 / 抹掉出处"。
  *   现在**每一行自己带着名字**，那个反对意见就不成立了 —— 折叠反而比原来更准确。
- *   （原来的设计和它的理由记在 `src/dev/xhs.astro` 文件头，别当成漏改。）
+ *   （原来的设计和它的理由记在 `src/dev/cards.astro` 文件头，别当成漏改。）
  * ★ 归组的钥匙**不在这里**：调用方用 `foldQaGroups()` 折好再喂进来，和列表卡片、
  *   详情页那排切换、`/_share` 同一把（`related.ts` 的 `qaGroupKey()`）。
  *   在这儿另写一套"标题一样就算一组"是同一个判据的第二份拷贝。
@@ -283,7 +283,7 @@ export interface XhsVoice {
   /**
    * 「OpenAI ChatGPT（GPT-6-Pro）」—— **和站上那张 AgentModelChip 同一个判据**
    * 算出来的整串（`findAgent()` ＋ `modelSlot()` / `modelSlotLabel()`），
-   * 由调用方算好传进来（`xhs-card.ts` 的 `bylineOf()`）。
+   * 由调用方算好传进来（`xhsEntry.ts` 的 `bylineOf()`）。
    *
    * ★【2026-09-22 第四轮，用户要的】原来这一格是**只有产品名**的 `agentName`
    *   （`ChatGPT`），那是从 `sharePost.ts` 抄来的 —— 而那边剪掉厂商和模型的理由是
@@ -316,7 +316,7 @@ export interface XhsCardSource {
   voices: readonly XhsVoice[];
   /**
    * 只有一份时那行完整落款「Anthropic Claude（Opus-5）」，三档由调用方按
-   * `modelSlot()` 算好（见 `xhs-card.ts`）。
+   * `modelSlot()` 算好（见 `xhsEntry.ts`）。
    *
    * ⚠ 几份那一档**传了也会被丢掉**（`planXhsCard()` 里强制），不是忘了画：
    *   名字已经在每一行上，页脚再印一个「某某（模型）」会被读成
@@ -326,7 +326,7 @@ export interface XhsCardSource {
   /** YYYY-MM-DD，北京时间（`config.site.timezone`）。 */
   date: string;
   /**
-   * 左下角那两行的第一行：「报告全文：」/「回答全文：」/…
+   * 左下角那两行的第一行：「免费全文报告：」/「免费全文回答：」/…
    * 由调用方按集合算好（`fullTextLabelFor()`）再传进来，和 `kindLabel` 同一条路。
    */
   fullTextLabel: string;
@@ -402,7 +402,7 @@ export interface XhsCardPlan {
   descSize: number;
   tags: string[];
   byline?: string;
-  /** 左下角第一行「报告全文：」。⚠ `url` 没有时这一行也不画（它俩是一对）。 */
+  /** 左下角第一行「免费全文报告：」。⚠ `url` 没有时这一行也不画（它俩是一对）。 */
   fullTextLabel: string;
   /**
    * 左下角第二行：落地页的绝对地址。
@@ -437,7 +437,7 @@ export function xhsCardText(plan: XhsCardPlan): string[] {
     ...plan.voices.flatMap(v => [v.label ?? "", v.description]),
     plan.moreVoices > 0 ? moreVoicesLabel(plan.moreVoices) : "",
     ...plan.tags.map(t => `#${t}`),
-    // ⚠ 不印地址那一档连「报告全文：」也不画，所以它也不该占字形
+    // ⚠ 不印地址那一档连「免费全文报告：」也不画，所以它也不该占字形
     //   —— 取了不画只是多一次往返，但缓存键会因此对不上。
     plan.url ? plan.fullTextLabel : "",
     plan.byline ?? "",
@@ -452,10 +452,12 @@ export function xhsCardText(plan: XhsCardPlan): string[] {
  *
  * 【2026-09-22 用户要的】原话是「改为报告全文和文章网址」。⚠「报告」这个词
  * **只对研究报告成立** —— 印在一条问答上就是把回答叫成了报告，印在教程上更不对。
- * 所以这里和 `sharePost.ts` 的 `KIND_WORDS` 同一个形状：一张按集合的小词表，
- * 研究报告那一档就是用户写的「报告全文」。
+ * 所以这里和 `sharePost.ts` 的 `KIND_WORDS` 同一个形状：一张按集合的小词表。
+ * ★【2026-09-23 用户要的】「图片上的全文报告加个免费，免费全文报告」—— 研究报告那一档
+ *   **就是用户写的那几个字**「免费全文报告」，另外三档照同一个语序换词
+ *   （免费全文回答 / 教程 / 提示词）。「免费」是实话：站上每一篇都不要钱、不要登录。
  *
- * ★ 表外的集合回落到「全文」。这一档是**安全的**，不是在猜：
+ * ★ 表外的集合回落到「免费全文」。这一档是**安全的**，不是在猜：
  *   「全文」对任何一种内容都成立（`sharePost.ts` 全站就用这一个词）。
  *   ⚠ 别学 provenance 那种"不知道就得红" —— 那里回落是**替内容认领出身**，
  *     而这里回落只是少了一个更贴切的词，不会说出任何一句假话。
@@ -465,7 +467,7 @@ export function fullTextLabelFor(collection: string): string {
     { posts: "报告", qa: "回答", guides: "教程", prompts: "提示词" }[
       collection
     ] ?? "";
-  return `${word}全文：`;
+  return `免费全文${word}：`;
 }
 
 /**

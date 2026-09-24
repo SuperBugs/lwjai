@@ -124,7 +124,8 @@ export function tagOptions(): { label: string; value: string }[] {
  * 这几个标签里，哪些**不在表里** —— 全站唯一判据。
  *
  * 读它的地方：`src/content.config.ts` 四个集合的 schema（构建期拦）、
- * 粘贴导入（`scripts/content/importPlan.ts`，把认不出来的丢掉并记一条 note）。
+ * 粘贴导入（`scripts/content/importPlan.ts`，把认不出来的丢掉并记一条 note）、
+ * 后台那一格的默认值（下面的 `resolveDefaultTags()`）。
  * ★ 别在别处再写一份 `TAGS.includes(...)`：两处各写一份的那天，就是后台说"这个标签
  *   不存在"而构建说"没问题"的那天（docs/engineering-notes.md 坑 8 那个形态）。
  */
@@ -140,4 +141,82 @@ export function unknownTagsMessage(unknown: readonly string[]): string {
     `（现在表里有：${TAGS.join(" / ") || "一个都没有"}）。\n` +
     `⚠ 标签是封闭词表：表里没有的标签在 /t 上不会有自己的页面，而条目在后台也打不开。`
   );
+}
+
+/**
+ * 后台新建一篇**研究稿**时，「标签」那一格预先勾上的。【2026-09-23 用户要的】
+ *
+ * 用户原话「管理页面研究稿，默认标签为个股研究」：站上的研究稿几乎篇篇是逐只票的研究
+ * （当天 34 篇里 33 篇打着它），每新建一篇都要去勾同一格。
+ *
+ * ★ **只管后台新建那一刻**（Keystatic 的默认值只喂新建表单）。刻意不跟的三处：
+ *   已有条目（没打标签的，打开还是没打）；构建期 schema（在那儿补的话，一篇刻意不打
+ *   标签的稿子会被悄悄归进这个标签页）；两个粘贴导入口（那边的标签是模型照着
+ *   `{{tags}}` 从表里挑的，挑了什么就是什么）。
+ * ★ 只有研究稿有。问答 / 教程 / 提示词那三格照旧空着 —— 教程默认勾一个「个股研究」是错的。
+ * ⚠ 代价和智能体那一格换默认值时同一种（keystatic.config.ts 里 `agent` 那段注释）：
+ *   存下来的文件看不出这个勾是默认的还是人勾的。一篇讲宏观、讲方法论的研究稿忘了取消，
+ *   它就会出现在这个标签页里，而四处全绿。这是拿"每篇少勾一下"换的，是个决定。
+ * ⚠ 这里写的是**标签本身那几个字**，表里改名 / 删掉之后它就指向一个不存在的标签 ——
+ *   那种时候**不预先勾**、那一格的说明改口，见下面两个函数。
+ */
+export const POSTS_DEFAULT_TAGS: readonly string[] = ["个股研究"];
+
+/**
+ * 默认要勾的那几个，按**当前这张表**分成两份：还在表里的（真的预先勾上）/
+ * 已经不在表里的（不勾，由 `defaultTagsNote()` 说出来）。
+ *
+ * ★ 为什么非滤不可：Keystatic 的 `fields.multiselect` **不核对默认值在不在选项里**
+ *   （`fields.select` 会在配置求值那一刻就抛，多选不会 —— 读的 @keystatic/core 0.6.9 源码）。
+ *   一个表里没有的默认值在表单上**勾不出来、看不见**，存盘时却原样写进新稿子；
+ *   那一条随后在后台打不开（parse 对表外的值直接抛）、构建也红 ——
+ *   而人从头到尾没见它被勾上过。
+ * ★ "在不在表里"只问 `unknownTags()` 一处（它文件头那条纪律）。
+ */
+export function resolveDefaultTags(wanted: readonly string[]): {
+  applied: string[];
+  missing: string[];
+} {
+  const missing = unknownTags(wanted);
+  return {
+    applied: wanted.filter(tag => !missing.includes(tag)),
+    missing,
+  };
+}
+
+/**
+ * 那一格的说明里关于默认值的那一句 —— **三档，字节两两不同**：
+ *
+ * | 档 | 什么时候 | 说什么 |
+ * |---|---|---|
+ * | 勾上了 | 有默认、在表里 | 默认勾着哪个，不是这一类记得取消 |
+ * | 该勾没勾 | 有默认、表里已经没有了 | 本该勾哪个、为什么这次没勾、去哪儿改 |
+ * | 没有默认 | 这个集合本来就没有（问答 / 教程 / 提示词） | 空串，那一格的说明和原来一字不差 |
+ *
+ * ⚠ 第二档不许省成空串：省掉的话"默认标签被删了"和"这个集合本来就没有默认"在后台
+ *   长得一模一样，人只会觉得"咦，这次怎么没勾上"，而且没有任何一处告诉他去哪儿改。
+ * ⚠ 第二档也不许说成"默认勾着…"：那是替一个表里已经没有的标签打广告
+ *   （keystatic.config.ts 的 `tagsField()` 说明里"不许举具体标签当例子"同一条理由）。
+ */
+export function defaultTagsNote({
+  applied,
+  missing,
+}: {
+  applied: readonly string[];
+  missing: readonly string[];
+}): string {
+  const quote = (tags: readonly string[]) => tags.map(t => `「${t}」`).join("");
+  let note = "";
+  if (applied.length > 0) {
+    note +=
+      `★ 新建时默认已经勾上${quote(applied)} —— ` +
+      "这一篇不是这一类就记得取消，不取消它就会出现在那个标签页里。";
+  }
+  if (missing.length > 0) {
+    note +=
+      `⚠ 新建时本该默认勾上${quote(missing)}，但标签表里已经没有` +
+      `${missing.length > 1 ? "它们" : "它"}了（改名或删掉了），所以这次没有预先勾 —— ` +
+      "要换默认标签，去改 src/config/tags.ts 的 POSTS_DEFAULT_TAGS。";
+  }
+  return note;
 }

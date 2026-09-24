@@ -6,7 +6,6 @@ import { getSortedPosts } from "@/utils/getSortedPosts";
 import { foldQaGroups } from "@/utils/qaGroups";
 import { entrySlug, entryUrl } from "@/utils/getPostPaths";
 import { fullTextLabelFor, type XhsCardSource } from "@/utils/xhsCardPlan";
-import type { XhsPostSource } from "@/utils/xhsPost";
 import type { XueqiuArticleSource } from "@/utils/xueqiuArticle";
 import { symbolNames } from "@/config/symbols";
 import { agentDisplayName, findAgent } from "@/config/agents";
@@ -26,21 +25,24 @@ dayjs.extend(utc);
 dayjs.extend(timezone);
 
 /**
- * 「`?c=<集合>&s=<号>` 指的是哪一组内容，它的卡和它的文案分别该印什么」——
- * `/_xhs/card.png`（出图）和 `/_xhs/publish`（发帖）**共用这一份**。
+ * 「`?c=<集合>&s=<号>` 指的是哪一组内容，它的卡和它的长文分别该印什么」——
+ * `/_cards/card.png`（出图）、`/_xueqiu/draft`（推雪球长文）、`/_share` 和 `/_cards`
+ * 那两页**共用这一份**。
+ * （文件名还叫 xhs 是历史原因：它最早是小红书出图 ＋ 发帖那两个端点共用的；
+ *   小红书那一套 2026-09-23 按用户要求删了，出图留着。）
  *
  * ## ★ 为什么必须共用
  *
- * 两个端点各查一次、各拼一次的话，它们可能**描述的不是同一条内容**：
+ * 几个出口各查一次、各拼一次的话，它们可能**描述的不是同一条内容**：
  * 归组的口径、取代表那条的口径、落款的算法……任何一处分家，结果就是
- * **图是 A 的、文案是 B 的**，而页面、构建、测试四处全绿。
+ * **图是 A 的、字是 B 的**，而页面、构建、测试四处全绿。
  * 发出去之后也看不出来 —— 读者只会觉得这张图和这段字对不上。
  *
  * ## 两条前提照旧（docs/gate.md 7.5）
  *
  *   1. **草稿进不来**：`getSortedPosts()` = postFilter。
- *   2. **给出去的是字段白名单**，不是 `entry.data`（下面两个 `...SourceOf` 逐格列）。
- *      图片里的字和发出去的笔记都没有下游能再检查一遍。
+ *   2. **给出去的是字段白名单**，不是 `entry.data`（下面几个 `...SourceOf` 逐格列）。
+ *      图片里的字没有下游能再检查一遍。
  */
 
 /** 折组之后手上那几条的形状（`foldQaGroups` 是泛型的，这里只用得着这几格）。 */
@@ -123,9 +125,9 @@ async function routedEntries() {
   const missing = routed.filter(k => !(k in byKey));
   if (missing.length > 0) {
     throw new Error(
-      `/_xhs 漏了集合：${missing.join(" / ")}。\n` +
-        `上面补一行 getCollection("<集合>") —— 漏掉的那个集合在这一页上` +
-        `根本没有封面图，而页面照常渲染、一句话都不说。`
+      `xhsEntry 漏了集合：${missing.join(" / ")}。\n` +
+        `上面补一行 getCollection("<集合>") —— 漏掉的那个集合根本出不了图片卡片、` +
+        `也推不了雪球长文，而页面照常渲染、一句话都不说。`
     );
   }
   return byKey;
@@ -221,29 +223,6 @@ export function cardSourceOf(
 }
 
 /**
- * 笔记文案要印什么。**和卡片读同一个 group、同一个 `voiceOf`** ——
- * 这正是这个文件存在的理由（见文件头）。
- *
- * ⚠ 这里**不传 url**：正文里刻意不放链接（图上有，而且小红书对正文外链有风控），
- *   理由写在 `src/utils/xhsPost.ts` 文件头。
- */
-export function postSourceOf(
-  group: XhsGroup,
-  collection: string,
-  t: T
-): XhsPostSource {
-  const data = group.entry.data;
-  return {
-    kindLabel: requireCollectionSpec(collection).label,
-    title: typeof data.title === "string" ? data.title : "",
-    symbols: list(data, "symbols").map(code => symbolNames(code)),
-    voices: group.answers.map(a => voiceOf(a, t)),
-    tags: list(data, "tags"),
-    date: beijingDate(data),
-  };
-}
-
-/**
  * 推到雪球草稿箱的那篇长文要带什么（`src/dev/xueqiu-draft.ts`）。
  * **和卡片、文案读同一个 group、同一个 `bylineOf()`** —— 理由见文件头。
  *
@@ -252,7 +231,8 @@ export function postSourceOf(
  *   逐字节相同，理由在 `src/utils/xueqiuArticle.ts` 文件头。
  *   ⚠ 所以这里**不许**碰 `entry.body` —— 那是第二个出口（docs/gate.md 7.5
  *   「复制全文」那一节的同一条）。
- * ★ 仍然是一张字段白名单：标题、标的、日期、地址、每一份的落款和摘要。
+ * ★ 仍然是一张字段白名单：标题、标的、日期、地址，以及每一份的落款和它自己的地址 / 日期 / 标的。
+ *   （摘要原来也在 —— 标题回落要用；2026-09-23 标题改成站上的标题原样之后就不用了，删了。）
  */
 export function xueqiuSourceOf(
   group: XhsGroup,
@@ -280,8 +260,6 @@ export function xueqiuSourceOf(
     ).href,
     sections: group.answers.map((a, i) => ({
       label: bylineOf(a.collection, a.data, t),
-      description:
-        typeof a.data.description === "string" ? a.data.description : "",
       body: bodies[i]!,
       // 放不下、分开推的时候每篇各记一笔账，要知道它是站上哪一条。
       key: `${a.collection}/${slugOf(a)}`,

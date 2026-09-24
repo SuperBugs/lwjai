@@ -6,9 +6,13 @@ import { findPlatform } from "@/config/socialPlatforms";
 import { entryUrl } from "@/utils/getPostPaths";
 import {
   XUEQIU_BUDGET,
+  XUEQIU_MAX_SHRINKS,
   XUEQIU_TEXT_MAX,
-  isTooLongError,
+  lengthRejection,
   planDrafts,
+  replan,
+  shouldShrink,
+  type Measure,
   type XueqiuDraftPlan,
 } from "@/utils/xueqiuArticle";
 import { useTranslations } from "@/i18n";
@@ -52,8 +56,10 @@ import { envFileProblem, tokenFromEnv } from "./xueqiu-status";
  *      → 渲染成 HTML（站上那份消毒 schema 照套）
  *   5. 一篇一篇 `syncArticle` → 分档 → 记账（通道出了问题就停，`stopsDraftBatch()`）
  *
- * ★ **不重试**：超时的那一次可能已经存上了，重试就是两份草稿（同小红书 D7）。
- * ★ **同一时刻只推一篇**，没有队列 —— `draft` 那一档成立的前提之一（见平台表）。
+ * ★ **不重试**：超时的那一次可能已经存上了，重试就是两份草稿。
+ *   唯一的例外是雪球**明确说正文太长**（= 拒收、什么都没存）：截短成更短的另一篇再推，
+ *   有上限 —— 理由在 `xueqiuArticle.ts` 的 `shouldShrink()` 上面。
+ * ★ **同一时刻只推一组**，不跨组排队 —— `draft` 那一档成立的前提之一（见平台表文件头 ③）。
  */
 
 export const prerender = false;
@@ -91,7 +97,7 @@ function renderHtml(markdown: string): Promise<string> {
 export const POST: APIRoute = async ({ request: req, url, currentLocale }) => {
   /**
    * 只认同源请求 —— 它**用你的雪球登录态往外推东西**，而它跑在 localhost 上，
-   * 浏览器里随便一个网页都能往这儿发一个表单 POST（同 `xhs-publish.ts`）。
+   * 浏览器里随便一个网页都能往这儿发一个表单 POST（同 `/_publish` 那条接口）。
    */
   const site = req.headers.get("sec-fetch-site");
   const reasons = [
@@ -230,12 +236,13 @@ export const POST: APIRoute = async ({ request: req, url, currentLocale }) => {
      * ★ 量长度用的就是下面推之前渲染 HTML 的那一台（`renderHtml`），不是另一把尺子。
      */
     const t = useTranslations(currentLocale);
+    const measure: Measure = async md => (await renderHtml(md)).length;
     let plans: XueqiuDraftPlan[];
     try {
       plans = await planDrafts(
         xueqiuSourceOf(group, collection, t, currentLocale, bodies),
         platform,
-        async md => (await renderHtml(md)).length
+        measure
       );
     } catch (err) {
       // 连开头加第一节都放不下 —— 一个字都没推，原话摊出来。
@@ -253,15 +260,23 @@ export const POST: APIRoute = async ({ request: req, url, currentLocale }) => {
 
     // ── 5. 一篇一篇推。之后的失败都算"交出去了" ──────────────────────────
     /**
-     * ★ **串行**，上一篇回来了才推下一篇（同 /_xhs 队列那条：并发的话连是哪一篇撞了都分不出来）。
+     * ★ **串行**，上一篇回来了才推下一篇（并发的话连是哪一篇撞了都分不出来）。
      * ★ 某一篇落在「不确定」或者「还没轮到推」那几档（扩展断了、没登录……）就**停下**，
      *   后面的不推 —— 通道本身出了问题，接着推只会多几个同样的结果；
      *   而「没存上」（雪球明确拒了这一篇）不停，那是这一篇自己的事。
-     * ⚠ 不重试：超时的那一次可能已经存上了，重试就是两份草稿。
+     * ★ 雪球**明确说正文太长**的那一篇：按更小的预算重排、排回队头接着推（`shouldShrink()` /
+     *   `replan()`）。【用户定的】「正文少很多都行，要保证能上传」。
+     * ⚠ 那不是重试：别的失败、超时、看不懂的回话一律不重推 —— 超时的那一次可能已经存上了，
+     *   重推就是两份草稿。理由在 `shouldShrink()` 上面。
      */
+    /** 这一篇是谁写的：分开推的每一篇标题都一样（站上的标题），屏幕上靠这一格分。 */
+    const whoOf = (p: XueqiuDraftPlan) =>
+      p.source.sections.length === 1 ? p.source.sections[0]!.label : undefined;
     const results: Record<string, unknown>[] = [];
-    const notPushed: { title: string }[] = [];
-    for (const [i, plan] of plans.entries()) {
+    let notPushed: { title: string; who?: string }[] = [];
+    const queue = [...plans];
+    while (queue.length > 0) {
+      const plan = queue.shift()!;
       const html = await renderHtml(plan.article.markdown);
       let result: DraftOutcome;
       try {
@@ -290,19 +305,49 @@ export const POST: APIRoute = async ({ request: req, url, currentLocale }) => {
       }
 
       /**
-       * 雪球还是说太长 —— 我们的预算估少了。**单独说**，不和别的"没存上"混成一句：
-       * 这一句告诉人的是"去调那个数"，别的失败告诉人的是"去看这一篇"。
+       * 雪球说正文太长 —— 这一篇**没存上**，按更小的预算重排、排回队头（不记账：
+       * 这一篇还没有结果，记下来的应该是截短之后那一次的）。
        */
-      if (
-        result.tier === "failed" &&
-        isTooLongError(`${result.detail} ${result.raw ?? ""}`)
+      if (shouldShrink(result, plan)) {
+        try {
+          queue.unshift(...(await replan(plan, platform, measure)));
+          continue;
+        } catch (err) {
+          result = {
+            ...result,
+            detail:
+              `雪球说正文太长，而再截就连第一节都放不下了：` +
+              `${err instanceof Error ? err.message : String(err)}`,
+          };
+        }
+      }
+
+      /**
+       * 被退回来的是哪一格太长 —— 两种说的话不一样，**不许混成一句**
+       * （第一版只认「太长」，把 AAPL 那三篇的**标题**太长说成了"正文预算估少了"）。
+       */
+      const rejected =
+        result.tier === "failed"
+          ? lengthRejection(`${result.detail} ${result.raw ?? ""}`)
+          : undefined;
+      if (rejected === "title") {
+        result = {
+          ...result,
+          detail:
+            `雪球说标题太长（平台表里它的上限是 ${platform.titleMax ?? "?"} 字）。` +
+            `推的是「${plan.article.title}」，按码点数是 ${[...plan.article.title].length} 字 —— ` +
+            `它的数法和我们的对不上，这一篇要人来看（src/utils/xueqiuArticle.ts 的 fitTitle）。`,
+        };
+      } else if (
+        rejected === "body" &&
+        (plan.shrinks ?? 0) >= XUEQIU_MAX_SHRINKS
       ) {
         result = {
           ...result,
           detail:
-            `雪球说太长（它数的是扩展渲染出来的 HTML，上限 ${XUEQIU_TEXT_MAX}）。` +
-            `我们按自己的渲染器估的是 ${plan.estimate}，预算 ${XUEQIU_BUDGET} —— 说明预算估少了，` +
-            `把 src/utils/xueqiuArticle.ts 的 XUEQIU_BUDGET 往下调一点再推。`,
+            `雪球连着 ${(plan.shrinks ?? 0) + 1} 次说正文太长（上限 ${XUEQIU_TEXT_MAX}），` +
+            `截到最后一次我们估的是 ${plan.estimate}（预算 ${XUEQIU_BUDGET} 起步）—— ` +
+            `我们的尺子和它的差得比预想的多，停下来没再推。把 XUEQIU_BUDGET 调低一些再点。`,
         };
       }
 
@@ -316,6 +361,7 @@ export const POST: APIRoute = async ({ request: req, url, currentLocale }) => {
           truncated: plan.truncated
             ? { kept: plan.truncated.kept, total: plan.truncated.total }
             : undefined,
+          who: whoOf(plan),
         });
       }
 
@@ -323,14 +369,16 @@ export const POST: APIRoute = async ({ request: req, url, currentLocale }) => {
         ...result,
         head: DRAFT_TIER_HEAD[result.tier],
         title: plan.article.title,
+        who: whoOf(plan),
         estimate: plan.estimate,
         combined: plan.keys.length >= 2 ? plan.keys.length : undefined,
         truncated: plan.truncated,
+        shrinks: plan.shrinks,
+        titleCut: plan.article.titleCut,
       });
 
       if (stopsDraftBatch(result.tier)) {
-        for (const rest of plans.slice(i + 1))
-          notPushed.push({ title: rest.article.title });
+        notPushed = queue.map(p => ({ title: p.article.title, who: whoOf(p) }));
         break;
       }
     }

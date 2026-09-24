@@ -27,6 +27,7 @@ import {
 } from "@/config/socialPlatforms";
 import { beijingDate, bylineOf } from "./xhsEntry";
 import { draftLabel, draftRecordsFor, readDrafts } from "./xueqiuDrafts";
+import { cardFileName, cardPngUrl } from "./cardsPlan";
 import { useTranslations } from "@/i18n";
 import type { ShareKind } from "@/utils/sharePost";
 import config from "@/config";
@@ -55,6 +56,10 @@ import config from "@/config";
  *   它推的是**全文**，和上面那段短帖是两样东西（理由和七档见 `src/dev/wechatsyncPlan.ts`）。
  * ⚠ 只有 X 有**官方的预填地址**（intent 链接），另外两家点过去只是开站点，
  *   字还得自己粘 —— 按钮上的措辞两档不一样，别顺手统一成「打开 X 发帖」。
+ * ★【2026-09-23 用户要的】「发到富途有时候我要发图片卡片」：雪球 / 富途那两块各有一行
+ *   「配图：下载图片卡片 · 预览」，按**那一块的平台**出（卡上印不印网址跟着平台表走）。
+ *   地址和文件名只有 `cardsPlan.ts` 一份，和 `/_cards` 那一页同一条接口、同一份缓存。
+ *   X 那一块不给：X 不在平台表里，卡上印不印网址没有它的规矩。
  *
  * ## 【2026-09-21 用户要的】四个集合都能发
  *
@@ -253,6 +258,11 @@ const draftLog = readDrafts();
 const items = groups.map(({ entry, answers }) => {
   const collection = entry.collection as ShareKind;
   const url = absoluteUrl(entry);
+  /** 代表那一条的号 —— 推雪球长文和图片卡片都按它再查一次那一组（页面不传内容）。 */
+  const slug = entrySlug(entry.collection, entry.id, entry.filePath).replace(
+    /^\/+/,
+    ""
+  );
   const text = xPostText({
     kind: collection,
     title: entry.data.title,
@@ -311,6 +321,9 @@ const items = groups.map(({ entry, answers }) => {
         draftC: "",
         draftS: "",
         drafts: [] as { label: string; tier: string; url?: string }[],
+        /** X 不在平台表里（见 X_TAB 那段），卡上印不印网址没有它的规矩 —— 不给卡。 */
+        card: undefined as
+          { png: string; filename: string; urlOnCard: boolean } | undefined,
       },
       ...ACTIVE_PLATFORMS.map(p => {
         const post = communityFor(entry, answers, url, p);
@@ -339,10 +352,7 @@ const items = groups.map(({ entry, answers }) => {
           draftable: p.mode === "draft",
           /** 推的时候带给 `/_xueqiu/draft` 的那两个参数（它按它们再查一次，页面不传内容）。 */
           draftC: entry.collection,
-          draftS: entrySlug(entry.collection, entry.id, entry.filePath).replace(
-            /^\/+/,
-            ""
-          ),
+          draftS: slug,
           /**
            * 这一组在账上推过的每一篇。★ 组里每一份的 key 都去查：放不下的时候
            * 是每份各推一篇（xueqiuArticle.ts 的 planDrafts），只查代表那一条会漏掉其余几篇。
@@ -352,6 +362,21 @@ const items = groups.map(({ entry, answers }) => {
             tier: r.tier,
             url: r.draftUrl,
           })),
+          /**
+           * 【2026-09-23 用户要的】「发到富途有时候我要发图片卡片」——
+           * 这一组的图片卡片，**按这个平台的规矩出**（`p` 跟着这一块走：卡上印不印网址
+           * 是平台表的 `urlOnCard`，同一组给两家出的卡可能不一样）。
+           * 地址和文件名只有 `cardsPlan.ts` 一份，`/_cards` 那一页读的也是它。
+           */
+          card: {
+            png: cardPngUrl(entry.collection, slug, p.id),
+            filename: cardFileName(
+              config.site.title,
+              requireCollectionSpec(entry.collection).urlPrefix,
+              slug
+            ),
+            urlOnCard: p.urlOnCard,
+          },
         };
       }),
     ],
@@ -387,8 +412,10 @@ const items = groups.map(({ entry, answers }) => {
     {
       /* ── 发到哪儿（【2026-09-23 用户定的】小红书停用之后换的两家）──────────
          ★ 判据全在 `src/config/socialPlatforms.ts`，这儿只排按钮。
-         ★ 停用的那个**留在页面上并说出原因** —— 静默消失的话，
-           「这个站不发小红书了」和「小红书那块坏了」长得一模一样。 */
+         ★ 停用的平台（表里 `retired` 那一档）**留在页面上并说出原因** —— 静默消失的话，
+           「这个站不发某个平台了」和「那块坏了」长得一模一样。
+           【2026-09-23】小红书那一行按用户要求整行删了（「小红书不要了」），
+           所以今天这一段什么都不画；原因记在 docs/engineering-notes.md。 */
     }
     {
       items.length > 0 && (
@@ -491,6 +518,36 @@ const items = groups.map(({ entry, answers }) => {
                       class="text-sm"
                     />
                   </p>
+                  {/* 【2026-09-23 用户要的】配图：这一组的图片卡片，按这个平台的规矩出
+                      （印不印网址跟着平台表走）。和 /_cards 那一页是同一条接口、同一份缓存。 */}
+                  {block.card && (
+                    <p
+                      class="mt-2 flex flex-wrap items-center gap-2 text-sm"
+                      data-share-card
+                    >
+                      <span class="text-muted-foreground">配图：</span>
+                      <a
+                        href={block.card.png}
+                        download={block.card.filename}
+                        class="border-border bg-surface hover:border-border-strong inline-flex items-center rounded-md border px-3 py-1.5 text-sm font-medium no-underline transition-colors"
+                      >
+                        下载图片卡片
+                      </a>
+                      <a
+                        href={block.card.png}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        class="text-muted-foreground underline decoration-1 underline-offset-4"
+                      >
+                        预览 ↗
+                      </a>
+                      <span class="text-muted-foreground text-xs">
+                        {block.card.urlOnCard
+                          ? "卡上印这一篇的完整地址"
+                          : "卡上不印网址（这个平台不许图里带链接）"}
+                      </span>
+                    </p>
+                  )}
                   {/* ⚠ 没核过的那几个数必须在屏幕上自报家门，见 socialPlatforms.ts。 */}
                   {block.note && (
                     <p
@@ -511,8 +568,11 @@ const items = groups.map(({ entry, answers }) => {
                     >
                       <p class="text-muted-foreground text-xs leading-relaxed">
                         长文：把<strong>全文</strong>
-                        （不是上面这段）推到雪球草稿箱，你在雪球编辑器里看一眼表格和列表有没有走样，再点发布。
-                        同一个问题的几份合成一篇，每份前面一个「智能体（模型）」小标题。
+                        （不是上面这段）推到雪球草稿箱，标题就是站上的标题。雪球单篇不超过
+                        2 万字：
+                        同一个问题的几份放得下就合成一篇（每份前面一个「智能体（模型）」小标题），
+                        放不下就每份各推一篇，还放不下就按整节截、末尾附全文链接。
+                        推完在雪球编辑器里看一眼表格和列表有没有走样，再点发布。
                       </p>
                       <p class="mt-2 flex flex-wrap items-center gap-2">
                         <button
@@ -710,7 +770,7 @@ const items = groups.map(({ entry, answers }) => {
 
     // 秒表：图多的时候扩展要把每张图下载再转存到雪球，会等很久。
     // ★ 秒数是真的；那一句"大概在干什么"刻意不写 —— 我们看不到扩展里的进度，
-    //   编一个进度条比没有更坏（同 /_xhs 那一条）。
+    //   编一个进度条比没有更坏。
     const started = Date.now();
     const tick = () => {
       const sec = Math.round((Date.now() - started) / 1000);
@@ -742,8 +802,16 @@ const items = groups.map(({ entry, answers }) => {
         estimate?: number;
         combined?: number;
         truncated?: { kept: number; total: number; cut: string[] };
+        /** 这一篇是谁写的（分开推的几篇标题都是站上那个，靠这一格分）。 */
+        who?: string;
+        /** 雪球说正文太长、截短重排过几次。 */
+        shrinks?: number;
+        titleCut?: boolean;
       };
-      let data: One & { results?: One[]; notPushed?: { title: string }[] };
+      let data: One & {
+        results?: One[];
+        notPushed?: { title: string; who?: string }[];
+      };
       try {
         data = JSON.parse(text);
       } catch {
@@ -786,8 +854,17 @@ const items = groups.map(({ entry, answers }) => {
         lines.push(`${tag}${r.head ?? `？认不出的结果：${r.tier}`}`);
         if (r.title !== undefined) {
           lines.push(
-            `   「${r.title}」${shape}${r.estimate ? ` · 约 ${r.estimate} 字（按 HTML 算）` : ""}`
+            `   「${r.title}」${r.who ? ` · ${r.who}` : ""}${shape}${r.estimate ? ` · 约 ${r.estimate} 字（按 HTML 算）` : ""}`
           );
+        }
+        // 被雪球退回来、截短重推过的要说出来：草稿里那篇比第一次打算推的短。
+        if (r.shrinks) {
+          lines.push(
+            `   雪球嫌正文太长退回过 ${r.shrinks} 次，这一篇是截短之后推的。`
+          );
+        }
+        if (r.titleCut) {
+          lines.push(`   标题超过雪球的上限，截短了。`);
         }
         if (r.detail) lines.push(`   ${r.detail}`);
         if (r.raw && r.tier !== "drafted")
@@ -795,7 +872,7 @@ const items = groups.map(({ entry, answers }) => {
       });
       for (const np of notPushed) {
         lines.push(
-          `— 没轮到推：「${np.title}」（前面那篇出了问题，停下了，没往下推）`
+          `— 没轮到推：「${np.title}」${np.who ? ` · ${np.who}` : ""}（前面那篇出了问题，停下了，没往下推）`
         );
       }
       status.textContent = lines.join("\n");

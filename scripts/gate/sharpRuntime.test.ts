@@ -3,7 +3,7 @@
  *
  * ## 【2026-09-23 实测踩到】两份 sharp = 所有出图路由 500，而且时灵时不灵
  *
- * 症状：`/og.png`、`/r/<号>/index.png`、`/_xhs/card.png` 全部 500，返回的是
+ * 症状：`/og.png`、`/r/<号>/index.png`、`/_xhs/card.png`（现在是 `/_cards/card.png`）全部 500，返回的是
  * Astro 的裸错误页（错误发生在**模块加载期**，没进处理函数的 try/catch）：
  *
  *     Could not load the "sharp" module using the win32-x64 runtime

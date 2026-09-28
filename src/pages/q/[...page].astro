@@ -14,6 +14,7 @@ import Pagination from "@/components/Pagination.astro";
 import { getSortedPosts } from "@/utils/getSortedPosts";
 import { foldQaGroups } from "@/utils/qaGroups";
 import { useTranslations } from "@/i18n";
+import { listSeo } from "@/utils/seoMeta";
 import config from "@/config";
 
 /**
@@ -44,12 +45,10 @@ const { page } = Astro.props;
 
 const locale = Astro.currentLocale ?? config.site.lang;
 const t = useTranslations(locale);
+const seo = listSeo(t.seo.lists.qa, t.pages.qaDesc, t.seo, config.site.title);
 ---
 
-<Layout
-  title={`${t.pages.qaTitle} | ${config.site.title}`}
-  description={t.pages.qaDesc}
->
+<Layout title={seo.title} description={seo.description}>
   <Header />
 
   <Breadcrumb />

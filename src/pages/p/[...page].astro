@@ -13,6 +13,7 @@ import Footer from "@/components/Footer.astro";
 import Pagination from "@/components/Pagination.astro";
 import { getSortedPosts } from "@/utils/getSortedPosts";
 import { useTranslations } from "@/i18n";
+import { listSeo } from "@/utils/seoMeta";
 import config from "@/config";
 
 /**
@@ -34,12 +35,15 @@ const { page } = Astro.props;
 
 const locale = Astro.currentLocale ?? config.site.lang;
 const t = useTranslations(locale);
+const seo = listSeo(
+  t.seo.lists.prompts,
+  t.pages.promptsDesc,
+  t.seo,
+  config.site.title
+);
 ---
 
-<Layout
-  title={`${t.pages.promptsTitle} | ${config.site.title}`}
-  description={t.pages.promptsDesc}
->
+<Layout title={seo.title} description={seo.description}>
   <Header />
 
   <Breadcrumb />

@@ -41,6 +41,8 @@ export type SiteJsonLdInput = {
   logoUrl?: string;
   /** 社交账号地址（Organization.sameAs）。`mailto:` 不是账号，由调用方先滤掉。 */
   sameAs?: readonly string[];
+  /** 站点关键词（`site.keywords`）。空 / 不传 = 不写 keywords。 */
+  keywords?: readonly string[];
 };
 
 export function siteJsonLd(input: SiteJsonLdInput): Record<string, unknown> {
@@ -69,6 +71,9 @@ export function siteJsonLd(input: SiteJsonLdInput): Record<string, unknown> {
   if (input.alternateNames && input.alternateNames.length > 0) {
     website.alternateName = [...input.alternateNames];
   }
+  if (input.keywords && input.keywords.length > 0) {
+    website.keywords = [...input.keywords];
+  }
 
   return {
     "@context": "https://schema.org",
@@ -90,6 +95,8 @@ export type BlogPostingJsonLdInput = {
   lang: string;
   author: { name: string; url?: string };
   publisher: { name: string; url: string; logoUrl?: string };
+  /** 这一篇自己的关键词（标的、标签，`seoMeta.ts` 的 `detailSeo`）。空 / 不传 = 不写。 */
+  keywords?: readonly string[];
 };
 
 export function blogPostingJsonLd(
@@ -122,6 +129,9 @@ export function blogPostingJsonLd(
   };
   if (input.description) out.description = input.description;
   if (input.image) out.image = input.image;
+  if (input.keywords && input.keywords.length > 0) {
+    out.keywords = [...input.keywords];
+  }
   if (input.datePublished) {
     out.datePublished = input.datePublished.toISOString();
   }

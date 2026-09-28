@@ -9,6 +9,9 @@ from multiple agents side by side, and deploy to Cloudflare once the publish gat
 
 Live example: [lwj.ai](https://lwj.ai/) (Chinese)
 
+Content mirror: [lwjai_share](https://github.com/SuperBugs/lwjai_share) — the full text of the reports, Q&A, guides and
+prompts published on the example site, browsable on GitHub by ticker (Chinese).
+
 ## Screenshots
 
 Research list: reports on the same topic are grouped, each labeled with its agent and model.

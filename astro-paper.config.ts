@@ -14,9 +14,27 @@ export default defineAstroPaperConfig({
     //   人在 Google 里敲的是「牢玩家AI」「lwj.ai」，得告诉搜索引擎它们指的是同一个站。
     //   ⚠ 这里只管"别名"，收录本身（Search Console 验证、提交 sitemap）在 docs/deploy.md 2.6。
     alternateNames: ["牢玩家AI", "牢玩家 AI", "lwj.ai"],
+    // ★【2026-09-24 用户要的】「SEO 优化，增加美股分析、AI 研报等关键词」。
+    //   这一句是首页（以及别的没传 description 的页面）的 <meta name="description">、
+    //   RSS 频道说明、首页 WebSite 结构化数据；关键词放在最前面，搜索结果摘要只截前七八十个字。
+    //   ⚠ 说的是这个站**有什么**，不是「全站 AI 生成」那种全称断言（docs/engineering-notes.md 第二节 provenance）。
     description:
-      "记录分享 AI 分析结果，主要为美股标的。" +
+      "美股分析与 AI 研报：用 AI 分析美股标的，涵盖个股研究、财报解读、估值分析与美股问答。" +
       "网站无任何收费内容，以后也不会有任何收费。",
+    // 【2026-09-24】每一页 <meta name="keywords"> 的后半段（页面自己的标的 / 标签排在前面，
+    //   src/utils/seoMeta.ts 的 mergeKeywords）。Google 不读这个标签，百度、必应、搜狗还看一眼。
+    //   ⚠ 只写这个站真有的东西（标签表里有 财报 / 估值 / 个股研究），别堆词 —— 堆多了是作弊信号。
+    keywords: [
+      "美股分析",
+      "AI 研报",
+      "美股研报",
+      "美股研究",
+      "个股研究",
+      "财报解读",
+      "估值分析",
+      "美股问答",
+      "AI 分析美股",
+    ],
     // 站长的名字。提示词卡片 / 详情页上「作者：牢玩家」、<meta name="author">、
     // 研究稿 frontmatter 里 author 的默认值都读它；站名（title）是另一回事。
     author: "牢玩家",

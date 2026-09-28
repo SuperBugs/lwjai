@@ -5,11 +5,6 @@ import Header from "@/components/Header.astro";
 import Main from "@/components/Main.astro";
 import Footer from "@/components/Footer.astro";
 import { collectionSpec, NUMBERED_COLLECTIONS } from "@/config/collections";
-// ⚠ `astro check` 会对这一行报一条 ts(6133)「declared but never read」的**提示**
-//   （不是 error，不拦构建）。那是误报：下面那个 `return Astro.redirect(...)` 是
-//   frontmatter 里的顶层 return，语言服务把它之后的代码当成不可达了，于是看不见
-//   第 95 行那次调用。**别顺手把这个 import 删掉** —— 删了这一页当场编不过，
-//   而"能看的条目直接跳走"那一档正是它唯一的用处。
 import { entryUrl } from "@/utils/getPostPaths";
 import { previewTier } from "./previewPlan";
 
@@ -96,9 +91,13 @@ const tier = previewTier({
   draft: entry?.data.draft === true,
 });
 
-if (tier === "open" && entry) {
-  return Astro.redirect(entryUrl(collection, entry.id, entry.filePath));
-}
+// 先算好再 return：Astro 语言服务会把顶层 return 后的模板当成不可达，
+// 直接把 entryUrl() 写在 return 里时会误报这个 import 未使用。
+const openUrl =
+  tier === "open" && entry
+    ? entryUrl(collection, entry.id, entry.filePath)
+    : null;
+if (openUrl) return Astro.redirect(openUrl);
 
 /** 回后台那一条的地址。集合名和号都是从查询串来的，原样拼回去。 */
 const backToAdmin = `/keystatic/collection/${encodeURIComponent(collection)}/item/${encodeURIComponent(slug)}`;

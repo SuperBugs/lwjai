@@ -75,7 +75,7 @@ const qaUrl = collectionUrl("qa", locale);
 const guidesUrl = collectionUrl("guides", locale);
 const promptsUrl = collectionUrl("prompts", locale);
 
-/** 首页 <title>：「牢玩家 · AI 美股研究、问答与提示词」。
+/** 首页 <title>：「牢玩家 · 美股分析与 AI 研报：个股研究、问答与提示词」。
  *  【2026-09-20】原来只有站名两个字 —— 人在 Google 里敲「牢玩家 AI」「AI 美股研究」时，
  *  首页上没有一个词能对上。后半句在 i18n（home.tagline），措辞的纪律写在那儿。 */
 const homeTitle = `${config.site.title} · ${t.home.tagline}`;
@@ -93,6 +93,7 @@ const structuredData = siteJsonLd({
   sameAs: socials
     .map(social => social.url)
     .filter(url => !url.startsWith("mailto:")),
+  keywords: config.site.keywords,
 });
 ---
 
@@ -161,9 +162,11 @@ const structuredData = siteJsonLd({
            但 h1 本身留着、只是 sr-only：页眉那个站名是 `<a>` 不是标题，
            整页删掉 h1 的话首页就一个 h1 都没有了 —— 屏幕阅读器按标题跳转时
            首页会变成"没有标题的一页"，搜索结果里也少一层结构。
-           **看不见 ≠ 不存在**，这两件事别一起删。 */
+           **看不见 ≠ 不存在**，这两件事别一起删。
+           【2026-09-24】内容和 <title> 同一串（站名 ＋ home.tagline）：搜索引擎把 h1 当作
+           这一页讲什么的第二个信号，只有站名两个字的话「美股分析」「AI 研报」在正文结构里一次都没出现。 */
       }
-      <h1 class="sr-only">{config.site.title}</h1>
+      <h1 class="sr-only">{homeTitle}</h1>
 
       {
         /* 行高 1.55，不是正文那档 1.9：字号越大，舒适行高越小 —— 34px 的中文

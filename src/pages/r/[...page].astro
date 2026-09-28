@@ -17,6 +17,7 @@ import { getSortedPosts } from "@/utils/getSortedPosts";
 // 两个智能体各写一份，列表上就是两张标题一模一样的卡叠着。
 import { foldQaGroups } from "@/utils/qaGroups";
 import { useTranslations } from "@/i18n";
+import { listSeo } from "@/utils/seoMeta";
 import config from "@/config";
 
 export const getStaticPaths = (async ({ paginate }) => {
@@ -31,12 +32,15 @@ const { page } = Astro.props;
 
 const locale = Astro.currentLocale ?? config.site.lang;
 const t = useTranslations(locale);
+const seo = listSeo(
+  t.seo.lists.posts,
+  t.pages.postsDesc,
+  t.seo,
+  config.site.title
+);
 ---
 
-<Layout
-  title={`${t.pages.postsTitle} | ${config.site.title}`}
-  description={t.pages.postsDesc}
->
+<Layout title={seo.title} description={seo.description}>
   <Header />
 
   <Breadcrumb />

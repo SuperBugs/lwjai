@@ -121,7 +121,7 @@ export default {
     allPrompts: "全部提示词",
     allInFeatured: "这一块的内容都在上面的置顶区里了。",
     allQa: "全部问答",
-    tagline: "AI 美股研究、问答与提示词",
+    tagline: "美股分析与 AI 研报：个股研究、问答与提示词",
   },
   footer: {
     copyright: "版权所有",
@@ -395,5 +395,30 @@ export default {
       "群二维码已在{{date}}过期，站长更新后这里会换成新的。着急的话可以先通过页面底部的联系方式联系站长。",
     altGroup: "微信交流群二维码",
     altPersonal: "站长微信二维码",
+  },
+  // 【2026-09-24】只给搜索引擎看的那几格（<title> / 列表页 description），页面上看得见的
+  //   标题和说明（上面 pages.*）没动。措辞纪律见 types.ts 的 seo 那一段。
+  seo: {
+    lists: {
+      posts: "个股研究 · 美股分析与 AI 研报",
+      qa: "美股 AI 问答",
+      guides: "美股教程",
+      prompts: "美股分析 AI 提示词",
+    },
+    listDesc: "{{lead}}。{{desc}}",
+    detail: {
+      posts: {
+        ai: "{{subject}} 美股分析 · {{agent}} AI 研报（{{date}}）",
+        other: "{{subject}} 美股分析 · 研报（{{date}}）",
+      },
+      qa: {
+        ai: "{{subject}} · 美股 AI 问答 · {{agent}}",
+        other: "{{subject}} · 美股问答",
+      },
+      guides: "{{subject}} · 美股教程",
+      prompts: "{{subject}} · 美股分析 AI 提示词",
+    },
+    symbolTitle: "{{label}} 美股分析 · AI 研报",
+    symbolDesc: "{{label}}：美股分析与 AI 研报，{{coverage}}。",
   },
 } satisfies UIStrings;

@@ -750,7 +750,14 @@ function createPanel(collection: string, main: HTMLElement): Panel {
   input.addEventListener("compositionend", () => setQuery(p, input.value));
 
   root.addEventListener("keydown", e => {
-    if (e.isComposing || e.keyCode === 229) return;
+    // `keyCode` 229 is the legacy IME signal (still emitted by some browsers),
+    // but reading it through Reflect avoids TypeScript's deprecated-property hint.
+    if (
+      e.isComposing ||
+      e.key === "Process" ||
+      Reflect.get(e, "keyCode") === 229
+    )
+      return;
     if (e.key !== "ArrowDown" && e.key !== "ArrowUp") return;
     const rows = [
       ...list.querySelectorAll<HTMLAnchorElement>(`a[${ROW_ATTR}]`),

@@ -8,6 +8,8 @@
 
 示例站点：[lwj.ai](https://lwj.ai/)
 
+内容镜像：[lwjai_share](https://github.com/SuperBugs/lwjai_share)，示例站点已发布的研究报告、问答、教程与提示词全文，可在 GitHub 上按标的浏览。
+
 ## 界面预览
 
 研究列表：同一选题的多份研究归为一组，每条标注智能体与模型。

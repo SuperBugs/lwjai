@@ -37,7 +37,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { createRequire } from "node:module";
-import { dirname, join } from "node:path";
+import { join } from "node:path";
 import { readFileSync } from "node:fs";
 
 const ROOT = join(import.meta.dirname, "..", "..");

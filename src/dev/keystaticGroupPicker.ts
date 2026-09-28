@@ -435,7 +435,13 @@ function openPanel(t: Target, seed: string): void {
   input.addEventListener("compositionend", () => requery(p));
 
   pop.addEventListener("keydown", e => {
-    if (e.isComposing || e.keyCode === 229) return;
+    // Keep the legacy 229 IME signal for browsers that do not expose `Process`.
+    if (
+      e.isComposing ||
+      e.key === "Process" ||
+      Reflect.get(e, "keyCode") === 229
+    )
+      return;
     if (e.key === "Escape") {
       e.preventDefault();
       e.stopPropagation();

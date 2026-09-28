@@ -76,8 +76,8 @@ export type ContentCollectionSpec = {
    * 判据落地在 `src/config/provenance.ts`，页面页脚和导出的 .md **读同一个函数** ——
    * 同一句断言在这个仓库里已经两次出现"两处只改一处"（docs/engineering-notes.md 坑 8）。
    * ⚠【2026-09-23】那两个读的地方**今天都没有了**（页脚那句 09-21 删、.md 文件头
-   *   09-23 删 —— 导出件现在就是正文原文）。这一格还在，是等站长决定这套判据
-   *   删掉还是另找落点；见 provenance.ts 顶部「现状」。
+   *   09-23 删 —— 导出件现在就是正文原文）。【2026-09-24】现在唯一读它的是详情页的
+   *   `<title>`（`src/utils/seoMeta.ts`：判成 `ai` 才写「AI 研报」）；见 provenance.ts 顶部「现状」。
    *
    * ★ **有详情路由的集合必须填，少填一个是类型错误**（见下面 StrictSpec）。
    *   为什么要用类型而不是一条测试钉：`pnpm test` **不在任何自动链路里** ——

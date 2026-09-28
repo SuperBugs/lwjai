@@ -36,6 +36,7 @@ import AdjacentPostNav from "./_components/AdjacentPostNav.astro";
 import { SEARCH_FILTER_KEY, SEARCH_KINDS } from "@/config/searchKinds";
 import { searchMetaAttr } from "@/utils/searchMeta";
 import { tplStr, useTranslations } from "@/i18n";
+import { detailSeo } from "@/utils/seoMeta";
 import config from "@/config";
 
 export async function getStaticPaths() {
@@ -103,6 +104,12 @@ type Props = {
 const { post, siblings, related, prevPost, nextPost } = Astro.props;
 const locale = Astro.currentLocale ?? config.site.lang;
 const t = useTranslations(locale);
+/** 搜索引擎看的 <title> 和 keywords（src/utils/seoMeta.ts）；页面上的标题照旧是 title。 */
+const seo = detailSeo("posts", post.data, t.seo, {
+  siteTitle: config.site.title,
+  timezone: config.site.timezone,
+  dateFormat: t.post.dateOnlyFormat,
+});
 
 const {
   title,
@@ -184,9 +191,10 @@ const ogImage = ogImageUrl
 ---
 
 <PostLayout
-  title={`${title} | ${config.site.title}`}
+  title={seo.title}
   headline={title}
   description={description}
+  keywords={seo.keywords}
   ogImage={ogImage}
   canonicalURL={canonicalURL}
   pubDatetime={pubDatetime}

@@ -24,6 +24,8 @@ type Props = {
   canonicalURL?: string;
   pubDatetime?: Date;
   modDatetime?: Date | null;
+  /** 这一篇的关键词（`seoMeta.ts` 的 `detailSeo`）：进 `<meta name="keywords">` 和 JSON-LD。 */
+  keywords?: readonly string[];
 };
 
 const { site } = config;
@@ -36,6 +38,7 @@ const {
   canonicalURL = new URL(Astro.url.pathname, Astro.site).href,
   pubDatetime,
   modDatetime,
+  keywords,
 } = Astro.props;
 
 const siteBase = Astro.site ?? Astro.url;
@@ -59,10 +62,18 @@ const structuredData = blogPostingJsonLd({
     url: site.url,
     logoUrl: new URL(getAssetPath("favicon.svg"), siteBase).href,
   },
+  keywords,
 });
 ---
 
-<Layout {title} {description} {ogImage} {canonicalURL} ogType="article">
+<Layout
+  {title}
+  {description}
+  {ogImage}
+  {canonicalURL}
+  {keywords}
+  ogType="article"
+>
   <Fragment slot="head">
     {
       /* ★ og:type **不在这里写**。【2026-09-20 查出来的】原来这里补一条 `article`，

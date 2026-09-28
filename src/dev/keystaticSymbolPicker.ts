@@ -303,7 +303,13 @@ function mount(
   });
   search.addEventListener("compositionend", () => applyFilter(m));
   search.addEventListener("keydown", e => {
-    if (e.isComposing || e.keyCode === 229) return;
+    // Keep the legacy 229 IME signal for browsers that do not expose `Process`.
+    if (
+      e.isComposing ||
+      e.key === "Process" ||
+      Reflect.get(e, "keyCode") === 229
+    )
+      return;
     const vis = visibility(m);
     if (e.key === "Enter") {
       // Enter = 勾 / 取消第一个命中的。敲「mu」回车就勾上了，不用去框里找。

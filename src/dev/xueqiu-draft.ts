@@ -86,12 +86,13 @@ const outcome = (o: DraftOutcome, extra: Record<string, unknown> = {}) =>
  *   不认识这些，只会让代码块更乱。
  */
 let processor: ReturnType<typeof createMarkdownProcessor> | null = null;
-function renderHtml(markdown: string): Promise<string> {
+async function renderHtml(markdown: string): Promise<string> {
   processor ??= createMarkdownProcessor({
     syntaxHighlight: false,
     rehypePlugins: [[rehypeSanitize, MARKDOWN_SANITIZE_SCHEMA]],
   });
-  return processor.then(p => p.render(markdown)).then(r => r.code);
+  const result = await (await processor).render(markdown);
+  return result.code;
 }
 
 export const POST: APIRoute = async ({ request: req, url, currentLocale }) => {

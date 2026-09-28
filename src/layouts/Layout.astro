@@ -4,6 +4,7 @@ import { ClientRouter } from "astro:transitions";
 import { resolveDefaultOgImagePath } from "@/utils/resolveDefaultOgImagePath";
 import { getAssetPath } from "@/utils/withBase";
 import { SITEMAP_FILE } from "@/config/sitemap";
+import { mergeKeywords } from "@/utils/seoMeta";
 import { PUBLIC_CF_BEACON_TOKEN } from "astro:env/client";
 import config from "@/config";
 import "@/styles/global.css";
@@ -25,6 +26,11 @@ type Props = {
    * 见 astro.config.ts；seo.test.ts 钉着两处一起。
    */
   robots?: string;
+  /**
+   * 这一页自己的关键词（标的、标签……），排在站点那张（`site.keywords`）前面，
+   * 合并去重在 `src/utils/seoMeta.ts` 的 `mergeKeywords`。不传就只有站点那张。
+   */
+  keywords?: readonly string[];
 };
 
 const { site } = config;
@@ -36,7 +42,10 @@ const {
   canonicalURL = new URL(Astro.url.pathname, Astro.site).href,
   ogType = "website",
   robots = "index, follow, max-image-preview:large",
+  keywords = [],
 } = Astro.props;
+
+const metaKeywords = mergeKeywords(keywords, site.keywords ?? []);
 
 const socialImageURL = new URL(ogImage, Astro.site ?? Astro.url);
 // og:locale 要的是下划线写法（zh_CN），<html lang> 是连字符（zh-CN）。同一个来源，两种写法。
@@ -94,6 +103,11 @@ const rssHref = getAssetPath("rss.xml");
     <title>{title}</title>
     <meta name="title" content={title} />
     <meta name="description" content={description} />
+    {
+      metaKeywords.length > 0 && (
+        <meta name="keywords" content={metaKeywords.join(",")} />
+      )
+    }
     <meta name="author" content={site.author} />
     <meta name="robots" content={robots} />
     {

@@ -25,6 +25,11 @@ interface SiteConfig {
    * 这一行告诉它们指的是同一个站。
    */
   alternateNames?: string[];
+  /**
+   * 站点关键词：每一页 `<meta name="keywords">` 的后半段（页面自己的排在前面），
+   * 首页 WebSite 结构化数据的 `keywords`。拼法在 src/utils/seoMeta.ts。
+   */
+  keywords?: string[];
 }
 
 interface PostsConfig {
@@ -121,7 +126,10 @@ type ResolvedSiteConfig = Required<
     | "ogImage"
   >
 > &
-  Pick<SiteConfig, "profile" | "googleVerification" | "alternateNames">;
+  Pick<
+    SiteConfig,
+    "profile" | "googleVerification" | "alternateNames" | "keywords"
+  >;
 
 export interface ResolvedAstroPaperConfig {
   site: ResolvedSiteConfig;

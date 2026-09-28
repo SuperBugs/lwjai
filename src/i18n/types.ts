@@ -166,9 +166,10 @@ export interface UIStrings {
      *  压成一句"还没写"的话，一个内容全被置顶的站会在首页对读者撒谎。 */
     allInFeatured: string;
     allQa: string;
-    /** 首页 <title> 里站名后面那半句：「牢玩家 · AI 美股研究、问答与提示词」。
-     *  【2026-09-20 加】只进 <title> / og:title，页面上不显示。它存在的理由是搜索引擎：
-     *  首页原来的标题只有站名两个字，人敲「牢玩家 AI」「AI 美股研究」时没有一个词能对上。
+    /** 首页 <title> 里站名后面那半句：「牢玩家 · 美股分析与 AI 研报：…」。
+     *  【2026-09-20 加】只进 <title> / og:title 和首页那个 sr-only 的 <h1>，页面上看不见。
+     *  它存在的理由是搜索引擎：首页原来的标题只有站名两个字，人敲「牢玩家 AI」「AI 美股研究」时
+     *  没有一个词能对上。【2026-09-24】换成「美股分析」「AI 研报」打头（用户要的关键词）。
      *  ⚠ 措辞说的是这个站**有什么**（研究、问答、提示词），不是**谁写的** ——
      *  不许写成「全站 AI 生成」那种全称断言（docs/engineering-notes.md 第二节 provenance 那条）。 */
     tagline: string;
@@ -644,5 +645,36 @@ export interface UIStrings {
     expired: string;
     altGroup: string;
     altPersonal: string;
+  };
+  /**
+   * 只给搜索引擎看的那几格：`<title>`、列表页的 `<meta name="description">`。
+   * 【2026-09-24 用户要的】「SEO 优化，增加美股分析、AI 研报等关键词」。页面上看得见的
+   * 标题 / 说明（`pages.*`）一个字都没改，拼法在 `src/utils/seoMeta.ts`。
+   *
+   * ⚠ 占位符写错不报错：`tplStr()` 把认不出的 `{{…}}` **静默换成空**，`<title>` 就少一截。
+   *   `seoKeywords.test.ts` 钉着每一格该有的占位符。
+   */
+  seo: {
+    /** 列表页 `<title>` 的前半段；也接在页面说明前面当 description（`listDesc`）。 */
+    lists: { posts: string; qa: string; guides: string; prompts: string };
+    /** `{{lead}}`（上面那一格）/ `{{desc}}`（页面上那句说明，`pages.*Desc`）。 */
+    listDesc: string;
+    /**
+     * 详情页 `<title>`（后面由代码接「 | 站名」）。`{{subject}}` = 标题（研究稿补上代码和中文名），
+     * `{{date}}` = 创建那天（按站点时区，格式同列表卡片；研究稿用它让同一只票的几轮不同名）。
+     * ★ 研究稿 / 问答分两版：`ai` 带 `{{agent}}`（登记表里的名字），**只有 `provenanceOf()`
+     *   判成 `ai` 时才用**；人写的、还没标的用 `other` —— 那一版对谁写的不下断言。
+     *   教程 / 提示词没有「谁写的」那一格，只有一版。
+     */
+    detail: {
+      posts: { ai: string; other: string };
+      qa: { ai: string; other: string };
+      guides: string;
+      prompts: string;
+    };
+    /** `/s/<代码>` 的 `<title>`：`{{label}}` = 「AAPL 苹果」（`seoMeta.ts` 的 `symbolSubject`）。 */
+    symbolTitle: string;
+    /** `/s/<代码>` 的 description：`{{label}}` / `{{coverage}}`（「3 篇研究 · 2 条问答」）。 */
+    symbolDesc: string;
   };
 }

@@ -76,7 +76,8 @@ export default {
     allPrompts: "All prompts",
     allInFeatured: "Everything in this section is pinned above.",
     allQa: "All Q&A",
-    tagline: "AI-assisted US stock research, Q&A and prompts",
+    tagline:
+      "US stock analysis & AI research reports: stock research, Q&A and prompts",
   },
   footer: {
     copyright: "Copyright",
@@ -298,5 +299,29 @@ export default {
       "The group QR code expired on {{date}} and will be replaced soon. In the meantime, use the contact links at the bottom of the page.",
     altGroup: "WeChat group QR code",
     altPersonal: "Site owner's WeChat QR code",
+  },
+  seo: {
+    lists: {
+      posts: "Stock research · US stock analysis & AI research reports",
+      qa: "US stock AI Q&A",
+      guides: "US stock guides",
+      prompts: "AI prompts for US stock analysis",
+    },
+    listDesc: "{{lead}}. {{desc}}",
+    detail: {
+      posts: {
+        ai: "{{subject}} US stock analysis · {{agent}} AI research report ({{date}})",
+        other: "{{subject}} US stock analysis · research report ({{date}})",
+      },
+      qa: {
+        ai: "{{subject}} · US stock AI Q&A · {{agent}}",
+        other: "{{subject}} · US stock Q&A",
+      },
+      guides: "{{subject}} · US stock guide",
+      prompts: "{{subject}} · AI prompt for US stock analysis",
+    },
+    symbolTitle: "{{label}} US stock analysis · AI research reports",
+    symbolDesc:
+      "{{label}}: US stock analysis and AI research reports, {{coverage}}.",
   },
 } satisfies UIStrings;
